@@ -193,6 +193,11 @@ class AVScenesCoordinator(DataUpdateCoordinator):
                 # For covers, directly apply settings (open/position/tilt)
                 # No generic turn_on, just set the desired state
                 await self._update_device_settings(entity_id, state_config)
+
+                # Wait for power-on delay (useful for sequential cover operations)
+                delay = state_config.get(CONF_POWER_ON_DELAY, DEFAULT_POWER_ON_DELAY)
+                if delay > 0:
+                    await asyncio.sleep(delay)
             else:
                 # For other entities (media_player, light, switch), turn on first
                 await self.hass.services.async_call(
