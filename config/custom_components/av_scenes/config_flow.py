@@ -166,11 +166,13 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
         
         if user_input is not None:
             action = user_input.get("action")
-            
+
             if action == "add_room":
                 return await self.async_step_add_room()
             elif action == "edit_room":
                 return await self.async_step_select_room()
+            elif action == "delete_room":
+                return await self.async_step_delete_room()
             elif action == "finish":
                 # Update the config entry with new data
                 self.hass.config_entries.async_update_entry(
@@ -178,19 +180,25 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
                     data={CONF_ROOMS: self.rooms}
                 )
                 return self.async_create_entry(title="", data={})
-        
+
         room_list = "\n".join([f"- {room_id}" for room_id in self.rooms.keys()])
         if not room_list:
             room_list = "No rooms configured yet"
-        
+
+        actions = {
+            "add_room": "Add new room",
+            "finish": "Finish and save",
+        }
+
+        # Only show edit/delete if there are rooms
+        if self.rooms:
+            actions["edit_room"] = "Edit existing room"
+            actions["delete_room"] = "Delete room"
+
         return self.async_show_form(
             step_id="room_menu",
             data_schema=vol.Schema({
-                vol.Required("action"): vol.In({
-                    "add_room": "Add new room",
-                    "edit_room": "Edit existing room",
-                    "finish": "Finish and save",
-                }),
+                vol.Required("action"): vol.In(actions),
             }),
             description_placeholders={
                 "rooms": room_list,
@@ -317,15 +325,44 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             self.current_room = user_input.get("room_id")
             return await self.async_step_activity_menu()
-        
+
         if not self.rooms:
             return await self.async_step_room_menu()
-        
+
         return self.async_show_form(
             step_id="select_room",
             data_schema=vol.Schema({
                 vol.Required("room_id"): vol.In(list(self.rooms.keys())),
             }),
+        )
+
+    async def async_step_delete_room(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Delete a room."""
+        if user_input is not None:
+            room_to_delete = user_input.get("room_id")
+
+            if room_to_delete in self.rooms:
+                room_name = self.rooms[room_to_delete].get("name", room_to_delete)
+                del self.rooms[room_to_delete]
+                _LOGGER.info("Deleted room %s (%s)", room_to_delete, room_name)
+                # Save immediately
+                self._save_config()
+
+            return await self.async_step_room_menu()
+
+        if not self.rooms:
+            return await self.async_step_room_menu()
+
+        return self.async_show_form(
+            step_id="delete_room",
+            data_schema=vol.Schema({
+                vol.Required("room_id"): vol.In(list(self.rooms.keys())),
+            }),
+            description_placeholders={
+                "warning": "This will delete the room and all its activities. This action cannot be undone!",
+            },
         )
 
     async def async_step_activity_menu(
@@ -340,31 +377,39 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
         
         if user_input is not None:
             action = user_input.get("action")
-            
+
             if action == "add_activity":
                 return await self.async_step_add_activity()
             elif action == "edit_activity":
                 return await self.async_step_select_activity()
             elif action == "delete_activity":
                 return await self.async_step_delete_activity()
+            elif action == "copy_activity":
+                return await self.async_step_copy_activity()
             elif action == "back":
                 return await self.async_step_room_menu()
-        
+
         room_data = self.rooms[self.current_room]
         activities = room_data.get(CONF_ACTIVITIES, {})
         activity_list = "\n".join([f"- {act_name}" for act_name in activities.keys()])
         if not activity_list:
             activity_list = "No activities configured yet"
-        
+
+        actions = {
+            "add_activity": "Add new activity",
+            "back": "Back to room menu",
+        }
+
+        # Only show edit/delete/copy if there are activities
+        if activities:
+            actions["edit_activity"] = "Edit existing activity"
+            actions["delete_activity"] = "Delete activity"
+            actions["copy_activity"] = "Copy activity"
+
         return self.async_show_form(
             step_id="activity_menu",
             data_schema=vol.Schema({
-                vol.Required("action"): vol.In({
-                    "add_activity": "Add new activity",
-                    "edit_activity": "Edit existing activity",
-                    "delete_activity": "Delete activity",
-                    "back": "Back to room menu",
-                }),
+                vol.Required("action"): vol.In(actions),
             }),
             description_placeholders={
                 "room": self.current_room,
@@ -587,7 +632,7 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
         """Delete an activity."""
         if user_input is not None:
             activity_to_delete = user_input.get("activity_name")
-            
+
             if activity_to_delete:
                 room_data = self.rooms[self.current_room]
                 if activity_to_delete in room_data[CONF_ACTIVITIES]:
@@ -595,15 +640,15 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
                     _LOGGER.info("Deleted activity %s", activity_to_delete)
                     # Save immediately
                     self._save_config()
-            
+
             return await self.async_step_activity_menu()
-        
+
         room_data = self.rooms.get(self.current_room, {})
         activities = room_data.get(CONF_ACTIVITIES, {})
-        
+
         if not activities:
             return await self.async_step_activity_menu()
-        
+
         return self.async_show_form(
             step_id="delete_activity",
             data_schema=vol.Schema({
@@ -612,6 +657,54 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
             description_placeholders={
                 "room": self.current_room or "unknown",
                 "warning": "This action cannot be undone!",
+            },
+        )
+
+    async def async_step_copy_activity(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Copy an existing activity."""
+        errors = {}
+
+        if user_input is not None:
+            source_activity = user_input.get("source_activity")
+            new_activity_name = user_input.get("new_activity_name")
+
+            if not new_activity_name or not new_activity_name.strip():
+                errors["new_activity_name"] = "invalid_name"
+            elif source_activity:
+                room_data = self.rooms[self.current_room]
+                activities = room_data.get(CONF_ACTIVITIES, {})
+
+                if new_activity_name in activities:
+                    errors["new_activity_name"] = "already_exists"
+                elif source_activity in activities:
+                    # Deep copy the source activity
+                    import copy
+                    activities[new_activity_name] = copy.deepcopy(activities[source_activity])
+                    _LOGGER.info("Copied activity %s to %s", source_activity, new_activity_name)
+                    # Save immediately
+                    self._save_config()
+                    return await self.async_step_activity_menu()
+                else:
+                    errors["source_activity"] = "not_found"
+
+        room_data = self.rooms.get(self.current_room, {})
+        activities = room_data.get(CONF_ACTIVITIES, {})
+
+        if not activities:
+            return await self.async_step_activity_menu()
+
+        return self.async_show_form(
+            step_id="copy_activity",
+            data_schema=vol.Schema({
+                vol.Required("source_activity"): vol.In(list(activities.keys())),
+                vol.Required("new_activity_name"): str,
+            }),
+            errors=errors,
+            description_placeholders={
+                "room": self.current_room or "unknown",
+                "info": "Select an activity to copy and enter a name for the new activity.",
             },
         )
 

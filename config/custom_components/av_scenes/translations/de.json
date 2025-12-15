@@ -50,6 +50,13 @@
           "room_id": "Raum"
         }
       },
+      "delete_room": {
+        "title": "Raum löschen",
+        "description": "{warning}",
+        "data": {
+          "room_id": "Zu löschender Raum"
+        }
+      },
       "activity_menu": {
         "title": "Aktivitäten für {room}",
         "description": "Konfigurierte Aktivitäten:\n{activities}",
@@ -90,6 +97,14 @@
         "description": "Wähle eine zu löschende Aktivität aus {room}\n\n{warning}",
         "data": {
           "activity_name": "Zu löschende Aktivität"
+        }
+      },
+      "copy_activity": {
+        "title": "Aktivität kopieren",
+        "description": "{info}",
+        "data": {
+          "source_activity": "Zu kopierende Aktivität",
+          "new_activity_name": "Name für die neue Aktivität"
         }
       },
       "add_device": {

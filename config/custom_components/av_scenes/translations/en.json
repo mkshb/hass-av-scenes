@@ -42,6 +42,13 @@
           "room_id": "Room"
         }
       },
+      "delete_room": {
+        "title": "Delete Room",
+        "description": "{warning}",
+        "data": {
+          "room_id": "Room to Delete"
+        }
+      },
       "activity_menu": {
         "title": "Activities for {room}",
         "description": "Configured activities:\n{activities}",
@@ -82,6 +89,14 @@
         "description": "Select activity to delete from {room}\n\n{warning}",
         "data": {
           "activity_name": "Activity to Delete"
+        }
+      },
+      "copy_activity": {
+        "title": "Copy Activity",
+        "description": "{info}",
+        "data": {
+          "source_activity": "Activity to Copy",
+          "new_activity_name": "Name for New Activity"
         }
       },
       "add_device": {
