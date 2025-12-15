@@ -86,19 +86,24 @@
       },
       "add_device": {
         "title": "Add Device to {activity}",
-        "description": "Select a media player to add to this activity in {room}",
+        "description": "Select a device (media player, light, switch, cover) to add to this activity in {room}",
         "data": {
-          "entity_id": "Media Player"
+          "entity_id": "Device"
         }
       },
       "add_device_details": {
-        "title": "Configure Device: {device}",
-        "description": "Set input source and other settings for {device}",
+        "title": "Configure {domain}: {device}",
+        "description": "Set configuration for {device}",
         "data": {
           "input_source": "Input Source",
           "power_on_delay": "Power-on Delay (seconds)",
           "is_volume_controller": "Use this device for volume control",
-          "volume_level": "Initial Volume Level (%)"
+          "volume_level": "Initial Volume Level (%)",
+          "brightness": "Brightness (%)",
+          "color_temp": "Color Temperature (Mired, 153-500)",
+          "transition": "Transition Time (seconds)",
+          "position": "Position (%)",
+          "tilt_position": "Tilt Position (%)"
         }
       },
       "device_menu": {
@@ -116,13 +121,18 @@
         }
       },
       "edit_device": {
-        "title": "Edit Device: {device}",
+        "title": "Edit {domain}: {device}",
         "description": "Modify device configuration",
         "data": {
           "input_source": "Input Source",
           "power_on_delay": "Power-on Delay (seconds)",
           "is_volume_controller": "Use this device for volume control",
-          "volume_level": "Initial Volume Level (%)"
+          "volume_level": "Initial Volume Level (%)",
+          "brightness": "Brightness (%)",
+          "color_temp": "Color Temperature (Mired, 153-500)",
+          "transition": "Transition Time (seconds)",
+          "position": "Position (%)",
+          "tilt_position": "Tilt Position (%)"
         }
       },
       "select_device_to_delete": {

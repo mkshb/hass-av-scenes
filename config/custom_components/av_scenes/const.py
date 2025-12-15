@@ -17,6 +17,16 @@ CONF_INPUT_SOURCE: Final = "input_source"
 CONF_VOLUME_LEVEL: Final = "volume_level"
 CONF_IS_VOLUME_CONTROLLER: Final = "is_volume_controller"
 
+# Light-specific configuration
+CONF_BRIGHTNESS: Final = "brightness"
+CONF_COLOR_TEMP: Final = "color_temp"
+CONF_RGB_COLOR: Final = "rgb_color"
+CONF_TRANSITION: Final = "transition"
+
+# Cover-specific configuration
+CONF_POSITION: Final = "position"
+CONF_TILT_POSITION: Final = "tilt_position"
+
 # Device types
 DEVICE_TYPE_RECEIVER: Final = "receiver"
 DEVICE_TYPE_PROJECTOR: Final = "projector"
@@ -24,6 +34,7 @@ DEVICE_TYPE_TV: Final = "tv"
 DEVICE_TYPE_MEDIA_PLAYER: Final = "media_player"
 DEVICE_TYPE_LIGHT: Final = "light"
 DEVICE_TYPE_SWITCH: Final = "switch"
+DEVICE_TYPE_COVER: Final = "cover"
 
 DEVICE_TYPES: Final = [
     DEVICE_TYPE_RECEIVER,
@@ -32,6 +43,7 @@ DEVICE_TYPES: Final = [
     DEVICE_TYPE_MEDIA_PLAYER,
     DEVICE_TYPE_LIGHT,
     DEVICE_TYPE_SWITCH,
+    DEVICE_TYPE_COVER,
 ]
 
 # Activity states

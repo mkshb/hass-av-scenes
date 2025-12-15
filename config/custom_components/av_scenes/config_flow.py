@@ -24,6 +24,12 @@ from .const import (
     CONF_POWER_ON_DELAY,
     CONF_VOLUME_LEVEL,
     CONF_IS_VOLUME_CONTROLLER,
+    CONF_BRIGHTNESS,
+    CONF_COLOR_TEMP,
+    CONF_RGB_COLOR,
+    CONF_TRANSITION,
+    CONF_POSITION,
+    CONF_TILT_POSITION,
     DEFAULT_POWER_ON_DELAY,
 )
 
@@ -557,23 +563,28 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
                 _LOGGER.exception("Error in add_device: %s", ex)
                 errors["base"] = "unknown"
         
-        # Get all media_player entities
-        media_players = []
-        for entity_id in self.hass.states.async_entity_ids("media_player"):
-            state = self.hass.states.get(entity_id)
-            if state:
-                # Use friendly name if available
-                friendly_name = state.attributes.get("friendly_name", entity_id)
-                media_players.append((entity_id, friendly_name))
-        
-        # Sort by friendly name
-        media_players.sort(key=lambda x: x[1])
-        
+        # Get all supported entities (media_player, light, switch, cover)
+        supported_domains = ["media_player", "light", "switch", "cover"]
+        entities = []
+
+        for domain in supported_domains:
+            for entity_id in self.hass.states.async_entity_ids(domain):
+                state = self.hass.states.get(entity_id)
+                if state:
+                    # Use friendly name if available
+                    friendly_name = state.attributes.get("friendly_name", entity_id)
+                    # Add domain prefix to make it clearer in the UI
+                    display_name = f"[{domain}] {friendly_name}"
+                    entities.append((entity_id, display_name))
+
+        # Sort by display name
+        entities.sort(key=lambda x: x[1])
+
         # Create entity selector options
-        entity_options = {entity_id: name for entity_id, name in media_players}
-        
+        entity_options = {entity_id: name for entity_id, name in entities}
+
         if not entity_options:
-            entity_options = {"": "No media players found"}
+            entity_options = {"": "No entities found"}
         
         return self.async_show_form(
             step_id="add_device",
@@ -592,7 +603,10 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
     ) -> FlowResult:
         """Add a device to the activity - step 2: configure details."""
         errors = {}
-        
+
+        # Get entity domain
+        domain = self.selected_device_id.split(".")[0]
+
         if user_input is not None:
             try:
                 device_config = {
@@ -600,66 +614,119 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
                         CONF_POWER_ON_DELAY, DEFAULT_POWER_ON_DELAY
                     ),
                 }
-                
-                input_source = user_input.get(CONF_INPUT_SOURCE)
-                if input_source and input_source.strip() and input_source != "none":
-                    device_config[CONF_INPUT_SOURCE] = input_source.strip()
-                
-                # Volume control settings
-                is_volume_controller = user_input.get(CONF_IS_VOLUME_CONTROLLER, False)
-                if is_volume_controller:
-                    device_config[CONF_IS_VOLUME_CONTROLLER] = True
-                    volume_level = user_input.get(CONF_VOLUME_LEVEL)
-                    if volume_level is not None:
-                        # Convert percentage to 0.0-1.0 range
-                        device_config[CONF_VOLUME_LEVEL] = volume_level / 100.0
-                
+
+                # Media player specific configuration
+                if domain == "media_player":
+                    input_source = user_input.get(CONF_INPUT_SOURCE)
+                    if input_source and input_source.strip() and input_source != "none":
+                        device_config[CONF_INPUT_SOURCE] = input_source.strip()
+
+                    # Volume control settings
+                    is_volume_controller = user_input.get(CONF_IS_VOLUME_CONTROLLER, False)
+                    if is_volume_controller:
+                        device_config[CONF_IS_VOLUME_CONTROLLER] = True
+                        volume_level = user_input.get(CONF_VOLUME_LEVEL)
+                        if volume_level is not None:
+                            # Convert percentage to 0.0-1.0 range
+                            device_config[CONF_VOLUME_LEVEL] = volume_level / 100.0
+
+                # Light specific configuration
+                elif domain == "light":
+                    brightness = user_input.get(CONF_BRIGHTNESS)
+                    if brightness is not None:
+                        # Convert percentage to 0-255 range
+                        device_config[CONF_BRIGHTNESS] = int(brightness * 255 / 100)
+
+                    color_temp = user_input.get(CONF_COLOR_TEMP)
+                    if color_temp is not None:
+                        device_config[CONF_COLOR_TEMP] = color_temp
+
+                    transition = user_input.get(CONF_TRANSITION)
+                    if transition is not None:
+                        device_config[CONF_TRANSITION] = transition
+
+                # Cover specific configuration
+                elif domain == "cover":
+                    position = user_input.get(CONF_POSITION)
+                    if position is not None:
+                        device_config[CONF_POSITION] = position
+
+                    tilt_position = user_input.get(CONF_TILT_POSITION)
+                    if tilt_position is not None:
+                        device_config[CONF_TILT_POSITION] = tilt_position
+
+                # Switch has no additional configuration beyond power_on_delay
+
                 if CONF_DEVICE_STATES not in self.current_activity_data:
                     self.current_activity_data[CONF_DEVICE_STATES] = {}
-                
+
                 self.current_activity_data[CONF_DEVICE_STATES][self.selected_device_id] = device_config
-                
+
                 _LOGGER.info("Added device %s to activity", self.selected_device_id)
                 self.selected_device_id = None  # Clear selection
-                
+
                 # Ask if user wants to add more devices
                 return await self.async_step_device_menu()
             except Exception as ex:
                 _LOGGER.exception("Error in add_device_details: %s", ex)
                 errors["base"] = "unknown"
-        
-        # Get available sources for the selected device
+
+        # Get entity state
         state = self.hass.states.get(self.selected_device_id)
-        source_list = []
-        
-        if state:
-            source_list = state.attributes.get("source_list", [])
-        
-        # Create source options
-        if source_list:
-            source_options = {"none": "-- No source selection --"}
-            for source in source_list:
-                source_options[source] = source
-        else:
-            source_options = {"none": "-- Device has no sources --"}
-        
         friendly_name = state.attributes.get("friendly_name", self.selected_device_id) if state else self.selected_device_id
-        
+
+        # Build dynamic schema based on entity domain
+        schema_dict = {}
+
+        # Common field for all domains
+        schema_dict[vol.Optional(CONF_POWER_ON_DELAY, default=DEFAULT_POWER_ON_DELAY)] = int
+
+        # Domain-specific fields
+        if domain == "media_player":
+            # Get available sources
+            source_list = state.attributes.get("source_list", []) if state else []
+
+            if source_list:
+                source_options = {"none": "-- No source selection --"}
+                for source in source_list:
+                    source_options[source] = source
+            else:
+                source_options = {"none": "-- Device has no sources --"}
+
+            schema_dict[vol.Optional(CONF_INPUT_SOURCE, default="none")] = vol.In(source_options)
+            schema_dict[vol.Optional(CONF_IS_VOLUME_CONTROLLER, default=False)] = bool
+            schema_dict[vol.Optional(CONF_VOLUME_LEVEL, default=50)] = vol.All(
+                int, vol.Range(min=0, max=100)
+            )
+
+        elif domain == "light":
+            schema_dict[vol.Optional(CONF_BRIGHTNESS, default=100)] = vol.All(
+                int, vol.Range(min=0, max=100)
+            )
+            schema_dict[vol.Optional(CONF_COLOR_TEMP)] = vol.All(
+                int, vol.Range(min=153, max=500)
+            )
+            schema_dict[vol.Optional(CONF_TRANSITION, default=0)] = vol.All(
+                int, vol.Range(min=0, max=60)
+            )
+
+        elif domain == "cover":
+            schema_dict[vol.Optional(CONF_POSITION, default=100)] = vol.All(
+                int, vol.Range(min=0, max=100)
+            )
+            schema_dict[vol.Optional(CONF_TILT_POSITION)] = vol.All(
+                int, vol.Range(min=0, max=100)
+            )
+
+        # For switch, we only have the power_on_delay
+
         return self.async_show_form(
             step_id="add_device_details",
-            data_schema=vol.Schema({
-                vol.Optional(CONF_INPUT_SOURCE, default="none"): vol.In(source_options),
-                vol.Optional(
-                    CONF_POWER_ON_DELAY, default=DEFAULT_POWER_ON_DELAY
-                ): int,
-                vol.Optional(CONF_IS_VOLUME_CONTROLLER, default=False): bool,
-                vol.Optional(CONF_VOLUME_LEVEL, default=50): vol.All(
-                    int, vol.Range(min=0, max=100)
-                ),
-            }),
+            data_schema=vol.Schema(schema_dict),
             errors=errors,
             description_placeholders={
                 "device": friendly_name,
+                "domain": domain,
                 "room": self.current_room or "unknown",
                 "activity": self.current_activity or "unknown",
             },
@@ -763,7 +830,10 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
         """Edit a device configuration."""
         errors = {}
         device_states = self.current_activity_data.get(CONF_DEVICE_STATES, {})
-        
+
+        # Get entity domain
+        domain = self.selected_device_id.split(".")[0]
+
         # If user submitted the form
         if user_input is not None:
             try:
@@ -772,92 +842,173 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
                         CONF_POWER_ON_DELAY, DEFAULT_POWER_ON_DELAY
                     ),
                 }
-                
-                input_source = user_input.get(CONF_INPUT_SOURCE)
-                if input_source and input_source.strip() and input_source != "none":
-                    device_config[CONF_INPUT_SOURCE] = input_source.strip()
-                
-                # Volume control settings
-                is_volume_controller = user_input.get(CONF_IS_VOLUME_CONTROLLER, False)
-                if is_volume_controller:
-                    device_config[CONF_IS_VOLUME_CONTROLLER] = True
-                    volume_level = user_input.get(CONF_VOLUME_LEVEL)
-                    if volume_level is not None:
-                        # Convert percentage to 0.0-1.0 range
-                        device_config[CONF_VOLUME_LEVEL] = volume_level / 100.0
-                
+
+                # Media player specific configuration
+                if domain == "media_player":
+                    input_source = user_input.get(CONF_INPUT_SOURCE)
+                    if input_source and input_source.strip() and input_source != "none":
+                        device_config[CONF_INPUT_SOURCE] = input_source.strip()
+
+                    # Volume control settings
+                    is_volume_controller = user_input.get(CONF_IS_VOLUME_CONTROLLER, False)
+                    if is_volume_controller:
+                        device_config[CONF_IS_VOLUME_CONTROLLER] = True
+                        volume_level = user_input.get(CONF_VOLUME_LEVEL)
+                        if volume_level is not None:
+                            # Convert percentage to 0.0-1.0 range
+                            device_config[CONF_VOLUME_LEVEL] = volume_level / 100.0
+
+                # Light specific configuration
+                elif domain == "light":
+                    brightness = user_input.get(CONF_BRIGHTNESS)
+                    if brightness is not None:
+                        # Convert percentage to 0-255 range
+                        device_config[CONF_BRIGHTNESS] = int(brightness * 255 / 100)
+
+                    color_temp = user_input.get(CONF_COLOR_TEMP)
+                    if color_temp is not None:
+                        device_config[CONF_COLOR_TEMP] = color_temp
+
+                    transition = user_input.get(CONF_TRANSITION)
+                    if transition is not None:
+                        device_config[CONF_TRANSITION] = transition
+
+                # Cover specific configuration
+                elif domain == "cover":
+                    position = user_input.get(CONF_POSITION)
+                    if position is not None:
+                        device_config[CONF_POSITION] = position
+
+                    tilt_position = user_input.get(CONF_TILT_POSITION)
+                    if tilt_position is not None:
+                        device_config[CONF_TILT_POSITION] = tilt_position
+
+                # Switch has no additional configuration beyond power_on_delay
+
                 device_states[self.selected_device_id] = device_config
                 _LOGGER.info("Updated device %s", self.selected_device_id)
-                
+
                 # If we're editing an existing activity, save it
-                if (self.current_room in self.rooms and 
+                if (self.current_room in self.rooms and
                     self.current_activity in self.rooms[self.current_room].get(CONF_ACTIVITIES, {})):
                     self.rooms[self.current_room][CONF_ACTIVITIES][self.current_activity] = self.current_activity_data
                     self._save_config()
-                
+
                 self.selected_device_id = None  # Clear selection
                 return await self.async_step_device_menu()
             except Exception as ex:
                 _LOGGER.exception("Error editing device: %s", ex)
                 errors["base"] = "unknown"
-        
+
         # Show edit form with current values
         if self.selected_device_id is None:
             _LOGGER.error("No device selected for editing")
             return await self.async_step_device_menu()
-        
+
         current_config = device_states.get(self.selected_device_id, {})
-        
-        # Convert volume from 0.0-1.0 to 0-100 for display
-        current_volume = current_config.get(CONF_VOLUME_LEVEL, 0.5)
-        if isinstance(current_volume, (int, float)):
-            current_volume_pct = int(current_volume * 100)
-        else:
-            current_volume_pct = 50
-        
-        # Get available sources for the selected device
+
+        # Get entity state
         state = self.hass.states.get(self.selected_device_id)
-        source_list = []
-        current_source = current_config.get(CONF_INPUT_SOURCE, "none")
-        
-        if state:
-            source_list = state.attributes.get("source_list", [])
-        
-        # Create source options
-        if source_list:
-            source_options = {"none": "-- No source selection --"}
-            for source in source_list:
-                source_options[source] = source
-        else:
-            source_options = {"none": "-- Device has no sources --"}
-        
-        # Make sure current source is in options
-        if current_source and current_source != "none" and current_source not in source_options:
-            source_options[current_source] = f"{current_source} (custom)"
-        
+
+        # Build dynamic schema based on entity domain
+        schema_dict = {}
+
+        # Common field for all domains
+        schema_dict[vol.Optional(
+            CONF_POWER_ON_DELAY,
+            default=current_config.get(CONF_POWER_ON_DELAY, DEFAULT_POWER_ON_DELAY)
+        )] = int
+
+        # Domain-specific fields
+        if domain == "media_player":
+            # Convert volume from 0.0-1.0 to 0-100 for display
+            current_volume = current_config.get(CONF_VOLUME_LEVEL, 0.5)
+            if isinstance(current_volume, (int, float)):
+                current_volume_pct = int(current_volume * 100)
+            else:
+                current_volume_pct = 50
+
+            # Get available sources
+            source_list = state.attributes.get("source_list", []) if state else []
+            current_source = current_config.get(CONF_INPUT_SOURCE, "none")
+
+            if source_list:
+                source_options = {"none": "-- No source selection --"}
+                for source in source_list:
+                    source_options[source] = source
+            else:
+                source_options = {"none": "-- Device has no sources --"}
+
+            # Make sure current source is in options
+            if current_source and current_source != "none" and current_source not in source_options:
+                source_options[current_source] = f"{current_source} (custom)"
+
+            schema_dict[vol.Optional(
+                CONF_INPUT_SOURCE,
+                default=current_source if current_source else "none"
+            )] = vol.In(source_options)
+            schema_dict[vol.Optional(
+                CONF_IS_VOLUME_CONTROLLER,
+                default=current_config.get(CONF_IS_VOLUME_CONTROLLER, False)
+            )] = bool
+            schema_dict[vol.Optional(
+                CONF_VOLUME_LEVEL,
+                default=current_volume_pct
+            )] = vol.All(int, vol.Range(min=0, max=100))
+
+        elif domain == "light":
+            # Convert brightness from 0-255 to 0-100 for display
+            current_brightness = current_config.get(CONF_BRIGHTNESS, 255)
+            if isinstance(current_brightness, (int, float)):
+                current_brightness_pct = int(current_brightness * 100 / 255)
+            else:
+                current_brightness_pct = 100
+
+            schema_dict[vol.Optional(
+                CONF_BRIGHTNESS,
+                default=current_brightness_pct
+            )] = vol.All(int, vol.Range(min=0, max=100))
+
+            if CONF_COLOR_TEMP in current_config:
+                schema_dict[vol.Optional(
+                    CONF_COLOR_TEMP,
+                    default=current_config[CONF_COLOR_TEMP]
+                )] = vol.All(int, vol.Range(min=153, max=500))
+            else:
+                schema_dict[vol.Optional(CONF_COLOR_TEMP)] = vol.All(
+                    int, vol.Range(min=153, max=500)
+                )
+
+            schema_dict[vol.Optional(
+                CONF_TRANSITION,
+                default=current_config.get(CONF_TRANSITION, 0)
+            )] = vol.All(int, vol.Range(min=0, max=60))
+
+        elif domain == "cover":
+            schema_dict[vol.Optional(
+                CONF_POSITION,
+                default=current_config.get(CONF_POSITION, 100)
+            )] = vol.All(int, vol.Range(min=0, max=100))
+
+            if CONF_TILT_POSITION in current_config:
+                schema_dict[vol.Optional(
+                    CONF_TILT_POSITION,
+                    default=current_config[CONF_TILT_POSITION]
+                )] = vol.All(int, vol.Range(min=0, max=100))
+            else:
+                schema_dict[vol.Optional(CONF_TILT_POSITION)] = vol.All(
+                    int, vol.Range(min=0, max=100)
+                )
+
+        # For switch, we only have the power_on_delay
+
         return self.async_show_form(
             step_id="edit_device",
-            data_schema=vol.Schema({
-                vol.Optional(
-                    CONF_INPUT_SOURCE,
-                    default=current_source if current_source else "none"
-                ): vol.In(source_options),
-                vol.Optional(
-                    CONF_POWER_ON_DELAY,
-                    default=current_config.get(CONF_POWER_ON_DELAY, DEFAULT_POWER_ON_DELAY)
-                ): int,
-                vol.Optional(
-                    CONF_IS_VOLUME_CONTROLLER,
-                    default=current_config.get(CONF_IS_VOLUME_CONTROLLER, False)
-                ): bool,
-                vol.Optional(
-                    CONF_VOLUME_LEVEL,
-                    default=current_volume_pct
-                ): vol.All(int, vol.Range(min=0, max=100)),
-            }),
+            data_schema=vol.Schema(schema_dict),
             errors=errors,
             description_placeholders={
                 "device": self.selected_device_id,
+                "domain": domain,
             },
         )
 

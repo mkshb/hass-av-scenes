@@ -28,6 +28,12 @@ from .const import (
     CONF_INPUT_SOURCE,
     CONF_VOLUME_LEVEL,
     CONF_IS_VOLUME_CONTROLLER,
+    CONF_BRIGHTNESS,
+    CONF_COLOR_TEMP,
+    CONF_RGB_COLOR,
+    CONF_TRANSITION,
+    CONF_POSITION,
+    CONF_TILT_POSITION,
     DEFAULT_POWER_ON_DELAY,
     DEFAULT_POWER_OFF_DELAY,
     SERVICE_START_ACTIVITY,
@@ -202,47 +208,110 @@ class AVScenesCoordinator(DataUpdateCoordinator):
     async def _update_device_settings(
         self, entity_id: str, state_config: dict[str, Any]
     ) -> None:
-        """Update device settings (volume, input source) without power cycling."""
+        """Update device settings without power cycling."""
         try:
             domain = entity_id.split(".")[0]
-            
-            # Set volume if this is the volume controller
-            if state_config.get(CONF_IS_VOLUME_CONTROLLER, False):
-                volume_level = state_config.get(CONF_VOLUME_LEVEL)
-                if volume_level is not None:
+
+            # Media player specific settings
+            if domain == "media_player":
+                # Set volume if this is the volume controller
+                if state_config.get(CONF_IS_VOLUME_CONTROLLER, False):
+                    volume_level = state_config.get(CONF_VOLUME_LEVEL)
+                    if volume_level is not None:
+                        await self.hass.services.async_call(
+                            domain,
+                            "volume_set",
+                            {
+                                ATTR_ENTITY_ID: entity_id,
+                                "volume_level": volume_level,
+                            },
+                            blocking=True,
+                        )
+                        _LOGGER.info(
+                            "Set volume to %.0f%% on %s",
+                            volume_level * 100,
+                            entity_id
+                        )
+
+                # Set input source if specified
+                input_source = state_config.get(CONF_INPUT_SOURCE)
+                if input_source:
                     await self.hass.services.async_call(
                         domain,
-                        "volume_set",
+                        "select_source",
                         {
                             ATTR_ENTITY_ID: entity_id,
-                            "volume_level": volume_level,
+                            "source": input_source,
                         },
                         blocking=True,
                     )
                     _LOGGER.info(
-                        "Set volume to %.0f%% on %s",
-                        volume_level * 100,
+                        "Changed input source to '%s' on %s",
+                        input_source,
                         entity_id
                     )
-            
-            # Set input source if specified
-            input_source = state_config.get(CONF_INPUT_SOURCE)
-            if input_source:
-                await self.hass.services.async_call(
-                    domain,
-                    "select_source",
-                    {
-                        ATTR_ENTITY_ID: entity_id,
-                        "source": input_source,
-                    },
-                    blocking=True,
-                )
-                _LOGGER.info(
-                    "Changed input source to '%s' on %s",
-                    input_source,
-                    entity_id
-                )
-                
+
+            # Light specific settings
+            elif domain == "light":
+                service_data = {ATTR_ENTITY_ID: entity_id}
+
+                # Set brightness
+                brightness = state_config.get(CONF_BRIGHTNESS)
+                if brightness is not None:
+                    service_data["brightness"] = brightness
+
+                # Set color temperature
+                color_temp = state_config.get(CONF_COLOR_TEMP)
+                if color_temp is not None:
+                    service_data["color_temp"] = color_temp
+
+                # Set transition
+                transition = state_config.get(CONF_TRANSITION)
+                if transition is not None:
+                    service_data["transition"] = transition
+
+                # Only call turn_on if we have settings to apply
+                if len(service_data) > 1:  # More than just entity_id
+                    await self.hass.services.async_call(
+                        domain,
+                        SERVICE_TURN_ON,
+                        service_data,
+                        blocking=True,
+                    )
+                    _LOGGER.info("Updated light settings on %s", entity_id)
+
+            # Cover specific settings
+            elif domain == "cover":
+                # Set position
+                position = state_config.get(CONF_POSITION)
+                if position is not None:
+                    await self.hass.services.async_call(
+                        domain,
+                        "set_cover_position",
+                        {
+                            ATTR_ENTITY_ID: entity_id,
+                            "position": position,
+                        },
+                        blocking=True,
+                    )
+                    _LOGGER.info("Set cover position to %d%% on %s", position, entity_id)
+
+                # Set tilt position
+                tilt_position = state_config.get(CONF_TILT_POSITION)
+                if tilt_position is not None:
+                    await self.hass.services.async_call(
+                        domain,
+                        "set_cover_tilt_position",
+                        {
+                            ATTR_ENTITY_ID: entity_id,
+                            "tilt_position": tilt_position,
+                        },
+                        blocking=True,
+                    )
+                    _LOGGER.info("Set cover tilt to %d%% on %s", tilt_position, entity_id)
+
+            # Switch has no additional settings to update
+
         except Exception as ex:
             _LOGGER.error(f"Error updating settings for {entity_id}: {ex}")
 
