@@ -823,15 +823,18 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
                 elif action == "reorder_device":
                     return await self.async_step_reorder_device()
                 elif action == "finish_activity":
+                    # Ensure device order is synchronized before saving
+                    self._ensure_device_order(self.current_activity_data)
+
                     # Save activity
                     if self.current_room not in self.rooms:
                         _LOGGER.error("Room %s not found", self.current_room)
                         return await self.async_step_room_menu()
-                    
+
                     room_data = self.rooms[self.current_room]
                     if CONF_ACTIVITIES not in room_data:
                         room_data[CONF_ACTIVITIES] = {}
-                    
+
                     room_data[CONF_ACTIVITIES][self.current_activity] = self.current_activity_data
                     _LOGGER.info(
                         "Saved activity %s to room %s with %d devices",
@@ -1023,6 +1026,8 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
                 # If we're editing an existing activity, save it
                 if (self.current_room in self.rooms and
                     self.current_activity in self.rooms[self.current_room].get(CONF_ACTIVITIES, {})):
+                    # Ensure device order is synchronized before saving
+                    self._ensure_device_order(self.current_activity_data)
                     self.rooms[self.current_room][CONF_ACTIVITIES][self.current_activity] = self.current_activity_data
                     self._save_config()
 
@@ -1155,10 +1160,12 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
             if device_id in device_states:
                 del device_states[device_id]
                 _LOGGER.info("Deleted device %s", device_id)
-                
+
                 # If we're editing an existing activity, save it
-                if (self.current_room in self.rooms and 
+                if (self.current_room in self.rooms and
                     self.current_activity in self.rooms[self.current_room].get(CONF_ACTIVITIES, {})):
+                    # Ensure device order is synchronized before saving (removes deleted device from order)
+                    self._ensure_device_order(self.current_activity_data)
                     self.rooms[self.current_room][CONF_ACTIVITIES][self.current_activity] = self.current_activity_data
                     self._save_config()
             
