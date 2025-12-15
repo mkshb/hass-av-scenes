@@ -179,6 +179,16 @@
       "unknown": "Unbekannter Fehler aufgetreten"
     }
   },
+  "entity": {
+    "sensor": {
+      "room_config": {
+        "name": "{room_name} Konfiguration",
+        "state": {
+          "idle": "Inaktiv"
+        }
+      }
+    }
+  },
   "services": {
     "start_activity": {
       "name": "Aktivität starten",

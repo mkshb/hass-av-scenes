@@ -173,5 +173,45 @@
       "room_not_found": "Room not found",
       "unknown": "Unknown error occurred"
     }
+  },
+  "entity": {
+    "sensor": {
+      "room_config": {
+        "name": "{room_name} Configuration",
+        "state": {
+          "idle": "Idle"
+        }
+      }
+    }
+  },
+  "services": {
+    "start_activity": {
+      "name": "Start Activity",
+      "description": "Starts an activity in a room",
+      "fields": {
+        "room": {
+          "name": "Room",
+          "description": "The room ID"
+        },
+        "activity": {
+          "name": "Activity",
+          "description": "The name of the activity to start"
+        }
+      }
+    },
+    "stop_activity": {
+      "name": "Stop Activity",
+      "description": "Stops the current activity in a room",
+      "fields": {
+        "room": {
+          "name": "Room",
+          "description": "The room ID"
+        }
+      }
+    },
+    "reload": {
+      "name": "Reload",
+      "description": "Reloads the AV Scenes configuration"
+    }
   }
 }
