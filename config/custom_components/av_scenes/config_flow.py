@@ -438,17 +438,56 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
         room_data = self.rooms.get(self.current_room, {})
         activity_data = room_data.get(CONF_ACTIVITIES, {}).get(self.current_activity, {})
         device_states = activity_data.get(CONF_DEVICE_STATES, {})
-        
+
         device_list = []
         for entity_id, config in device_states.items():
-            source_info = config.get(CONF_INPUT_SOURCE, 'No source')
-            volume_info = ""
-            if config.get(CONF_IS_VOLUME_CONTROLLER, False):
-                volume_level = config.get(CONF_VOLUME_LEVEL, 0.5)
-                volume_pct = int(volume_level * 100)
-                volume_info = f" [Volume: {volume_pct}%]"
-            device_list.append(f"- {entity_id}: {source_info}{volume_info}")
-        
+            domain = entity_id.split(".")[0]
+            info_parts = []
+
+            # Media Player
+            if domain == "media_player":
+                source = config.get(CONF_INPUT_SOURCE)
+                if source:
+                    info_parts.append(f"Source: {source}")
+                if config.get(CONF_IS_VOLUME_CONTROLLER, False):
+                    volume_level = config.get(CONF_VOLUME_LEVEL, 0.5)
+                    volume_pct = int(volume_level * 100)
+                    info_parts.append(f"Volume: {volume_pct}%")
+
+            # Light
+            elif domain == "light":
+                brightness = config.get(CONF_BRIGHTNESS)
+                if brightness is not None:
+                    brightness_pct = int(brightness * 100 / 255)
+                    info_parts.append(f"Brightness: {brightness_pct}%")
+                color_temp = config.get(CONF_COLOR_TEMP)
+                if color_temp is not None:
+                    info_parts.append(f"Color Temp: {color_temp}K")
+                transition = config.get(CONF_TRANSITION)
+                if transition is not None and transition > 0:
+                    info_parts.append(f"Transition: {transition}s")
+
+            # Cover
+            elif domain == "cover":
+                position = config.get(CONF_POSITION)
+                if position is not None:
+                    info_parts.append(f"Position: {position}%")
+                tilt = config.get(CONF_TILT_POSITION)
+                if tilt is not None:
+                    info_parts.append(f"Tilt: {tilt}%")
+
+            # Switch
+            elif domain == "switch":
+                info_parts.append("On/Off")
+
+            # Build display string
+            if info_parts:
+                device_info = " [" + ", ".join(info_parts) + "]"
+            else:
+                device_info = ""
+
+            device_list.append(f"- {entity_id}{device_info}")
+
         device_list_str = "\n".join(device_list) if device_list else "No devices configured"
         
         return self.async_show_form(
@@ -773,14 +812,53 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
         device_states = self.current_activity_data.get(CONF_DEVICE_STATES, {})
         device_list = []
         for entity_id, config in device_states.items():
-            source_info = config.get(CONF_INPUT_SOURCE, 'No source')
-            volume_info = ""
-            if config.get(CONF_IS_VOLUME_CONTROLLER, False):
-                volume_level = config.get(CONF_VOLUME_LEVEL, 0.5)
-                volume_pct = int(volume_level * 100)
-                volume_info = f" [Volume: {volume_pct}%]"
-            device_list.append(f"- {entity_id}: {source_info}{volume_info}")
-        
+            domain = entity_id.split(".")[0]
+            info_parts = []
+
+            # Media Player
+            if domain == "media_player":
+                source = config.get(CONF_INPUT_SOURCE)
+                if source:
+                    info_parts.append(f"Source: {source}")
+                if config.get(CONF_IS_VOLUME_CONTROLLER, False):
+                    volume_level = config.get(CONF_VOLUME_LEVEL, 0.5)
+                    volume_pct = int(volume_level * 100)
+                    info_parts.append(f"Volume: {volume_pct}%")
+
+            # Light
+            elif domain == "light":
+                brightness = config.get(CONF_BRIGHTNESS)
+                if brightness is not None:
+                    brightness_pct = int(brightness * 100 / 255)
+                    info_parts.append(f"Brightness: {brightness_pct}%")
+                color_temp = config.get(CONF_COLOR_TEMP)
+                if color_temp is not None:
+                    info_parts.append(f"Color Temp: {color_temp}K")
+                transition = config.get(CONF_TRANSITION)
+                if transition is not None and transition > 0:
+                    info_parts.append(f"Transition: {transition}s")
+
+            # Cover
+            elif domain == "cover":
+                position = config.get(CONF_POSITION)
+                if position is not None:
+                    info_parts.append(f"Position: {position}%")
+                tilt = config.get(CONF_TILT_POSITION)
+                if tilt is not None:
+                    info_parts.append(f"Tilt: {tilt}%")
+
+            # Switch
+            elif domain == "switch":
+                info_parts.append("On/Off")
+
+            # Build display string
+            if info_parts:
+                device_info = " [" + ", ".join(info_parts) + "]"
+            else:
+                device_info = ""
+
+            device_list.append(f"- {entity_id}{device_info}")
+
         device_list_str = "\n".join(device_list) if device_list else "No devices added yet"
         
         actions = {
