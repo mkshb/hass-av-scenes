@@ -83,22 +83,23 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
         _LOGGER.debug("Initializing OptionsFlow for entry: %s", config_entry.entry_id)
-        
+
         try:
+            import copy
             # Make a deep copy to avoid modifying the original
             rooms_data = config_entry.data.get(CONF_ROOMS, {})
             if not isinstance(rooms_data, dict):
                 _LOGGER.warning("Rooms data is not a dict, using empty dict")
                 rooms_data = {}
-            
-            self.rooms: dict[str, Any] = dict(rooms_data)
+
+            self.rooms: dict[str, Any] = copy.deepcopy(rooms_data)
             self.current_room: str | None = None
             self.current_activity: str | None = None
             self.current_room_data: dict[str, Any] = {}
             self.current_activity_data: dict[str, Any] = {}
             self.selected_device_id: str | None = None
             self._last_save_data: str | None = None  # Track last saved data to avoid duplicate saves
-            
+
             _LOGGER.debug("OptionsFlow initialized with %d rooms", len(self.rooms))
         except Exception as ex:
             _LOGGER.exception("Error initializing OptionsFlow: %s", ex)
