@@ -18,9 +18,16 @@ Home Assistant Integration für aktivitätsbasierte Steuerung von AV-Geräten. E
 - 🏠 **Multiroom-Unterstützung** - Unabhängige Steuerung mehrerer Räume
 - 🎬 **Aktivitätsbasierte Szenen** - "Film schauen", "Musik hören", "Gaming", etc.
 - 🔄 **Smart Activity Switching** - Nahtloser Wechsel ohne Geräte neu zu starten
+- 🎛️ **Mehrere Entity-Typen** - Media Player, Lichter, Steckdosen und Rollläden
+- 🔢 **Geräte-Reihenfolge** - Kontrolle über die Einschalt-Sequenz (wichtig für Abhängigkeiten)
+- 💾 **Persistente Konfiguration** - Reihenfolge bleibt nach HA-Neustart erhalten
 - 🔊 **Lautstärkeregelung** - Automatische Lautstärkenanpassung pro Aktivität
+- 💡 **Lichtsteuerung** - Helligkeit, Farbtemperatur und Übergänge
+- 🪟 **Rollladen-Steuerung** - Position und Neigung basierend auf Aktivität
 - ⚡ **Power Sequencing** - Konfigurierbare Verzögerungen für optimale Gerätesteuerung
 - 🎛️ **Input Source Management** - Automatischer Input-Wechsel
+- 📋 **Aktivität kopieren** - Schnelles Duplizieren bestehender Aktivitäten
+- 🗑️ **Raum löschen** - Vollständige Entfernung von Räumen mit allen Aktivitäten
 - 🖥️ **UI-basierte Konfiguration** - Kein YAML erforderlich
 - 🇩🇪 **Vollständig auf Deutsch** - Komplette deutsche Übersetzung
 
@@ -64,10 +71,22 @@ Home Assistant Integration für aktivitätsbasierte Steuerung von AV-Geräten. E
 2. Klicke auf **Neue Aktivität hinzufügen**
 3. Gib einen Namen ein (z.B. "Film schauen")
 4. Füge Geräte hinzu:
-   - Wähle Media Player aus Dropdown
-   - Wähle Eingangsquelle (wird automatisch vom Gerät geladen)
+   - Wähle Gerät aus Dropdown (Media Player, Licht, Steckdose, Rollladen)
+   - Konfiguriere gerätespezifische Einstellungen:
+     - **Media Player**: Eingangsquelle, Lautstärkeregelung
+     - **Licht**: Helligkeit, Farbtemperatur, Übergangszeit
+     - **Steckdose**: Nur Ein/Aus mit Verzögerung
+     - **Rollladen**: Position und Neigungsposition
    - Setze Einschaltverzögerung (in Sekunden)
-   - Optional: Aktiviere Lautstärkeregelung und setze Anfangslautstärke
+5. **Geräte-Reihenfolge anpassen** (optional):
+   - Wähle "Change device order"
+   - Verschiebe Geräte nach oben/unten
+   - Wichtig für Abhängigkeiten (z.B. Steckdose vor TV)
+   - Geräte werden von oben nach unten eingeschaltet
+6. **Aktivität kopieren** (optional):
+   - Nutze "Copy activity" um eine Aktivität zu duplizieren
+   - Alle Geräte und Einstellungen werden kopiert
+   - Ideal für ähnliche Aktivitäten (z.B. "Film HD" → "Film 4K")
 
 ### 📖 Verwendung
 
@@ -153,6 +172,27 @@ target:
 - ✅ Apple TV bleibt AN
 - ❌ Sat-Receiver wird AUSGESCHALTET
 
+#### Szenario 3: Geräte-Reihenfolge für Abhängigkeiten
+
+**Problem:**
+- TV ist an Steckdose angeschlossen
+- TV schaltet sich ein bevor Steckdose aktiv ist
+- TV startet nicht richtig
+
+**Lösung mit Geräte-Reihenfolge:**
+1. Steckdose (Verzögerung: 5s)
+2. Rollladen (Position: 60%, Verzögerung: 1s)
+3. Licht (Helligkeit: 8%, Verzögerung: 1s)
+4. TV (Source: HDMI_IN_4, Verzögerung: 2s)
+5. Apple TV (Verzögerung: 2s)
+
+**Was passiert:**
+1. Steckdose wird eingeschaltet → Wartet 5 Sekunden
+2. Rollladen fährt auf 60% → Wartet 1 Sekunde
+3. Licht geht auf 8% → Wartet 1 Sekunde
+4. TV schaltet sich ein (hat jetzt Strom!) → Wartet 2 Sekunden
+5. Apple TV schaltet sich ein → Wartet 2 Sekunden
+
 ### 🔧 Erweiterte Konfiguration
 
 #### Lovelace Card Beispiel
@@ -197,9 +237,16 @@ automation:
 
 ### 🐛 Bekannte Einschränkungen
 
-- Funktioniert aktuell nur mit `media_player` Entitäten
 - Source-Wechsel funktioniert nur wenn das Gerät das `source_list` Attribut unterstützt
 - Lautstärkeregelung funktioniert nur wenn das Gerät den `volume_set` Service unterstützt
+- Rollläden mit Neigungsfunktion benötigen Unterstützung für `set_cover_tilt_position` Service
+
+### 🆕 Unterstützte Entity-Typen
+
+- **Media Player** (media_player.*) - Vollständige Unterstützung mit Input-Auswahl und Lautstärkeregelung
+- **Lichter** (light.*) - Helligkeit, Farbtemperatur und Übergangszeit
+- **Steckdosen** (switch.*) - Ein/Aus Steuerung mit konfigurierbarer Verzögerung
+- **Rollläden** (cover.*) - Position und Neigungssteuerung
 
 ### 🤝 Beitragen
 
@@ -234,9 +281,16 @@ Dieses Projekt ist unter der MIT-Lizenz lizenziert - siehe [LICENSE](LICENSE) f�
 - 🏠 **Multi-room Support** - Independent control of multiple rooms
 - 🎬 **Activity-based Scenes** - "Watch Movie", "Listen to Music", "Gaming", etc.
 - 🔄 **Smart Activity Switching** - Seamless transitions without restarting devices
+- 🎛️ **Multiple Entity Types** - Media Players, Lights, Switches and Covers
+- 🔢 **Device Order Control** - Control power-on sequence (important for dependencies)
+- 💾 **Persistent Configuration** - Order persists after HA restart
 - 🔊 **Volume Control** - Automatic volume adjustment per activity
+- 💡 **Light Control** - Brightness, color temperature and transitions
+- 🪟 **Cover Control** - Position and tilt based on activity
 - ⚡ **Power Sequencing** - Configurable delays for optimal device control
 - 🎛️ **Input Source Management** - Automatic input switching
+- 📋 **Copy Activity** - Quick duplication of existing activities
+- 🗑️ **Delete Room** - Complete removal of rooms with all activities
 - 🖥️ **UI-based Configuration** - No YAML required
 - 🇩🇪 **Fully Translated** - Complete German translation
 
@@ -280,10 +334,22 @@ Dieses Projekt ist unter der MIT-Lizenz lizenziert - siehe [LICENSE](LICENSE) f�
 2. Click **Add new activity**
 3. Enter a name (e.g., "Watch Movie")
 4. Add devices:
-   - Select media player from dropdown
-   - Select input source (automatically loaded from device)
+   - Select device from dropdown (Media Player, Light, Switch, Cover)
+   - Configure device-specific settings:
+     - **Media Player**: Input source, volume control
+     - **Light**: Brightness, color temperature, transition time
+     - **Switch**: Only on/off with delay
+     - **Cover**: Position and tilt position
    - Set power-on delay (in seconds)
-   - Optional: Enable volume control and set initial volume
+5. **Adjust device order** (optional):
+   - Select "Change device order"
+   - Move devices up/down
+   - Important for dependencies (e.g., outlet before TV)
+   - Devices power on from top to bottom
+6. **Copy activity** (optional):
+   - Use "Copy activity" to duplicate an activity
+   - All devices and settings are copied
+   - Ideal for similar activities (e.g., "Movie HD" → "Movie 4K")
 
 ### 📖 Usage
 
@@ -369,6 +435,27 @@ target:
 - ✅ Apple TV stays ON
 - ❌ Satellite Receiver turns OFF
 
+#### Scenario 3: Device Order for Dependencies
+
+**Problem:**
+- TV is connected to power outlet
+- TV powers on before outlet is active
+- TV doesn't start properly
+
+**Solution with Device Order:**
+1. Outlet (Delay: 5s)
+2. Cover (Position: 60%, Delay: 1s)
+3. Light (Brightness: 8%, Delay: 1s)
+4. TV (Source: HDMI_IN_4, Delay: 2s)
+5. Apple TV (Delay: 2s)
+
+**What happens:**
+1. Outlet powers on → Waits 5 seconds
+2. Cover moves to 60% → Waits 1 second
+3. Light dims to 8% → Waits 1 second
+4. TV powers on (now has power!) → Waits 2 seconds
+5. Apple TV powers on → Waits 2 seconds
+
 ### 🔧 Advanced Configuration
 
 #### Lovelace Card Example
@@ -413,9 +500,16 @@ automation:
 
 ### 🐛 Known Limitations
 
-- Currently only works with `media_player` entities
 - Source switching only works if device supports `source_list` attribute
 - Volume control only works if device supports `volume_set` service
+- Covers with tilt function require support for `set_cover_tilt_position` service
+
+### 🆕 Supported Entity Types
+
+- **Media Players** (media_player.*) - Full support with input selection and volume control
+- **Lights** (light.*) - Brightness, color temperature and transition time
+- **Switches** (switch.*) - On/off control with configurable delay
+- **Covers** (cover.*) - Position and tilt control
 
 ### 🤝 Contributing
 

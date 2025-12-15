@@ -50,6 +50,13 @@
           "room_id": "Raum"
         }
       },
+      "delete_room": {
+        "title": "Raum löschen",
+        "description": "{warning}",
+        "data": {
+          "room_id": "Zu löschender Raum"
+        }
+      },
       "activity_menu": {
         "title": "Aktivitäten für {room}",
         "description": "Konfigurierte Aktivitäten:\n{activities}",
@@ -92,21 +99,34 @@
           "activity_name": "Zu löschende Aktivität"
         }
       },
+      "copy_activity": {
+        "title": "Aktivität kopieren",
+        "description": "{info}",
+        "data": {
+          "source_activity": "Zu kopierende Aktivität",
+          "new_activity_name": "Name für die neue Aktivität"
+        }
+      },
       "add_device": {
         "title": "Gerät zu {activity} hinzufügen",
-        "description": "Wähle einen Media Player für diese Aktivität in {room}",
+        "description": "Wähle ein Gerät (Media Player, Licht, Steckdose, Rollladen) für diese Aktivität in {room}",
         "data": {
-          "entity_id": "Media Player"
+          "entity_id": "Gerät"
         }
       },
       "add_device_details": {
-        "title": "Gerät konfigurieren: {device}",
-        "description": "Eingangsquelle und weitere Einstellungen für {device} festlegen",
+        "title": "{domain} konfigurieren: {device}",
+        "description": "Einstellungen für {device} festlegen",
         "data": {
           "input_source": "Eingangsquelle",
           "power_on_delay": "Einschaltverzögerung (Sekunden)",
           "is_volume_controller": "Dieses Gerät für Lautstärkeregelung verwenden",
-          "volume_level": "Anfangslautstärke (%)"
+          "volume_level": "Anfangslautstärke (%)",
+          "brightness": "Helligkeit (%)",
+          "color_temp": "Farbtemperatur (Mired, 153-500)",
+          "transition": "Übergangszeit (Sekunden)",
+          "position": "Position (%)",
+          "tilt_position": "Neigungsposition (%)"
         }
       },
       "device_menu": {
@@ -124,13 +144,18 @@
         }
       },
       "edit_device": {
-        "title": "Gerät bearbeiten: {device}",
+        "title": "{domain} bearbeiten: {device}",
         "description": "Gerätekonfiguration ändern",
         "data": {
           "input_source": "Eingangsquelle",
           "power_on_delay": "Einschaltverzögerung (Sekunden)",
           "is_volume_controller": "Dieses Gerät für Lautstärkeregelung verwenden",
-          "volume_level": "Anfangslautstärke (%)"
+          "volume_level": "Anfangslautstärke (%)",
+          "brightness": "Helligkeit (%)",
+          "color_temp": "Farbtemperatur (Mired, 153-500)",
+          "transition": "Übergangszeit (Sekunden)",
+          "position": "Position (%)",
+          "tilt_position": "Neigungsposition (%)"
         }
       },
       "select_device_to_delete": {
@@ -138,6 +163,14 @@
         "description": "{warning}",
         "data": {
           "device_id": "Zu löschendes Gerät"
+        }
+      },
+      "reorder_device": {
+        "title": "Geräte-Reihenfolge ändern",
+        "description": "{info}",
+        "data": {
+          "device_id": "Gerät zum Verschieben",
+          "direction": "Richtung"
         }
       }
     },
