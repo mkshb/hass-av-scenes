@@ -442,12 +442,20 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
         device_list = []
         for idx, (entity_id, config) in enumerate(device_states.items(), 1):
             domain = entity_id.split(".")[0]
+
+            # Get friendly name
+            state = self.hass.states.get(entity_id)
+            friendly_name = state.attributes.get("friendly_name", entity_id) if state else entity_id
+
+            # Get power on delay
+            delay = config.get(CONF_POWER_ON_DELAY, DEFAULT_POWER_ON_DELAY)
+
             info_parts = []
 
             # Media Player
             if domain == "media_player":
                 source = config.get(CONF_INPUT_SOURCE)
-                if source:
+                if source and source != "none":
                     info_parts.append(f"Source: {source}")
                 if config.get(CONF_IS_VOLUME_CONTROLLER, False):
                     volume_level = config.get(CONF_VOLUME_LEVEL, 0.5)
@@ -480,13 +488,12 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
             elif domain == "switch":
                 info_parts.append("On/Off")
 
-            # Build display string with order number
-            if info_parts:
-                device_info = " [" + ", ".join(info_parts) + "]"
-            else:
-                device_info = ""
+            # Add delay information
+            info_parts.append(f"Delay: {delay}s")
 
-            device_list.append(f"{idx}. {entity_id}{device_info}")
+            # Build display string with order number and friendly name
+            device_info = " [" + ", ".join(info_parts) + "]"
+            device_list.append(f"{idx}. {friendly_name}{device_info}")
 
         device_list_str = "\n".join(device_list) if device_list else "No devices configured"
         
@@ -815,12 +822,20 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
         device_list = []
         for idx, (entity_id, config) in enumerate(device_states.items(), 1):
             domain = entity_id.split(".")[0]
+
+            # Get friendly name
+            state = self.hass.states.get(entity_id)
+            friendly_name = state.attributes.get("friendly_name", entity_id) if state else entity_id
+
+            # Get power on delay
+            delay = config.get(CONF_POWER_ON_DELAY, DEFAULT_POWER_ON_DELAY)
+
             info_parts = []
 
             # Media Player
             if domain == "media_player":
                 source = config.get(CONF_INPUT_SOURCE)
-                if source:
+                if source and source != "none":
                     info_parts.append(f"Source: {source}")
                 if config.get(CONF_IS_VOLUME_CONTROLLER, False):
                     volume_level = config.get(CONF_VOLUME_LEVEL, 0.5)
@@ -853,13 +868,12 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
             elif domain == "switch":
                 info_parts.append("On/Off")
 
-            # Build display string with order number
-            if info_parts:
-                device_info = " [" + ", ".join(info_parts) + "]"
-            else:
-                device_info = ""
+            # Add delay information
+            info_parts.append(f"Delay: {delay}s")
 
-            device_list.append(f"{idx}. {entity_id}{device_info}")
+            # Build display string with order number and friendly name
+            device_info = " [" + ", ".join(info_parts) + "]"
+            device_list.append(f"{idx}. {friendly_name}{device_info}")
 
         device_list_str = "\n".join(device_list) if device_list else "No devices added yet"
         
