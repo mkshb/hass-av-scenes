@@ -149,6 +149,14 @@
         "data": {
           "device_id": "Zu löschendes Gerät"
         }
+      },
+      "reorder_device": {
+        "title": "Geräte-Reihenfolge ändern",
+        "description": "{info}",
+        "data": {
+          "device_id": "Gerät zum Verschieben",
+          "direction": "Richtung"
+        }
       }
     },
     "error": {

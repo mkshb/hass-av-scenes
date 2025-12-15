@@ -440,7 +440,7 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
         device_states = activity_data.get(CONF_DEVICE_STATES, {})
 
         device_list = []
-        for entity_id, config in device_states.items():
+        for idx, (entity_id, config) in enumerate(device_states.items(), 1):
             domain = entity_id.split(".")[0]
             info_parts = []
 
@@ -480,13 +480,13 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
             elif domain == "switch":
                 info_parts.append("On/Off")
 
-            # Build display string
+            # Build display string with order number
             if info_parts:
                 device_info = " [" + ", ".join(info_parts) + "]"
             else:
                 device_info = ""
 
-            device_list.append(f"- {entity_id}{device_info}")
+            device_list.append(f"{idx}. {entity_id}{device_info}")
 
         device_list_str = "\n".join(device_list) if device_list else "No devices configured"
         
@@ -785,6 +785,8 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
                     return await self.async_step_select_device_to_edit()
                 elif action == "delete_device":
                     return await self.async_step_select_device_to_delete()
+                elif action == "reorder_device":
+                    return await self.async_step_reorder_device()
                 elif action == "finish_activity":
                     # Save activity
                     if self.current_room not in self.rooms:
@@ -811,7 +813,7 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
         
         device_states = self.current_activity_data.get(CONF_DEVICE_STATES, {})
         device_list = []
-        for entity_id, config in device_states.items():
+        for idx, (entity_id, config) in enumerate(device_states.items(), 1):
             domain = entity_id.split(".")[0]
             info_parts = []
 
@@ -851,13 +853,13 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
             elif domain == "switch":
                 info_parts.append("On/Off")
 
-            # Build display string
+            # Build display string with order number
             if info_parts:
                 device_info = " [" + ", ".join(info_parts) + "]"
             else:
                 device_info = ""
 
-            device_list.append(f"- {entity_id}{device_info}")
+            device_list.append(f"{idx}. {entity_id}{device_info}")
 
         device_list_str = "\n".join(device_list) if device_list else "No devices added yet"
         
@@ -865,11 +867,14 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
             "add_device": "Add another device",
             "finish_activity": "Finish activity",
         }
-        
-        # Only show edit/delete if there are devices
+
+        # Only show edit/delete/reorder if there are devices
         if device_states:
             actions["edit_device"] = "Edit device"
             actions["delete_device"] = "Delete device"
+            # Only show reorder if there are 2+ devices
+            if len(device_states) >= 2:
+                actions["reorder_device"] = "Change device order"
         
         return self.async_show_form(
             step_id="device_menu",
@@ -1122,5 +1127,77 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
             }),
             description_placeholders={
                 "warning": "This action cannot be undone!",
+            },
+        )
+
+    async def async_step_reorder_device(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Reorder devices in the activity."""
+        device_states = self.current_activity_data.get(CONF_DEVICE_STATES, {})
+
+        if user_input is not None:
+            device_id = user_input.get("device_id")
+            direction = user_input.get("direction")
+
+            # If done, return to device menu
+            if direction == "done":
+                return await self.async_step_device_menu()
+
+            if device_id and direction:
+                # Get list of entity IDs in current order
+                entity_ids = list(device_states.keys())
+                current_index = entity_ids.index(device_id)
+
+                # Calculate new index
+                if direction == "up" and current_index > 0:
+                    new_index = current_index - 1
+                elif direction == "down" and current_index < len(entity_ids) - 1:
+                    new_index = current_index + 1
+                else:
+                    # Can't move further, just return to menu
+                    return await self.async_step_device_menu()
+
+                # Swap positions in the list
+                entity_ids[current_index], entity_ids[new_index] = entity_ids[new_index], entity_ids[current_index]
+
+                # Rebuild device_states dict in new order
+                new_device_states = {}
+                for entity_id in entity_ids:
+                    new_device_states[entity_id] = device_states[entity_id]
+
+                self.current_activity_data[CONF_DEVICE_STATES] = new_device_states
+
+                # If we're editing an existing activity, save it
+                if (self.current_room in self.rooms and
+                    self.current_activity in self.rooms[self.current_room].get(CONF_ACTIVITIES, {})):
+                    self.rooms[self.current_room][CONF_ACTIVITIES][self.current_activity] = self.current_activity_data
+                    self._save_config()
+
+                _LOGGER.info("Moved device %s %s", device_id, direction)
+
+            # Stay in reorder mode to allow multiple moves
+            return await self.async_step_reorder_device()
+
+        if not device_states or len(device_states) < 2:
+            return await self.async_step_device_menu()
+
+        # Build device selection with current order numbers
+        device_options = {}
+        for idx, entity_id in enumerate(device_states.keys(), 1):
+            device_options[entity_id] = f"{idx}. {entity_id}"
+
+        return self.async_show_form(
+            step_id="reorder_device",
+            data_schema=vol.Schema({
+                vol.Required("device_id"): vol.In(device_options),
+                vol.Required("direction"): vol.In({
+                    "up": "Move up",
+                    "down": "Move down",
+                    "done": "Done reordering",
+                }),
+            }),
+            description_placeholders={
+                "info": "Select a device and choose whether to move it up or down in the order. Devices are executed from top to bottom when starting an activity.",
             },
         )

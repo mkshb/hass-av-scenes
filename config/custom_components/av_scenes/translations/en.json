@@ -141,6 +141,14 @@
         "data": {
           "device_id": "Device to Delete"
         }
+      },
+      "reorder_device": {
+        "title": "Change Device Order",
+        "description": "{info}",
+        "data": {
+          "device_id": "Device to Move",
+          "direction": "Direction"
+        }
       }
     },
     "error": {
