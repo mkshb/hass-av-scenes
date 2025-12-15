@@ -186,22 +186,30 @@ class AVScenesCoordinator(DataUpdateCoordinator):
     ) -> None:
         """Execute a command for a device."""
         try:
-            # Turn on device
-            await self.hass.services.async_call(
-                "homeassistant",
-                SERVICE_TURN_ON,
-                {ATTR_ENTITY_ID: entity_id},
-                blocking=True,
-            )
-            
-            # Wait for power-on delay
-            delay = state_config.get(CONF_POWER_ON_DELAY, DEFAULT_POWER_ON_DELAY)
-            if delay > 0:
-                await asyncio.sleep(delay)
-            
-            # Update settings (volume, input source)
-            await self._update_device_settings(entity_id, state_config)
-                
+            domain = entity_id.split(".")[0]
+
+            # Cover entities use different services
+            if domain == "cover":
+                # For covers, directly apply settings (open/position/tilt)
+                # No generic turn_on, just set the desired state
+                await self._update_device_settings(entity_id, state_config)
+            else:
+                # For other entities (media_player, light, switch), turn on first
+                await self.hass.services.async_call(
+                    "homeassistant",
+                    SERVICE_TURN_ON,
+                    {ATTR_ENTITY_ID: entity_id},
+                    blocking=True,
+                )
+
+                # Wait for power-on delay
+                delay = state_config.get(CONF_POWER_ON_DELAY, DEFAULT_POWER_ON_DELAY)
+                if delay > 0:
+                    await asyncio.sleep(delay)
+
+                # Update settings (volume, input source, brightness, etc.)
+                await self._update_device_settings(entity_id, state_config)
+
         except Exception as ex:
             _LOGGER.error(f"Error executing command for {entity_id}: {ex}")
 
@@ -295,6 +303,15 @@ class AVScenesCoordinator(DataUpdateCoordinator):
                         blocking=True,
                     )
                     _LOGGER.info("Set cover position to %d%% on %s", position, entity_id)
+                else:
+                    # If no position specified, just open the cover
+                    await self.hass.services.async_call(
+                        domain,
+                        "open_cover",
+                        {ATTR_ENTITY_ID: entity_id},
+                        blocking=True,
+                    )
+                    _LOGGER.info("Opened cover %s", entity_id)
 
                 # Set tilt position
                 tilt_position = state_config.get(CONF_TILT_POSITION)
@@ -318,12 +335,24 @@ class AVScenesCoordinator(DataUpdateCoordinator):
     async def _turn_off_device(self, entity_id: str) -> None:
         """Turn off a device."""
         try:
-            await self.hass.services.async_call(
-                "homeassistant",
-                SERVICE_TURN_OFF,
-                {ATTR_ENTITY_ID: entity_id},
-                blocking=True,
-            )
+            domain = entity_id.split(".")[0]
+
+            # Cover entities use close_cover instead of turn_off
+            if domain == "cover":
+                await self.hass.services.async_call(
+                    domain,
+                    "close_cover",
+                    {ATTR_ENTITY_ID: entity_id},
+                    blocking=True,
+                )
+            else:
+                # For other entities, use generic turn_off
+                await self.hass.services.async_call(
+                    "homeassistant",
+                    SERVICE_TURN_OFF,
+                    {ATTR_ENTITY_ID: entity_id},
+                    blocking=True,
+                )
         except Exception as ex:
             _LOGGER.error(f"Error turning off {entity_id}: {ex}")
 
