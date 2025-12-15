@@ -19,11 +19,15 @@ Home Assistant Integration für aktivitätsbasierte Steuerung von AV-Geräten. E
 - 🎬 **Aktivitätsbasierte Szenen** - "Film schauen", "Musik hören", "Gaming", etc.
 - 🔄 **Smart Activity Switching** - Nahtloser Wechsel ohne Geräte neu zu starten
 - 🎛️ **Mehrere Entity-Typen** - Media Player, Lichter, Steckdosen und Rollläden
+- 🔢 **Geräte-Reihenfolge** - Kontrolle über die Einschalt-Sequenz (wichtig für Abhängigkeiten)
+- 💾 **Persistente Konfiguration** - Reihenfolge bleibt nach HA-Neustart erhalten
 - 🔊 **Lautstärkeregelung** - Automatische Lautstärkenanpassung pro Aktivität
 - 💡 **Lichtsteuerung** - Helligkeit, Farbtemperatur und Übergänge
 - 🪟 **Rollladen-Steuerung** - Position und Neigung basierend auf Aktivität
 - ⚡ **Power Sequencing** - Konfigurierbare Verzögerungen für optimale Gerätesteuerung
 - 🎛️ **Input Source Management** - Automatischer Input-Wechsel
+- 📋 **Aktivität kopieren** - Schnelles Duplizieren bestehender Aktivitäten
+- 🗑️ **Raum löschen** - Vollständige Entfernung von Räumen mit allen Aktivitäten
 - 🖥️ **UI-basierte Konfiguration** - Kein YAML erforderlich
 - 🇩🇪 **Vollständig auf Deutsch** - Komplette deutsche Übersetzung
 
@@ -74,6 +78,15 @@ Home Assistant Integration für aktivitätsbasierte Steuerung von AV-Geräten. E
      - **Steckdose**: Nur Ein/Aus mit Verzögerung
      - **Rollladen**: Position und Neigungsposition
    - Setze Einschaltverzögerung (in Sekunden)
+5. **Geräte-Reihenfolge anpassen** (optional):
+   - Wähle "Change device order"
+   - Verschiebe Geräte nach oben/unten
+   - Wichtig für Abhängigkeiten (z.B. Steckdose vor TV)
+   - Geräte werden von oben nach unten eingeschaltet
+6. **Aktivität kopieren** (optional):
+   - Nutze "Copy activity" um eine Aktivität zu duplizieren
+   - Alle Geräte und Einstellungen werden kopiert
+   - Ideal für ähnliche Aktivitäten (z.B. "Film HD" → "Film 4K")
 
 ### 📖 Verwendung
 
@@ -158,6 +171,27 @@ target:
 - ✅ TV bleibt AN → Keine Änderung
 - ✅ Apple TV bleibt AN
 - ❌ Sat-Receiver wird AUSGESCHALTET
+
+#### Szenario 3: Geräte-Reihenfolge für Abhängigkeiten
+
+**Problem:**
+- TV ist an Steckdose angeschlossen
+- TV schaltet sich ein bevor Steckdose aktiv ist
+- TV startet nicht richtig
+
+**Lösung mit Geräte-Reihenfolge:**
+1. Steckdose (Verzögerung: 5s)
+2. Rollladen (Position: 60%, Verzögerung: 1s)
+3. Licht (Helligkeit: 8%, Verzögerung: 1s)
+4. TV (Source: HDMI_IN_4, Verzögerung: 2s)
+5. Apple TV (Verzögerung: 2s)
+
+**Was passiert:**
+1. Steckdose wird eingeschaltet → Wartet 5 Sekunden
+2. Rollladen fährt auf 60% → Wartet 1 Sekunde
+3. Licht geht auf 8% → Wartet 1 Sekunde
+4. TV schaltet sich ein (hat jetzt Strom!) → Wartet 2 Sekunden
+5. Apple TV schaltet sich ein → Wartet 2 Sekunden
 
 ### 🔧 Erweiterte Konfiguration
 
@@ -248,11 +282,15 @@ Dieses Projekt ist unter der MIT-Lizenz lizenziert - siehe [LICENSE](LICENSE) f�
 - 🎬 **Activity-based Scenes** - "Watch Movie", "Listen to Music", "Gaming", etc.
 - 🔄 **Smart Activity Switching** - Seamless transitions without restarting devices
 - 🎛️ **Multiple Entity Types** - Media Players, Lights, Switches and Covers
+- 🔢 **Device Order Control** - Control power-on sequence (important for dependencies)
+- 💾 **Persistent Configuration** - Order persists after HA restart
 - 🔊 **Volume Control** - Automatic volume adjustment per activity
 - 💡 **Light Control** - Brightness, color temperature and transitions
 - 🪟 **Cover Control** - Position and tilt based on activity
 - ⚡ **Power Sequencing** - Configurable delays for optimal device control
 - 🎛️ **Input Source Management** - Automatic input switching
+- 📋 **Copy Activity** - Quick duplication of existing activities
+- 🗑️ **Delete Room** - Complete removal of rooms with all activities
 - 🖥️ **UI-based Configuration** - No YAML required
 - 🇩🇪 **Fully Translated** - Complete German translation
 
@@ -303,6 +341,15 @@ Dieses Projekt ist unter der MIT-Lizenz lizenziert - siehe [LICENSE](LICENSE) f�
      - **Switch**: Only on/off with delay
      - **Cover**: Position and tilt position
    - Set power-on delay (in seconds)
+5. **Adjust device order** (optional):
+   - Select "Change device order"
+   - Move devices up/down
+   - Important for dependencies (e.g., outlet before TV)
+   - Devices power on from top to bottom
+6. **Copy activity** (optional):
+   - Use "Copy activity" to duplicate an activity
+   - All devices and settings are copied
+   - Ideal for similar activities (e.g., "Movie HD" → "Movie 4K")
 
 ### 📖 Usage
 
@@ -387,6 +434,27 @@ target:
 - ✅ TV stays ON → No change
 - ✅ Apple TV stays ON
 - ❌ Satellite Receiver turns OFF
+
+#### Scenario 3: Device Order for Dependencies
+
+**Problem:**
+- TV is connected to power outlet
+- TV powers on before outlet is active
+- TV doesn't start properly
+
+**Solution with Device Order:**
+1. Outlet (Delay: 5s)
+2. Cover (Position: 60%, Delay: 1s)
+3. Light (Brightness: 8%, Delay: 1s)
+4. TV (Source: HDMI_IN_4, Delay: 2s)
+5. Apple TV (Delay: 2s)
+
+**What happens:**
+1. Outlet powers on → Waits 5 seconds
+2. Cover moves to 60% → Waits 1 second
+3. Light dims to 8% → Waits 1 second
+4. TV powers on (now has power!) → Waits 2 seconds
+5. Apple TV powers on → Waits 2 seconds
 
 ### 🔧 Advanced Configuration
 

@@ -12,6 +12,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.0] - 2025-12-15
+
+### 🇩🇪 Deutsch
+
+#### Hinzugefügt
+- ✨ **Multi-Entity-Unterstützung** - Integration von Lichtern, Steckdosen und Rollläden zusätzlich zu Media Playern
+  - Lichter: Helligkeit (0-100%), Farbtemperatur (Mired), Übergangszeit
+  - Steckdosen: Ein/Aus-Steuerung mit konfigurierbarer Verzögerung
+  - Rollläden: Position (0-100%) und Neigungsposition
+- 🔢 **Geräte-Reihenfolge** - Kontrolle über die Einschalt-Reihenfolge von Geräten
+  - Nummerierte Anzeige (1., 2., 3., ...)
+  - "Change device order" Funktion zum Nach-oben/Nach-unten verschieben
+  - Geräte werden von oben nach unten ausgeführt
+  - Wichtig für Abhängigkeiten (z.B. Steckdose vor TV)
+- 💾 **Persistente Geräte-Reihenfolge** - Reihenfolge bleibt nach Home Assistant Neustart erhalten
+  - Explizite Speicherung der `device_order` Liste
+  - Synchronisation mit `device_states` bei jedem Speichern
+  - Rückwärtskompatibilität mit bestehenden Konfigurationen
+- 🗑️ **Raum löschen** - Funktion zum Löschen von Räumen mit allen Aktivitäten
+- 📋 **Aktivität kopieren** - Duplizierung bestehender Aktivitäten inkl. aller Geräte und Einstellungen
+- 📊 **Verbesserte Geräte-Anzeige**
+  - Friendly Names statt Entity-IDs
+  - Einschaltverzögerung bei jedem Gerät sichtbar
+  - Übersichtliche Formatierung mit allen wichtigen Parametern
+- ⏱️ **Cover-Verzögerungen** - power_on_delay funktioniert jetzt auch bei Rollläden
+- 🎨 **Optimierte Menü-Reihenfolge** - "Beenden/Zurück"-Optionen immer am Ende
+
+#### Behoben
+- 🐛 Cover-Steuerung verwendet jetzt korrekte Services (open_cover, set_cover_position, close_cover)
+- 🐛 Geräte-Reihenfolge wird vor jedem Speichern synchronisiert
+- 🐛 Gelöschte Geräte werden aus device_order entfernt
+
+#### Geändert
+- 🔄 Coordinator verwendet jetzt device_order für sequentielle Ausführung
+- 🔄 Geräte werden beim Ausschalten in umgekehrter Reihenfolge deaktiviert
+- 🔄 Menüs zeigen Optionen dynamisch basierend auf Inhalt
+
+### 🇬🇧 English
+
+#### Added
+- ✨ **Multi-Entity Support** - Integration of lights, switches and covers in addition to media players
+  - Lights: Brightness (0-100%), color temperature (Mired), transition time
+  - Switches: On/off control with configurable delay
+  - Covers: Position (0-100%) and tilt position
+- 🔢 **Device Order Control** - Control over device power-on sequence
+  - Numbered display (1., 2., 3., ...)
+  - "Change device order" function to move up/down
+  - Devices execute from top to bottom
+  - Important for dependencies (e.g., outlet before TV)
+- 💾 **Persistent Device Order** - Order persists after Home Assistant restart
+  - Explicit storage of `device_order` list
+  - Synchronization with `device_states` on every save
+  - Backward compatibility with existing configurations
+- 🗑️ **Delete Room** - Function to delete rooms with all activities
+- 📋 **Copy Activity** - Duplicate existing activities including all devices and settings
+- 📊 **Improved Device Display**
+  - Friendly names instead of entity IDs
+  - Power-on delay visible for each device
+  - Clear formatting with all important parameters
+- ⏱️ **Cover Delays** - power_on_delay now works for covers too
+- 🎨 **Optimized Menu Order** - "Finish/Back" options always at the bottom
+
+#### Fixed
+- 🐛 Cover control now uses correct services (open_cover, set_cover_position, close_cover)
+- 🐛 Device order is synchronized before every save
+- 🐛 Deleted devices are removed from device_order
+
+#### Changed
+- 🔄 Coordinator now uses device_order for sequential execution
+- 🔄 Devices are turned off in reverse order
+- 🔄 Menus show options dynamically based on content
+
+---
+
 ## [0.1.1] - 2025-12-14
 
 ### 🇩🇪 Deutsch
@@ -116,20 +190,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🇩🇪 Deutsch
 
-#### [0.2.0] - Geplant
-- Integration weiterer Gerätetypen (Lichter, Rolladen, etc.)
-- Erweiterte Bedingungen für Aktivitäten
-- Makro-Unterstützung
+#### [0.3.0] - Geplant
+- Erweiterte Bedingungen für Aktivitäten (Zeit, Helligkeit, etc.)
+- Makro-Unterstützung für komplexe Sequenzen
+- Templates für Aktivitäten
+- Zeitgesteuerte Übergänge
 
 ---
 
 ### 🇬🇧 English
 
-#### [0.2.0] - Planned
-- Integration of additional device types (lights, covers, etc.)
-- Advanced conditions for activities
-- Macro support
+#### [0.3.0] - Planned
+- Advanced conditions for activities (time, brightness, etc.)
+- Macro support for complex sequences
+- Activity templates
+- Time-based transitions
 
 ---
 
+[0.2.0]: https://github.com/mkshb/ha_av_scenes/releases/tag/v0.2.0
+[0.1.1]: https://github.com/mkshb/ha_av_scenes/releases/tag/v0.1.1
 [0.1.0]: https://github.com/mkshb/ha_av_scenes/releases/tag/v0.1.0
