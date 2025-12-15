@@ -187,13 +187,15 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
 
         actions = {
             "add_room": "Add new room",
-            "finish": "Finish and save",
         }
 
         # Only show edit/delete if there are rooms
         if self.rooms:
             actions["edit_room"] = "Edit existing room"
             actions["delete_room"] = "Delete room"
+
+        # Finish always at the bottom
+        actions["finish"] = "Finish and save"
 
         return self.async_show_form(
             step_id="room_menu",
@@ -397,7 +399,6 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
 
         actions = {
             "add_activity": "Add new activity",
-            "back": "Back to room menu",
         }
 
         # Only show edit/delete/copy if there are activities
@@ -405,6 +406,9 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
             actions["edit_activity"] = "Edit existing activity"
             actions["delete_activity"] = "Delete activity"
             actions["copy_activity"] = "Copy activity"
+
+        # Back always at the bottom
+        actions["back"] = "Back to room menu"
 
         return self.async_show_form(
             step_id="activity_menu",
@@ -1007,10 +1011,9 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
             device_list.append(f"{idx}. {friendly_name}{device_info}")
 
         device_list_str = "\n".join(device_list) if device_list else "No devices added yet"
-        
+
         actions = {
             "add_device": "Add another device",
-            "finish_activity": "Finish activity",
         }
 
         # Only show edit/delete/reorder if there are devices
@@ -1020,7 +1023,10 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
             # Only show reorder if there are 2+ devices
             if len(device_states) >= 2:
                 actions["reorder_device"] = "Change device order"
-        
+
+        # Finish always at the bottom
+        actions["finish_activity"] = "Finish activity"
+
         return self.async_show_form(
             step_id="device_menu",
             data_schema=vol.Schema({
