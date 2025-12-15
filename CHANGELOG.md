@@ -12,6 +12,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.1] - 2025-12-15
+
+### 🇩🇪 Deutsch
+
+#### Hinzugefügt
+- 📊 **Sensor Entities für Transparenz** - Jeder Raum erhält einen Konfigurations-Sensor
+  - State: Zeigt aktuelle Aktivität oder "Inaktiv"
+  - Attributes: Vollständige Details zu allen Aktivitäten und Geräten
+  - Geräte-Reihenfolge mit allen Einstellungen sichtbar
+  - Ideal für Lovelace-Dashboard Integration
+  - Icons wechseln basierend auf Status (aktiv: `mdi:play-circle`, inaktiv: `mdi:information-outline`)
+
+#### Behoben
+- 🐛 **Config Persistenz** - Deep copy statt shallow copy in OptionsFlow
+  - Verschachtelte Daten (rooms → activities → devices) werden jetzt korrekt kopiert
+  - Geräte-Löschungen werden zuverlässig persistiert
+  - Geräte-Reihenfolge bleibt nach Änderungen erhalten
+  - Keine "Geister-Geräte" mehr in core.config_entries
+
+#### Entfernt
+- 🗑️ **Überflüssiger Hilfstext** - `data_description` aus Menüs entfernt
+  - "Wähle eine Aktion" Text unter Dropdown-Menüs nicht mehr sichtbar
+  - Sauberere UI ohne redundanten Text
+
+### 🇬🇧 English
+
+#### Added
+- 📊 **Sensor Entities for Transparency** - Each room gets a configuration sensor
+  - State: Shows current activity or "Idle"
+  - Attributes: Complete details of all activities and devices
+  - Device order with all settings visible
+  - Perfect for Lovelace dashboard integration
+  - Icons change based on status (active: `mdi:play-circle`, idle: `mdi:information-outline`)
+
+#### Fixed
+- 🐛 **Config Persistence** - Deep copy instead of shallow copy in OptionsFlow
+  - Nested data (rooms → activities → devices) now copied correctly
+  - Device deletions persist reliably
+  - Device order remains after changes
+  - No more "ghost devices" in core.config_entries
+
+#### Removed
+- 🗑️ **Redundant Helper Text** - Removed `data_description` from menus
+  - "Choose an action" text below dropdown menus no longer visible
+  - Cleaner UI without redundant text
+
+---
+
 ## [0.2.0] - 2025-12-15
 
 ### 🇩🇪 Deutsch

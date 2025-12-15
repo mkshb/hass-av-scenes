@@ -28,6 +28,7 @@ Home Assistant Integration für aktivitätsbasierte Steuerung von AV-Geräten. E
 - 🎛️ **Input Source Management** - Automatischer Input-Wechsel
 - 📋 **Aktivität kopieren** - Schnelles Duplizieren bestehender Aktivitäten
 - 🗑️ **Raum löschen** - Vollständige Entfernung von Räumen mit allen Aktivitäten
+- 📊 **Sensor Entities** - Vollständige Transparenz über Konfiguration in Lovelace
 - 🖥️ **UI-basierte Konfiguration** - Kein YAML erforderlich
 - 🇩🇪 **Vollständig auf Deutsch** - Komplette deutsche Übersetzung
 
@@ -137,6 +138,42 @@ service: switch.turn_off
 target:
   entity_id: switch.wohnzimmer_activity
 ```
+
+#### Sensors
+
+Jeder Raum erhält einen Konfigurations-Sensor für vollständige Transparenz:
+```yaml
+# Aktueller Status
+{{ states('sensor.wohnzimmer_configuration') }}
+
+# Alle Aktivitäten
+{{ state_attr('sensor.wohnzimmer_configuration', 'activity_names') }}
+
+# Detaillierte Aktivitäts-Info
+{{ state_attr('sensor.wohnzimmer_configuration', 'activities') }}
+
+# Lovelace Entity Card
+type: entity
+entity: sensor.wohnzimmer_configuration
+
+# Lovelace Markdown für formatierte Anzeige
+type: markdown
+content: |
+  ## {{ states('sensor.wohnzimmer_configuration') }}
+
+  **Aktivitäten:** {{ state_attr('sensor.wohnzimmer_configuration', 'total_activities') }}
+
+  {% for activity in state_attr('sensor.wohnzimmer_configuration', 'activity_names') %}
+  - {{ activity }}
+  {% endfor %}
+```
+
+**Sensor Attributes enthalten:**
+- `activity_names` - Liste aller Aktivitäten
+- `activities` - Vollständige Details mit Geräten, Reihenfolge und allen Einstellungen
+- `current_activity` - Name der aktuell laufenden Aktivität
+- `status` - "active" oder "idle"
+- `total_activities` - Anzahl der konfigurierten Aktivitäten
 
 ### 🎬 Beispiel-Szenarien
 
@@ -291,6 +328,7 @@ Dieses Projekt ist unter der MIT-Lizenz lizenziert - siehe [LICENSE](LICENSE) f�
 - 🎛️ **Input Source Management** - Automatic input switching
 - 📋 **Copy Activity** - Quick duplication of existing activities
 - 🗑️ **Delete Room** - Complete removal of rooms with all activities
+- 📊 **Sensor Entities** - Complete transparency of configuration in Lovelace
 - 🖥️ **UI-based Configuration** - No YAML required
 - 🇩🇪 **Fully Translated** - Complete German translation
 
@@ -400,6 +438,42 @@ service: switch.turn_off
 target:
   entity_id: switch.living_room_activity
 ```
+
+#### Sensors
+
+Each room gets a configuration sensor for full transparency:
+```yaml
+# Current status
+{{ states('sensor.living_room_configuration') }}
+
+# All activities
+{{ state_attr('sensor.living_room_configuration', 'activity_names') }}
+
+# Detailed activity info
+{{ state_attr('sensor.living_room_configuration', 'activities') }}
+
+# Lovelace Entity Card
+type: entity
+entity: sensor.living_room_configuration
+
+# Lovelace Markdown for formatted display
+type: markdown
+content: |
+  ## {{ states('sensor.living_room_configuration') }}
+
+  **Activities:** {{ state_attr('sensor.living_room_configuration', 'total_activities') }}
+
+  {% for activity in state_attr('sensor.living_room_configuration', 'activity_names') %}
+  - {{ activity }}
+  {% endfor %}
+```
+
+**Sensor Attributes contain:**
+- `activity_names` - List of all activities
+- `activities` - Complete details with devices, order and all settings
+- `current_activity` - Name of currently running activity
+- `status` - "active" or "idle"
+- `total_activities` - Number of configured activities
 
 ### 🎬 Example Scenarios
 
