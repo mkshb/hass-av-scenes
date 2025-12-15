@@ -23,6 +23,7 @@ from .const import (
     CONF_ACTIVITIES,
     CONF_DEVICES,
     CONF_DEVICE_STATES,
+    CONF_DEVICE_ORDER,
     CONF_POWER_ON_DELAY,
     CONF_POWER_OFF_DELAY,
     CONF_INPUT_SOURCE,
@@ -133,9 +134,16 @@ class AVScenesCoordinator(DataUpdateCoordinator):
         # Set state to starting
         self.activity_states[room_id] = ACTIVITY_STATE_STARTING
         self.async_update_listeners()
-        
-        # Process all devices in new activity
-        for device_id, state_config in new_device_states.items():
+
+        # Get device order (fall back to dict keys if order not specified)
+        device_order = new_activity.get(CONF_DEVICE_ORDER, list(new_device_states.keys()))
+
+        # Process all devices in new activity, respecting the configured order
+        for device_id in device_order:
+            state_config = new_device_states.get(device_id)
+            if not state_config:
+                continue
+
             if device_id in devices_to_keep_on:
                 # Device is already on, just update settings (input source, volume)
                 _LOGGER.info(f"Updating settings for already-on device: {device_id}")
@@ -169,10 +177,14 @@ class AVScenesCoordinator(DataUpdateCoordinator):
         activities = room.get(CONF_ACTIVITIES, {})
         activity = activities.get(activity_name, {})
         device_states = activity.get(CONF_DEVICE_STATES, {})
-        
-        # Turn off devices
-        for device_id in device_states.keys():
-            await self._turn_off_device(device_id)
+
+        # Get device order (fall back to dict keys if order not specified)
+        device_order = activity.get(CONF_DEVICE_ORDER, list(device_states.keys()))
+
+        # Turn off devices in reverse order (opposite of turn on)
+        for device_id in reversed(device_order):
+            if device_id in device_states:
+                await self._turn_off_device(device_id)
         
         # Clear active activity
         del self.active_activities[room_id]

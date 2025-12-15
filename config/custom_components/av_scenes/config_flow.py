@@ -18,6 +18,7 @@ from .const import (
     CONF_ACTIVITIES,
     CONF_DEVICES,
     CONF_DEVICE_STATES,
+    CONF_DEVICE_ORDER,
     CONF_ACTIVITY_NAME,
     CONF_ENTITY_ID,
     CONF_INPUT_SOURCE,
@@ -113,20 +114,41 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
     def _save_config(self) -> None:
         """Save the current configuration to the config entry."""
         import json
-        
+
         # Convert to JSON to check if data actually changed
         current_data = json.dumps(self.rooms, sort_keys=True)
-        
+
         if current_data == self._last_save_data:
             _LOGGER.debug("Config unchanged, skipping save")
             return
-        
+
         _LOGGER.info("Saving configuration with %d rooms", len(self.rooms))
         self.hass.config_entries.async_update_entry(
             self.config_entry,
             data={CONF_ROOMS: self.rooms}
         )
         self._last_save_data = current_data
+
+    def _ensure_device_order(self, activity_data: dict[str, Any]) -> list[str]:
+        """Ensure device_order exists and is synchronized with device_states."""
+        device_states = activity_data.get(CONF_DEVICE_STATES, {})
+        device_order = activity_data.get(CONF_DEVICE_ORDER, [])
+
+        # If device_order doesn't exist or is out of sync, rebuild it from device_states
+        device_state_keys = list(device_states.keys())
+
+        # Remove any devices from order that no longer exist in device_states
+        device_order = [d for d in device_order if d in device_states]
+
+        # Add any new devices from device_states that aren't in order
+        for device_id in device_state_keys:
+            if device_id not in device_order:
+                device_order.append(device_id)
+
+        # Save the synchronized order back to activity_data
+        activity_data[CONF_DEVICE_ORDER] = device_order
+
+        return device_order
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -439,8 +461,14 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
         activity_data = room_data.get(CONF_ACTIVITIES, {}).get(self.current_activity, {})
         device_states = activity_data.get(CONF_DEVICE_STATES, {})
 
+        # Ensure device order is synchronized
+        device_order = self._ensure_device_order(activity_data)
+
         device_list = []
-        for idx, (entity_id, config) in enumerate(device_states.items(), 1):
+        for idx, entity_id in enumerate(device_order, 1):
+            config = device_states.get(entity_id)
+            if not config:
+                continue
             domain = entity_id.split(".")[0]
 
             # Get friendly name
@@ -819,8 +847,15 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
                 return await self.async_step_room_menu()
         
         device_states = self.current_activity_data.get(CONF_DEVICE_STATES, {})
+
+        # Ensure device order is synchronized
+        device_order = self._ensure_device_order(self.current_activity_data)
+
         device_list = []
-        for idx, (entity_id, config) in enumerate(device_states.items(), 1):
+        for idx, entity_id in enumerate(device_order, 1):
+            config = device_states.get(entity_id)
+            if not config:
+                continue
             domain = entity_id.split(".")[0]
 
             # Get friendly name
@@ -1150,6 +1185,9 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
         """Reorder devices in the activity."""
         device_states = self.current_activity_data.get(CONF_DEVICE_STATES, {})
 
+        # Ensure device order is synchronized
+        device_order = self._ensure_device_order(self.current_activity_data)
+
         if user_input is not None:
             device_id = user_input.get("device_id")
             direction = user_input.get("direction")
@@ -1159,28 +1197,23 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
                 return await self.async_step_device_menu()
 
             if device_id and direction:
-                # Get list of entity IDs in current order
-                entity_ids = list(device_states.keys())
-                current_index = entity_ids.index(device_id)
+                # Get current index from device_order
+                current_index = device_order.index(device_id)
 
                 # Calculate new index
                 if direction == "up" and current_index > 0:
                     new_index = current_index - 1
-                elif direction == "down" and current_index < len(entity_ids) - 1:
+                elif direction == "down" and current_index < len(device_order) - 1:
                     new_index = current_index + 1
                 else:
                     # Can't move further, just return to menu
                     return await self.async_step_device_menu()
 
-                # Swap positions in the list
-                entity_ids[current_index], entity_ids[new_index] = entity_ids[new_index], entity_ids[current_index]
+                # Swap positions in the device_order list
+                device_order[current_index], device_order[new_index] = device_order[new_index], device_order[current_index]
 
-                # Rebuild device_states dict in new order
-                new_device_states = {}
-                for entity_id in entity_ids:
-                    new_device_states[entity_id] = device_states[entity_id]
-
-                self.current_activity_data[CONF_DEVICE_STATES] = new_device_states
+                # Save the new order
+                self.current_activity_data[CONF_DEVICE_ORDER] = device_order
 
                 # If we're editing an existing activity, save it
                 if (self.current_room in self.rooms and
@@ -1198,8 +1231,10 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
 
         # Build device selection with current order numbers
         device_options = {}
-        for idx, entity_id in enumerate(device_states.keys(), 1):
-            device_options[entity_id] = f"{idx}. {entity_id}"
+        for idx, entity_id in enumerate(device_order, 1):
+            state = self.hass.states.get(entity_id)
+            friendly_name = state.attributes.get("friendly_name", entity_id) if state else entity_id
+            device_options[entity_id] = f"{idx}. {friendly_name}"
 
         return self.async_show_form(
             step_id="reorder_device",
