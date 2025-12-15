@@ -18,9 +18,6 @@
         "data": {
           "action": "Aktion"
         },
-        "data_description": {
-          "action": "Wähle eine Aktion"
-        },
         "menu_options": {
           "add_room": "Neuen Raum hinzufügen",
           "edit_room": "Bestehenden Raum bearbeiten",
