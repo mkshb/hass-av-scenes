@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.3.0] - 2025-12-16
+## [0.3.0] - 2025-12-17
 
 ### 🇩🇪 Deutsch
 
@@ -25,16 +25,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Kein globales `power_on_delay` mehr
   - Jeder Schritt hat eigenes `delay_after` (0-60 Sekunden)
   - Ideal für Geräte, die Zeit zum Aufwärmen brauchen
-- 🎯 **9 Schritt-Typen** für maximale Flexibilität
+- 🎯 **11 Schritt-Typen** für maximale Flexibilität
   - `power_on` - Gerät einschalten
   - `power_off` - Gerät ausschalten
   - `set_source` - Eingang wählen (Media Player)
   - `set_volume` - Lautstärke setzen (Media Player)
+  - `set_sound_mode` - Tonmodus setzen (Media Player) 🆕
   - `set_brightness` - Helligkeit/Farbe setzen (Light)
   - `set_color_temp` - Farbtemperatur setzen (Light)
   - `set_position` - Position setzen (Cover)
   - `set_tilt` - Neigung setzen (Cover)
+  - `call_action` - Beliebige Home Assistant Action aufrufen 🆕
   - `delay` - Nur warten (kein Gerät)
+- 🔊 **Sound Mode Support** - Tonmodus für AV Receiver konfigurieren
+  - Auswahl aus verfügbaren Sound Modes des Geräts
+  - Ideal für verschiedene Audio-Szenarien (Movie, Music, Direct, etc.)
+- ⚡ **Call Action Support** - Beliebige Home Assistant Services aufrufen
+  - Format: `domain.service` (z.B. `light.turn_on`, `script.activate`)
+  - Optionale Service-Daten als JSON
+  - Maximale Flexibilität für komplexe Automationen
+- ✏️ **Edit Step Funktionalität** - Bearbeitung bestehender Schritte
+  - Alle Parameter können nachträglich angepasst werden
+  - Geräte-Auswahl bleibt erhalten
+  - Vollständige Übersetzungen (DE/EN)
 - 🔄 **Move Up/Down für Schritte** - Einfache Neuanordnung der Schritte
   - Ähnlich wie bei Geräten
   - Schritte werden von oben nach unten ausgeführt
@@ -42,10 +55,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Device-basierte Aktivitäten → Step-basierte Aktivitäten
   - Läuft transparent beim Öffnen der Config
   - Keine Daten gehen verloren
+- 🎯 **Intelligentes Aktivitätswechsel-Management** - Automatisches Ausschalten ungenutzter Geräte
+  - Beim Wechsel zwischen Aktivitäten werden nicht mehr benötigte Geräte ausgeschaltet
+  - Beispiel: Wechsel von "Apple TV" (Beamer + AV Receiver + Apple TV) zu "Sonos" (AV Receiver + Sonos)
+    - ✅ Beamer wird ausgeschaltet (nicht mehr benötigt)
+    - ✅ Apple TV wird ausgeschaltet (nicht mehr benötigt)
+    - ✅ AV Receiver bleibt an (wird in beiden verwendet)
+  - Geräte werden in umgekehrter Reihenfolge ausgeschaltet
 - 📊 **Verbesserte Step-Anzeige** - Übersichtliche Liste aller Schritte mit Details
   - "1. Turn on AV Receiver (then wait 5s)"
   - "2. Set AV Receiver source to 'HDMI 1'"
-  - "3. Turn on Beamer (then wait 2s)"
+  - "3. Set AV Receiver sound mode to 'Movie'"
+  - "4. Turn on Beamer (then wait 2s)"
 
 #### Geändert
 - 🏗️ **Komplett neue Datenstruktur** - Von `device_states` zu `steps`
@@ -56,10 +77,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Führt Schritte sequenziell aus
   - Wartet nach jedem Schritt gemäß `delay_after`
   - Besseres Logging für jeden Schritt
-- 🗑️ **Smart Activity Switching entfernt** - Zu komplex mit Step-System
-  - Alle Schritte werden immer ausgeführt
-  - Einfacher und vorhersehbarer
-  - Bei Bedarf manuell konfigurierbar
+  - Intelligente Geräteverwaltung beim Aktivitätswechsel
+- 🔄 **async_stop_activity aktualisiert** - Verwendet jetzt step-basiertes System
+  - Schaltet alle Geräte aus der Aktivität aus
+  - Respektiert Geräte-Reihenfolge (umgekehrt)
+
+#### Behoben
+- 🐛 **CONF_ENTITY_ID Import** - Fehlender Import in coordinator.py hinzugefügt
+- 🐛 **Edit Step Übersetzungen** - Fehlende Übersetzungen für Edit-Formular ergänzt
 
 ### 🇬🇧 English
 
@@ -72,16 +97,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - No more global `power_on_delay`
   - Each step has its own `delay_after` (0-60 seconds)
   - Perfect for devices that need warm-up time
-- 🎯 **9 Step Types** for maximum flexibility
+- 🎯 **11 Step Types** for maximum flexibility
   - `power_on` - Turn on device
   - `power_off` - Turn off device
   - `set_source` - Select input (Media Player)
   - `set_volume` - Set volume (Media Player)
+  - `set_sound_mode` - Set sound mode (Media Player) 🆕
   - `set_brightness` - Set brightness/color (Light)
   - `set_color_temp` - Set color temperature (Light)
   - `set_position` - Set position (Cover)
   - `set_tilt` - Set tilt (Cover)
+  - `call_action` - Call any Home Assistant action 🆕
   - `delay` - Just wait (no device)
+- 🔊 **Sound Mode Support** - Configure sound mode for AV receivers
+  - Selection from available sound modes of the device
+  - Ideal for different audio scenarios (Movie, Music, Direct, etc.)
+- ⚡ **Call Action Support** - Call any Home Assistant service
+  - Format: `domain.service` (e.g., `light.turn_on`, `script.activate`)
+  - Optional service data as JSON
+  - Maximum flexibility for complex automations
+- ✏️ **Edit Step Functionality** - Edit existing steps
+  - All parameters can be adjusted afterwards
+  - Device selection is preserved
+  - Complete translations (DE/EN)
 - 🔄 **Move Up/Down for Steps** - Easy step reordering
   - Similar to devices
   - Steps execute from top to bottom
@@ -89,10 +127,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Device-based activities → Step-based activities
   - Runs transparently when opening config
   - No data loss
+- 🎯 **Intelligent Activity Switching Management** - Automatic shutdown of unused devices
+  - When switching between activities, devices no longer needed are turned off
+  - Example: Switch from "Apple TV" (Projector + AV Receiver + Apple TV) to "Sonos" (AV Receiver + Sonos)
+    - ✅ Projector turns off (no longer needed)
+    - ✅ Apple TV turns off (no longer needed)
+    - ✅ AV Receiver stays on (used in both)
+  - Devices turn off in reverse order
 - 📊 **Improved Step Display** - Clear list of all steps with details
   - "1. Turn on AV Receiver (then wait 5s)"
   - "2. Set AV Receiver source to 'HDMI 1'"
-  - "3. Turn on Projector (then wait 2s)"
+  - "3. Set AV Receiver sound mode to 'Movie'"
+  - "4. Turn on Projector (then wait 2s)"
 
 #### Changed
 - 🏗️ **Completely New Data Structure** - From `device_states` to `steps`
@@ -103,10 +149,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Executes steps sequentially
   - Waits after each step according to `delay_after`
   - Better logging for each step
-- 🗑️ **Smart Activity Switching Removed** - Too complex with step system
-  - All steps are always executed
-  - Simpler and more predictable
-  - Can be configured manually if needed
+  - Intelligent device management during activity switching
+- 🔄 **async_stop_activity updated** - Now uses step-based system
+  - Turns off all devices from the activity
+  - Respects device order (reversed)
+
+#### Fixed
+- 🐛 **CONF_ENTITY_ID Import** - Added missing import in coordinator.py
+- 🐛 **Edit Step Translations** - Added missing translations for edit form
 
 ---
 
@@ -336,24 +386,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🇩🇪 Deutsch
 
-#### [0.3.0] - Geplant
+#### [0.4.0] - Geplant
 - Erweiterte Bedingungen für Aktivitäten (Zeit, Helligkeit, etc.)
 - Makro-Unterstützung für komplexe Sequenzen
 - Templates für Aktivitäten
 - Zeitgesteuerte Übergänge
+- Blueprint-Support für Automatisierungen
 
 ---
 
 ### 🇬🇧 English
 
-#### [0.3.0] - Planned
+#### [0.4.0] - Planned
 - Advanced conditions for activities (time, brightness, etc.)
 - Macro support for complex sequences
 - Activity templates
 - Time-based transitions
+- Blueprint support for automations
 
 ---
 
+[0.3.0]: https://github.com/mkshb/ha_av_scenes/releases/tag/v0.3.0
+[0.2.1]: https://github.com/mkshb/ha_av_scenes/releases/tag/v0.2.1
 [0.2.0]: https://github.com/mkshb/ha_av_scenes/releases/tag/v0.2.0
 [0.1.1]: https://github.com/mkshb/ha_av_scenes/releases/tag/v0.1.1
 [0.1.0]: https://github.com/mkshb/ha_av_scenes/releases/tag/v0.1.0
