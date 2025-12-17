@@ -2089,6 +2089,229 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Select a step to edit."""
-        # For now, redirect to delete - full edit can be added later
-        # Editing individual steps is complex, so we'll keep it simple
-        return await self.async_step_step_menu()
+        if user_input is not None:
+            self.selected_step_id = user_input.get("step_id")
+            _LOGGER.debug("Selected step to edit: %s", self.selected_step_id)
+            return await self.async_step_edit_step()
+
+        steps = self.current_activity_data.get(CONF_STEPS, [])
+
+        if not steps:
+            return await self.async_step_step_menu()
+
+        # Build step selection
+        step_options = {}
+        for idx, step in enumerate(steps, 1):
+            step_id = step.get(CONF_STEP_ID)
+            step_type = step.get(CONF_STEP_TYPE, "unknown")
+            entity_id = step.get(CONF_ENTITY_ID, "")
+
+            state = self.hass.states.get(entity_id) if entity_id else None
+            friendly_name = state.attributes.get("friendly_name", entity_id) if state else "Delay"
+
+            desc = f"{idx}. {step_type} - {friendly_name}"
+            step_options[step_id] = desc
+
+        return self.async_show_form(
+            step_id="select_step_to_edit",
+            data_schema=vol.Schema({
+                vol.Required("step_id"): vol.In(step_options),
+            }),
+            description_placeholders={
+                "info": "Choose a step to edit",
+            },
+        )
+
+    async def async_step_edit_step(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Edit a step configuration."""
+        errors = {}
+        steps = self.current_activity_data.get(CONF_STEPS, [])
+
+        # Find the step to edit
+        current_step = None
+        for step in steps:
+            if step.get(CONF_STEP_ID) == self.selected_step_id:
+                current_step = step
+                break
+
+        if not current_step:
+            _LOGGER.error("Step %s not found", self.selected_step_id)
+            return await self.async_step_step_menu()
+
+        step_type = current_step.get(CONF_STEP_TYPE)
+        entity_id = current_step.get(CONF_ENTITY_ID, "")
+
+        if user_input is not None:
+            try:
+                # Update delay_after
+                delay_after = user_input.get(CONF_STEP_DELAY_AFTER, 0)
+                current_step[CONF_STEP_DELAY_AFTER] = delay_after
+
+                # Update step-specific parameters
+                parameters = {}
+
+                if step_type == STEP_TYPE_SET_SOURCE:
+                    source = user_input.get(CONF_INPUT_SOURCE)
+                    if source and source != "none":
+                        parameters[CONF_INPUT_SOURCE] = source
+
+                elif step_type == STEP_TYPE_SET_VOLUME:
+                    volume_level = user_input.get(CONF_VOLUME_LEVEL, 50)
+                    parameters[CONF_VOLUME_LEVEL] = volume_level / 100.0
+
+                elif step_type == STEP_TYPE_SET_BRIGHTNESS:
+                    brightness = user_input.get(CONF_BRIGHTNESS)
+                    if brightness is not None:
+                        parameters[CONF_BRIGHTNESS] = int(brightness * 255 / 100)
+
+                    color_temp = user_input.get(CONF_COLOR_TEMP)
+                    if color_temp is not None:
+                        parameters[CONF_COLOR_TEMP] = color_temp
+
+                    transition = user_input.get(CONF_TRANSITION)
+                    if transition is not None:
+                        parameters[CONF_TRANSITION] = transition
+
+                elif step_type == STEP_TYPE_SET_COLOR_TEMP:
+                    color_temp = user_input.get(CONF_COLOR_TEMP)
+                    if color_temp is not None:
+                        parameters[CONF_COLOR_TEMP] = color_temp
+
+                elif step_type == STEP_TYPE_SET_POSITION:
+                    position = user_input.get(CONF_POSITION)
+                    if position is not None:
+                        parameters[CONF_POSITION] = position
+
+                elif step_type == STEP_TYPE_SET_TILT:
+                    tilt = user_input.get(CONF_TILT_POSITION)
+                    if tilt is not None:
+                        parameters[CONF_TILT_POSITION] = tilt
+
+                elif step_type == STEP_TYPE_DELAY:
+                    # For delay steps, the delay is in delay_after
+                    pass
+
+                current_step[CONF_STEP_PARAMETERS] = parameters
+
+                _LOGGER.info("Updated step %s", self.selected_step_id)
+
+                # Save if editing existing activity
+                if (self.current_room in self.rooms and
+                    self.current_activity in self.rooms[self.current_room].get(CONF_ACTIVITIES, {})):
+                    self.rooms[self.current_room][CONF_ACTIVITIES][self.current_activity] = self.current_activity_data
+                    self._save_config()
+
+                self.selected_step_id = None  # Clear selection
+                return await self.async_step_step_menu()
+            except Exception as ex:
+                _LOGGER.exception("Error editing step: %s", ex)
+                errors["base"] = "unknown"
+
+        # Get entity state for source list etc.
+        state = self.hass.states.get(entity_id) if entity_id else None
+        friendly_name = state.attributes.get("friendly_name", entity_id) if state else "Delay"
+
+        # Build dynamic schema based on step type with current values
+        schema_dict = {}
+
+        # Get current parameters
+        current_params = current_step.get(CONF_STEP_PARAMETERS, {})
+        current_delay = current_step.get(CONF_STEP_DELAY_AFTER, 0)
+
+        # Common field for delay
+        if step_type == STEP_TYPE_DELAY:
+            # For delay steps, the delay is the main config
+            schema_dict[vol.Required(CONF_STEP_DELAY_AFTER, default=current_delay)] = vol.All(
+                int, vol.Range(min=1, max=60)
+            )
+        else:
+            schema_dict[vol.Optional(CONF_STEP_DELAY_AFTER, default=current_delay)] = vol.All(
+                int, vol.Range(min=0, max=60)
+            )
+
+        # Step-specific fields with current values
+        if step_type == STEP_TYPE_POWER_ON:
+            # No additional parameters for power on
+            pass
+
+        elif step_type == STEP_TYPE_SET_SOURCE:
+            source_list = state.attributes.get("source_list", []) if state else []
+            current_source = current_params.get(CONF_INPUT_SOURCE, "none")
+
+            if source_list:
+                source_options = {"none": "-- Select source --"}
+                for source in source_list:
+                    source_options[source] = source
+            else:
+                source_options = {"none": "-- Device has no sources --"}
+
+            # Make sure current source is in options
+            if current_source and current_source != "none" and current_source not in source_options:
+                source_options[current_source] = f"{current_source} (current)"
+
+            schema_dict[vol.Required(CONF_INPUT_SOURCE, default=current_source)] = vol.In(source_options)
+
+        elif step_type == STEP_TYPE_SET_VOLUME:
+            current_volume = current_params.get(CONF_VOLUME_LEVEL, 0.5)
+            current_volume_pct = int(current_volume * 100)
+
+            schema_dict[vol.Required(CONF_VOLUME_LEVEL, default=current_volume_pct)] = vol.All(
+                int, vol.Range(min=0, max=100)
+            )
+
+        elif step_type == STEP_TYPE_SET_BRIGHTNESS:
+            current_brightness = current_params.get(CONF_BRIGHTNESS)
+            if current_brightness is not None:
+                current_brightness_pct = int(current_brightness * 100 / 255)
+            else:
+                current_brightness_pct = 100
+
+            schema_dict[vol.Optional(CONF_BRIGHTNESS, default=current_brightness_pct)] = vol.All(
+                int, vol.Range(min=0, max=100)
+            )
+
+            current_color_temp = current_params.get(CONF_COLOR_TEMP)
+            if current_color_temp is not None:
+                schema_dict[vol.Optional(CONF_COLOR_TEMP, default=current_color_temp)] = vol.All(
+                    int, vol.Range(min=153, max=500)
+                )
+            else:
+                schema_dict[vol.Optional(CONF_COLOR_TEMP)] = vol.All(
+                    int, vol.Range(min=153, max=500)
+                )
+
+            current_transition = current_params.get(CONF_TRANSITION, 0)
+            schema_dict[vol.Optional(CONF_TRANSITION, default=current_transition)] = vol.All(
+                int, vol.Range(min=0, max=60)
+            )
+
+        elif step_type == STEP_TYPE_SET_COLOR_TEMP:
+            current_color_temp = current_params.get(CONF_COLOR_TEMP, 250)
+            schema_dict[vol.Required(CONF_COLOR_TEMP, default=current_color_temp)] = vol.All(
+                int, vol.Range(min=153, max=500)
+            )
+
+        elif step_type == STEP_TYPE_SET_POSITION:
+            current_position = current_params.get(CONF_POSITION, 100)
+            schema_dict[vol.Required(CONF_POSITION, default=current_position)] = vol.All(
+                int, vol.Range(min=0, max=100)
+            )
+
+        elif step_type == STEP_TYPE_SET_TILT:
+            current_tilt = current_params.get(CONF_TILT_POSITION, 50)
+            schema_dict[vol.Required(CONF_TILT_POSITION, default=current_tilt)] = vol.All(
+                int, vol.Range(min=0, max=100)
+            )
+
+        return self.async_show_form(
+            step_id="edit_step",
+            data_schema=vol.Schema(schema_dict),
+            errors=errors,
+            description_placeholders={
+                "device": friendly_name,
+                "step_type": step_type,
+                "info": "Edit the parameters for this step.",
+            },
+        )

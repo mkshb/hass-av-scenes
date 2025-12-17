@@ -219,6 +219,20 @@
           "step_id": "Schritt"
         }
       },
+      "edit_step": {
+        "title": "{step_type} bearbeiten: {device}",
+        "description": "{info}",
+        "data": {
+          "delay_after": "Verzögerung danach (Sekunden)",
+          "input_source": "Eingangsquelle",
+          "volume_level": "Lautstärke (%)",
+          "brightness": "Helligkeit (%)",
+          "color_temp": "Farbtemperatur (Mired, 153-500)",
+          "transition": "Übergangszeit (Sekunden)",
+          "position": "Position (%)",
+          "tilt_position": "Neigungsposition (%)"
+        }
+      },
       "select_step_to_delete": {
         "title": "Schritt löschen",
         "description": "{warning}",
