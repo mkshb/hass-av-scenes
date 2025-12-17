@@ -77,7 +77,7 @@
       },
       "edit_activity": {
         "title": "Aktivität bearbeiten: {activity}",
-        "description": "Aktuelle Geräte:\n{devices}",
+        "description": "Aktuelle Schritte:\n{steps}",
         "data": {
           "action": "Aktion"
         }
@@ -167,6 +167,70 @@
         "description": "{info}",
         "data": {
           "device_id": "Gerät zum Verschieben",
+          "direction": "Richtung"
+        }
+      },
+      "step_menu": {
+        "title": "Schritte in Aktivität",
+        "description": "Konfigurierte Schritte:\n{steps}",
+        "data": {
+          "action": "Aktion"
+        }
+      },
+      "add_step": {
+        "title": "Schritt hinzufügen",
+        "description": "{info}",
+        "data": {
+          "step_type": "Schritt-Typ"
+        }
+      },
+      "add_step_entity": {
+        "title": "Gerät für Schritt auswählen",
+        "description": "Wähle ein Gerät für: {step_type}",
+        "data": {
+          "entity_id": "Gerät"
+        }
+      },
+      "add_step_config": {
+        "title": "{step_type} konfigurieren: {device}",
+        "description": "{info}",
+        "data": {
+          "delay_after": "Verzögerung danach (Sekunden)",
+          "input_source": "Eingangsquelle",
+          "volume_level": "Lautstärke (%)",
+          "brightness": "Helligkeit (%)",
+          "color_temp": "Farbtemperatur (Mired, 153-500)",
+          "transition": "Übergangszeit (Sekunden)",
+          "position": "Position (%)",
+          "tilt_position": "Neigungsposition (%)"
+        }
+      },
+      "add_step_delay_config": {
+        "title": "Wartezeit konfigurieren",
+        "description": "{info}",
+        "data": {
+          "delay_after": "Wie viele Sekunden warten?"
+        }
+      },
+      "select_step_to_edit": {
+        "title": "Schritt zum Bearbeiten auswählen",
+        "description": "Wähle einen Schritt zum Bearbeiten",
+        "data": {
+          "step_id": "Schritt"
+        }
+      },
+      "select_step_to_delete": {
+        "title": "Schritt löschen",
+        "description": "{warning}",
+        "data": {
+          "step_id": "Zu löschender Schritt"
+        }
+      },
+      "reorder_step": {
+        "title": "Schritt-Reihenfolge ändern",
+        "description": "{info}",
+        "data": {
+          "step_id": "Schritt zum Verschieben",
           "direction": "Richtung"
         }
       }
