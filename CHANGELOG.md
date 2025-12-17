@@ -12,6 +12,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.1] - 2025-12-17
+
+### 🇩🇪 Deutsch
+
+#### Behoben
+- 🔧 **HACS Compliance** - Repository-Struktur für HACS korrigiert
+  - `custom_components` Verzeichnis in Repository-Root verschoben
+  - `hacs.json` hinzugefügt für bessere HACS-Integration
+  - Stellt sicher, dass die Integration korrekt über HACS installiert werden kann
+
+### 🇬🇧 English
+
+#### Fixed
+- 🔧 **HACS Compliance** - Fixed repository structure for HACS
+  - Moved `custom_components` directory to repository root
+  - Added `hacs.json` for better HACS integration
+  - Ensures the integration can be properly installed via HACS
+
+---
+
 ## [0.3.0] - 2025-12-17
 
 ### 🇩🇪 Deutsch
