@@ -120,26 +120,51 @@ class AVScenesCoordinator(DataUpdateCoordinator):
             _LOGGER.error(f"Activity '{activity_name}' not found in room '{room_id}'")
             return
 
-        # Get the activity configuration
-        activity = activities[activity_name]
-        steps = activity.get(CONF_STEPS, [])
+        # Get the new activity configuration
+        new_activity = activities[activity_name]
+        new_steps = new_activity.get(CONF_STEPS, [])
 
-        if not steps:
+        if not new_steps:
             _LOGGER.warning(f"Activity '{activity_name}' has no steps configured")
             return
+
+        # Check if there's an active activity and handle device switching
+        if room_id in self.active_activities:
+            old_activity_name = self.active_activities[room_id]
+            if old_activity_name != activity_name:
+                _LOGGER.info(f"Switching from '{old_activity_name}' to '{activity_name}'")
+
+                # Get entities from old activity
+                old_activity = activities.get(old_activity_name, {})
+                old_steps = old_activity.get(CONF_STEPS, [])
+                old_entities = self._get_entities_from_steps(old_steps)
+
+                # Get entities from new activity
+                new_entities = self._get_entities_from_steps(new_steps)
+
+                # Find entities that need to be turned off (in old but not in new)
+                entities_to_turn_off = old_entities - new_entities
+
+                if entities_to_turn_off:
+                    _LOGGER.info(f"Turning off devices no longer needed: {entities_to_turn_off}")
+                    for entity_id in entities_to_turn_off:
+                        try:
+                            await self._turn_off_device(entity_id)
+                        except Exception as ex:
+                            _LOGGER.error(f"Error turning off {entity_id}: {ex}")
 
         # Set state to starting
         self.activity_states[room_id] = ACTIVITY_STATE_STARTING
         self.async_update_listeners()
 
         # Execute each step in order
-        for idx, step in enumerate(steps, 1):
+        for idx, step in enumerate(new_steps, 1):
             step_type = step.get(CONF_STEP_TYPE)
             entity_id = step.get(CONF_ENTITY_ID, "")
             delay_after = step.get(CONF_STEP_DELAY_AFTER, 0)
             parameters = step.get(CONF_STEP_PARAMETERS, {})
 
-            _LOGGER.info(f"Executing step {idx}/{len(steps)}: {step_type} on {entity_id}")
+            _LOGGER.info(f"Executing step {idx}/{len(new_steps)}: {step_type} on {entity_id}")
 
             try:
                 await self._execute_step(step_type, entity_id, parameters)
@@ -159,37 +184,61 @@ class AVScenesCoordinator(DataUpdateCoordinator):
 
         _LOGGER.info(f"Activity '{activity_name}' started successfully in room '{room_id}'")
 
+    def _get_entities_from_steps(self, steps: list[dict[str, Any]]) -> set[str]:
+        """Extract unique entity IDs from a list of steps."""
+        entities = set()
+        for step in steps:
+            entity_id = step.get(CONF_ENTITY_ID, "")
+            # Only add non-empty entity IDs (skip delay and call_action steps which have no entity_id)
+            if entity_id and entity_id.strip():
+                entities.add(entity_id)
+        return entities
+
     async def async_stop_activity(self, room_id: str) -> None:
         """Stop the current activity in a room."""
         if room_id not in self.active_activities:
             _LOGGER.debug(f"No active activity in room '{room_id}'")
             return
-        
+
         activity_name = self.active_activities[room_id]
         _LOGGER.info(f"Stopping activity '{activity_name}' in room '{room_id}'")
-        
+
         # Set state to stopping
         self.activity_states[room_id] = ACTIVITY_STATE_STOPPING
         self.async_update_listeners()
-        
+
         room = self.rooms[room_id]
         activities = room.get(CONF_ACTIVITIES, {})
         activity = activities.get(activity_name, {})
-        device_states = activity.get(CONF_DEVICE_STATES, {})
 
-        # Get device order (fall back to dict keys if order not specified)
-        device_order = activity.get(CONF_DEVICE_ORDER, list(device_states.keys()))
+        # Get steps from activity
+        steps = activity.get(CONF_STEPS, [])
 
-        # Turn off devices in reverse order (opposite of turn on)
-        for device_id in reversed(device_order):
-            if device_id in device_states:
-                await self._turn_off_device(device_id)
-        
+        # Get all entities used in this activity
+        entities = self._get_entities_from_steps(steps)
+
+        # Turn off all devices (in reverse order of appearance in steps)
+        # Create a list that preserves order but removes duplicates
+        entity_list = []
+        seen = set()
+        for step in steps:
+            entity_id = step.get(CONF_ENTITY_ID, "")
+            if entity_id and entity_id.strip() and entity_id not in seen:
+                entity_list.append(entity_id)
+                seen.add(entity_id)
+
+        # Turn off in reverse order
+        for entity_id in reversed(entity_list):
+            try:
+                await self._turn_off_device(entity_id)
+            except Exception as ex:
+                _LOGGER.error(f"Error turning off {entity_id}: {ex}")
+
         # Clear active activity
         del self.active_activities[room_id]
         self.activity_states[room_id] = ACTIVITY_STATE_IDLE
         self.async_update_listeners()
-        
+
         _LOGGER.info(f"Activity '{activity_name}' stopped in room '{room_id}'")
 
     async def _execute_device_command(
