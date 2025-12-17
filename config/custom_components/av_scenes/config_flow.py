@@ -1564,6 +1564,12 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
 
         steps = self.current_activity_data.get(CONF_STEPS, [])
 
+        _LOGGER.debug(
+            "step_menu: current_activity_data has %d steps: %s",
+            len(steps),
+            [s.get(CONF_STEP_TYPE) for s in steps]
+        )
+
         step_list = []
         for idx, step in enumerate(steps, 1):
             step_type = step.get(CONF_STEP_TYPE, "unknown")
@@ -1811,7 +1817,13 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
                     self.current_activity_data[CONF_STEPS] = []
 
                 self.current_activity_data[CONF_STEPS].append(self.current_step_data)
-                _LOGGER.info("Added step %s", self.current_step_data[CONF_STEP_ID])
+                _LOGGER.info(
+                    "Added step %s (type: %s, entity: %s) to activity. Total steps: %d",
+                    self.current_step_data[CONF_STEP_ID],
+                    step_type,
+                    entity_id,
+                    len(self.current_activity_data[CONF_STEPS])
+                )
 
                 return await self.async_step_step_menu()
             except Exception as ex:
@@ -1906,7 +1918,11 @@ class AVScenesOptionsFlow(config_entries.OptionsFlow):
                     self.current_activity_data[CONF_STEPS] = []
 
                 self.current_activity_data[CONF_STEPS].append(self.current_step_data)
-                _LOGGER.info("Added delay step of %d seconds", delay)
+                _LOGGER.info(
+                    "Added delay step of %d seconds. Total steps: %d",
+                    delay,
+                    len(self.current_activity_data[CONF_STEPS])
+                )
 
                 return await self.async_step_step_menu()
             except Exception as ex:
