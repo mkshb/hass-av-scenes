@@ -17,15 +17,18 @@ Home Assistant Integration für aktivitätsbasierte Steuerung von AV-Geräten. E
 **Kernfunktionen:**
 - 🏠 **Multiroom-Unterstützung** - Unabhängige Steuerung mehrerer Räume
 - 🎬 **Aktivitätsbasierte Szenen** - "Film schauen", "Musik hören", "Gaming", etc.
-- 🔄 **Smart Activity Switching** - Nahtloser Wechsel ohne Geräte neu zu starten
+- 🚀 **Schritt-für-Schritt-Konfiguration** - Granulare Kontrolle mit 11 verschiedenen Schritt-Typen
+- 🎯 **Intelligentes Aktivitätswechsel-Management** - Automatisches Ausschalten ungenutzter Geräte
 - 🎛️ **Mehrere Entity-Typen** - Media Player, Lichter, Steckdosen und Rollläden
-- 🔢 **Geräte-Reihenfolge** - Kontrolle über die Einschalt-Sequenz (wichtig für Abhängigkeiten)
-- 💾 **Persistente Konfiguration** - Reihenfolge bleibt nach HA-Neustart erhalten
-- 🔊 **Lautstärkeregelung** - Automatische Lautstärkenanpassung pro Aktivität
+- 🔢 **Schritt-Reihenfolge** - Präzise Kontrolle über die Ausführungssequenz
+- 💾 **Persistente Konfiguration** - Alle Einstellungen bleiben nach HA-Neustart erhalten
+- 🔊 **Lautstärke & Sound Mode** - Lautstärke und Tonmodus pro Aktivität konfigurierbar
 - 💡 **Lichtsteuerung** - Helligkeit, Farbtemperatur und Übergänge
 - 🪟 **Rollladen-Steuerung** - Position und Neigung basierend auf Aktivität
-- ⚡ **Power Sequencing** - Konfigurierbare Verzögerungen für optimale Gerätesteuerung
+- ⚡ **Flexible Delays** - Individuelle Wartezeit nach jedem Schritt (0-60 Sekunden)
 - 🎛️ **Input Source Management** - Automatischer Input-Wechsel
+- ⚙️ **Call Action** - Beliebige Home Assistant Services in Aktivitäten einbinden
+- ✏️ **Edit Step** - Nachträgliche Bearbeitung aller Schritt-Parameter
 - 📋 **Aktivität kopieren** - Schnelles Duplizieren bestehender Aktivitäten
 - 🗑️ **Raum löschen** - Vollständige Entfernung von Räumen mit allen Aktivitäten
 - 📊 **Sensor Entities** - Vollständige Transparenz über Konfiguration in Lovelace
@@ -71,22 +74,31 @@ Home Assistant Integration für aktivitätsbasierte Steuerung von AV-Geräten. E
 1. Wähle einen Raum
 2. Klicke auf **Neue Aktivität hinzufügen**
 3. Gib einen Namen ein (z.B. "Film schauen")
-4. Füge Geräte hinzu:
-   - Wähle Gerät aus Dropdown (Media Player, Licht, Steckdose, Rollladen)
-   - Konfiguriere gerätespezifische Einstellungen:
-     - **Media Player**: Eingangsquelle, Lautstärkeregelung
-     - **Licht**: Helligkeit, Farbtemperatur, Übergangszeit
-     - **Steckdose**: Nur Ein/Aus mit Verzögerung
-     - **Rollladen**: Position und Neigungsposition
-   - Setze Einschaltverzögerung (in Sekunden)
-5. **Geräte-Reihenfolge anpassen** (optional):
-   - Wähle "Change device order"
-   - Verschiebe Geräte nach oben/unten
-   - Wichtig für Abhängigkeiten (z.B. Steckdose vor TV)
-   - Geräte werden von oben nach unten eingeschaltet
-6. **Aktivität kopieren** (optional):
+4. Füge Schritte hinzu:
+   - Wähle Schritt-Typ aus 11 verfügbaren Optionen:
+     - **Turn on device** - Gerät einschalten
+     - **Set input source** - Eingangsquelle wählen (Media Player)
+     - **Set volume** - Lautstärke setzen (Media Player)
+     - **Set sound mode** - Tonmodus setzen (Media Player) 🆕
+     - **Set brightness/color** - Helligkeit/Farbe setzen (Light)
+     - **Set color temperature** - Farbtemperatur setzen (Light)
+     - **Set position** - Position setzen (Cover)
+     - **Set tilt** - Neigung setzen (Cover)
+     - **Call action** - Beliebige Home Assistant Action aufrufen 🆕
+     - **Wait/Delay** - Wartezeit einfügen
+   - Wähle Gerät (außer bei Wait/Delay und Call Action)
+   - Konfiguriere schritt-spezifische Parameter
+   - Setze Verzögerung nach dem Schritt (0-60 Sekunden)
+5. **Schritte bearbeiten** (optional):
+   - Wähle "Edit step" um Parameter anzupassen
+   - Alle Einstellungen können nachträglich geändert werden
+6. **Schritt-Reihenfolge anpassen** (optional):
+   - Wähle "Change step order"
+   - Verschiebe Schritte nach oben/unten
+   - Schritte werden von oben nach unten ausgeführt
+7. **Aktivität kopieren** (optional):
    - Nutze "Copy activity" um eine Aktivität zu duplizieren
-   - Alle Geräte und Einstellungen werden kopiert
+   - Alle Schritte und Einstellungen werden kopiert
    - Ideal für ähnliche Aktivitäten (z.B. "Film HD" → "Film 4K")
 
 ### 📖 Verwendung
@@ -191,44 +203,49 @@ content: |
 4. Receiver wechselt auf BD/DVD Input
 5. Beamer wechselt auf HDMI1
 
-#### Szenario 2: Von TV zu Apple TV wechseln
+#### Szenario 2: Von Apple TV zu Sonos wechseln
 
-**Laufende Aktivität "TV":**
-- Receiver (Input: SAT)
-- TV
-- Sat-Receiver
+**Laufende Aktivität "Apple TV":**
+- Beamer einschalten
+- AV Receiver einschalten
+- AV Receiver Input: Apple TV
+- AV Receiver Lautstärke: 60%
+- Apple TV einschalten
 
-**Neue Aktivität "Apple TV":**
-- Receiver (Input: Apple TV, Lautstärke: 60%)
-- TV
-- Apple TV
+**Neue Aktivität "Sonos":**
+- AV Receiver einschalten
+- AV Receiver Input: Sonos
+- AV Receiver Lautstärke: 50%
+- Sonos einschalten
 
-**Smart Switching:**
-- ✅ Receiver bleibt AN → Nur Input-Wechsel SAT→Apple TV, Lautstärke 50%→60%
-- ✅ TV bleibt AN → Keine Änderung
-- ✅ Apple TV bleibt AN
-- ❌ Sat-Receiver wird AUSGESCHALTET
+**Intelligentes Aktivitätswechsel-Management:**
+- ❌ Beamer wird AUSGESCHALTET (nicht mehr benötigt)
+- ❌ Apple TV wird AUSGESCHALTET (nicht mehr benötigt)
+- ✅ AV Receiver bleibt AN → Nur Input-Wechsel Apple TV→Sonos, Lautstärke 60%→50%
+- ✅ Sonos wird eingeschaltet
 
-#### Szenario 3: Geräte-Reihenfolge für Abhängigkeiten
+#### Szenario 3: Schritt-Reihenfolge für Abhängigkeiten
 
 **Problem:**
 - TV ist an Steckdose angeschlossen
 - TV schaltet sich ein bevor Steckdose aktiv ist
 - TV startet nicht richtig
 
-**Lösung mit Geräte-Reihenfolge:**
-1. Steckdose (Verzögerung: 5s)
-2. Rollladen (Position: 60%, Verzögerung: 1s)
-3. Licht (Helligkeit: 8%, Verzögerung: 1s)
-4. TV (Source: HDMI_IN_4, Verzögerung: 2s)
-5. Apple TV (Verzögerung: 2s)
+**Lösung mit Schritt-Reihenfolge:**
+1. Turn on Steckdose (delay_after: 5s)
+2. Set position Rollladen 60% (delay_after: 1s)
+3. Set brightness Licht 8% (delay_after: 1s)
+4. Turn on TV (delay_after: 2s)
+5. Set source TV → HDMI_IN_4 (delay_after: 1s)
+6. Turn on Apple TV (delay_after: 2s)
 
 **Was passiert:**
 1. Steckdose wird eingeschaltet → Wartet 5 Sekunden
 2. Rollladen fährt auf 60% → Wartet 1 Sekunde
 3. Licht geht auf 8% → Wartet 1 Sekunde
 4. TV schaltet sich ein (hat jetzt Strom!) → Wartet 2 Sekunden
-5. Apple TV schaltet sich ein → Wartet 2 Sekunden
+5. TV wechselt auf HDMI_IN_4 → Wartet 1 Sekunde
+6. Apple TV schaltet sich ein → Wartet 2 Sekunden
 
 ### 🔧 Erweiterte Konfiguration
 
@@ -317,15 +334,18 @@ Dieses Projekt ist unter der MIT-Lizenz lizenziert - siehe [LICENSE](LICENSE) f�
 **Core Functionality:**
 - 🏠 **Multi-room Support** - Independent control of multiple rooms
 - 🎬 **Activity-based Scenes** - "Watch Movie", "Listen to Music", "Gaming", etc.
-- 🔄 **Smart Activity Switching** - Seamless transitions without restarting devices
+- 🚀 **Step-by-Step Configuration** - Granular control with 11 different step types
+- 🎯 **Intelligent Activity Switching Management** - Automatic shutdown of unused devices
 - 🎛️ **Multiple Entity Types** - Media Players, Lights, Switches and Covers
-- 🔢 **Device Order Control** - Control power-on sequence (important for dependencies)
-- 💾 **Persistent Configuration** - Order persists after HA restart
-- 🔊 **Volume Control** - Automatic volume adjustment per activity
+- 🔢 **Step Order Control** - Precise control over execution sequence
+- 💾 **Persistent Configuration** - All settings persist after HA restart
+- 🔊 **Volume & Sound Mode** - Volume and sound mode configurable per activity
 - 💡 **Light Control** - Brightness, color temperature and transitions
 - 🪟 **Cover Control** - Position and tilt based on activity
-- ⚡ **Power Sequencing** - Configurable delays for optimal device control
+- ⚡ **Flexible Delays** - Individual wait time after each step (0-60 seconds)
 - 🎛️ **Input Source Management** - Automatic input switching
+- ⚙️ **Call Action** - Integrate any Home Assistant service in activities
+- ✏️ **Edit Step** - Modify all step parameters afterwards
 - 📋 **Copy Activity** - Quick duplication of existing activities
 - 🗑️ **Delete Room** - Complete removal of rooms with all activities
 - 📊 **Sensor Entities** - Complete transparency of configuration in Lovelace
@@ -371,22 +391,31 @@ Dieses Projekt ist unter der MIT-Lizenz lizenziert - siehe [LICENSE](LICENSE) f�
 1. Select a room
 2. Click **Add new activity**
 3. Enter a name (e.g., "Watch Movie")
-4. Add devices:
-   - Select device from dropdown (Media Player, Light, Switch, Cover)
-   - Configure device-specific settings:
-     - **Media Player**: Input source, volume control
-     - **Light**: Brightness, color temperature, transition time
-     - **Switch**: Only on/off with delay
-     - **Cover**: Position and tilt position
-   - Set power-on delay (in seconds)
-5. **Adjust device order** (optional):
-   - Select "Change device order"
-   - Move devices up/down
-   - Important for dependencies (e.g., outlet before TV)
-   - Devices power on from top to bottom
-6. **Copy activity** (optional):
+4. Add steps:
+   - Choose step type from 11 available options:
+     - **Turn on device** - Turn on a device
+     - **Set input source** - Select input source (Media Player)
+     - **Set volume** - Set volume (Media Player)
+     - **Set sound mode** - Set sound mode (Media Player) 🆕
+     - **Set brightness/color** - Set brightness/color (Light)
+     - **Set color temperature** - Set color temperature (Light)
+     - **Set position** - Set position (Cover)
+     - **Set tilt** - Set tilt (Cover)
+     - **Call action** - Call any Home Assistant action 🆕
+     - **Wait/Delay** - Insert wait time
+   - Select device (except for Wait/Delay and Call Action)
+   - Configure step-specific parameters
+   - Set delay after step (0-60 seconds)
+5. **Edit steps** (optional):
+   - Select "Edit step" to adjust parameters
+   - All settings can be modified afterwards
+6. **Adjust step order** (optional):
+   - Select "Change step order"
+   - Move steps up/down
+   - Steps execute from top to bottom
+7. **Copy activity** (optional):
    - Use "Copy activity" to duplicate an activity
-   - All devices and settings are copied
+   - All steps and settings are copied
    - Ideal for similar activities (e.g., "Movie HD" → "Movie 4K")
 
 ### 📖 Usage
@@ -491,44 +520,49 @@ content: |
 4. Receiver switches to BD/DVD input
 5. Projector switches to HDMI1
 
-#### Scenario 2: Switch from TV to Apple TV
+#### Scenario 2: Switch from Apple TV to Sonos
 
-**Running Activity "TV":**
-- Receiver (Input: SAT)
-- TV
-- Satellite Receiver
+**Running Activity "Apple TV":**
+- Turn on Projector
+- Turn on AV Receiver
+- AV Receiver Input: Apple TV
+- AV Receiver Volume: 60%
+- Turn on Apple TV
 
-**New Activity "Apple TV":**
-- Receiver (Input: Apple TV, Volume: 60%)
-- TV
-- Apple TV
+**New Activity "Sonos":**
+- Turn on AV Receiver
+- AV Receiver Input: Sonos
+- AV Receiver Volume: 50%
+- Turn on Sonos
 
-**Smart Switching:**
-- ✅ Receiver stays ON → Only input change SAT→Apple TV, Volume 50%→60%
-- ✅ TV stays ON → No change
-- ✅ Apple TV stays ON
-- ❌ Satellite Receiver turns OFF
+**Intelligent Activity Switching Management:**
+- ❌ Projector turns OFF (no longer needed)
+- ❌ Apple TV turns OFF (no longer needed)
+- ✅ AV Receiver stays ON → Only input change Apple TV→Sonos, Volume 60%→50%
+- ✅ Sonos turns on
 
-#### Scenario 3: Device Order for Dependencies
+#### Scenario 3: Step Order for Dependencies
 
 **Problem:**
 - TV is connected to power outlet
 - TV powers on before outlet is active
 - TV doesn't start properly
 
-**Solution with Device Order:**
-1. Outlet (Delay: 5s)
-2. Cover (Position: 60%, Delay: 1s)
-3. Light (Brightness: 8%, Delay: 1s)
-4. TV (Source: HDMI_IN_4, Delay: 2s)
-5. Apple TV (Delay: 2s)
+**Solution with Step Order:**
+1. Turn on Outlet (delay_after: 5s)
+2. Set position Cover 60% (delay_after: 1s)
+3. Set brightness Light 8% (delay_after: 1s)
+4. Turn on TV (delay_after: 2s)
+5. Set source TV → HDMI_IN_4 (delay_after: 1s)
+6. Turn on Apple TV (delay_after: 2s)
 
 **What happens:**
 1. Outlet powers on → Waits 5 seconds
 2. Cover moves to 60% → Waits 1 second
 3. Light dims to 8% → Waits 1 second
 4. TV powers on (now has power!) → Waits 2 seconds
-5. Apple TV powers on → Waits 2 seconds
+5. TV switches to HDMI_IN_4 → Waits 1 second
+6. Apple TV powers on → Waits 2 seconds
 
 ### 🔧 Advanced Configuration
 

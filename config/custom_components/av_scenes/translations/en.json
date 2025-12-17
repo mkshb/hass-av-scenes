@@ -72,7 +72,7 @@
       },
       "edit_activity": {
         "title": "Edit Activity: {activity}",
-        "description": "Current devices:\n{devices}",
+        "description": "Current steps:\n{steps}",
         "data": {
           "action": "Action"
         }
@@ -162,6 +162,99 @@
         "description": "{info}",
         "data": {
           "device_id": "Device to Move",
+          "direction": "Direction"
+        }
+      },
+      "step_menu": {
+        "title": "Steps in Activity",
+        "description": "Configured steps:\n{steps}",
+        "data": {
+          "action": "Action"
+        }
+      },
+      "add_step": {
+        "title": "Add Step",
+        "description": "{info}",
+        "data": {
+          "step_type": "Step Type"
+        }
+      },
+      "add_step_entity": {
+        "title": "Select Device for Step",
+        "description": "Choose a device for: {step_type}",
+        "data": {
+          "entity_id": "Device"
+        }
+      },
+      "add_step_config": {
+        "title": "Configure {step_type}: {device}",
+        "description": "{info}",
+        "data": {
+          "delay_after": "Delay after (seconds)",
+          "input_source": "Input Source",
+          "volume_level": "Volume (%)",
+          "sound_mode": "Sound Mode",
+          "brightness": "Brightness (%)",
+          "color_temp": "Color Temperature (Mired, 153-500)",
+          "transition": "Transition Time (seconds)",
+          "position": "Position (%)",
+          "tilt_position": "Tilt Position (%)",
+          "action": "Action (e.g., light.turn_on)",
+          "service_data": "Service Data (JSON, optional)"
+        }
+      },
+      "add_step_delay_config": {
+        "title": "Configure Wait Time",
+        "description": "{info}",
+        "data": {
+          "delay_after": "How many seconds to wait?"
+        }
+      },
+      "add_step_action_config": {
+        "title": "Call Action",
+        "description": "{info}",
+        "data": {
+          "action": "Action (e.g., light.turn_on)",
+          "service_data": "Service Data (JSON, optional)",
+          "delay_after": "Delay after (seconds)"
+        }
+      },
+      "select_step_to_edit": {
+        "title": "Select Step to Edit",
+        "description": "Choose a step to edit",
+        "data": {
+          "step_id": "Step"
+        }
+      },
+      "edit_step": {
+        "title": "Edit {step_type}: {device}",
+        "description": "{info}",
+        "data": {
+          "delay_after": "Delay after (seconds)",
+          "input_source": "Input Source",
+          "volume_level": "Volume (%)",
+          "sound_mode": "Sound Mode",
+          "brightness": "Brightness (%)",
+          "color_temp": "Color Temperature (Mired, 153-500)",
+          "transition": "Transition Time (seconds)",
+          "position": "Position (%)",
+          "tilt_position": "Tilt Position (%)",
+          "action": "Action (e.g., light.turn_on)",
+          "service_data": "Service Data (JSON, optional)"
+        }
+      },
+      "select_step_to_delete": {
+        "title": "Delete Step",
+        "description": "{warning}",
+        "data": {
+          "step_id": "Step to Delete"
+        }
+      },
+      "reorder_step": {
+        "title": "Change Step Order",
+        "description": "{info}",
+        "data": {
+          "step_id": "Step to Move",
           "direction": "Direction"
         }
       }
