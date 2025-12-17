@@ -28,6 +28,7 @@ from .const import (
     CONF_POWER_OFF_DELAY,
     CONF_INPUT_SOURCE,
     CONF_VOLUME_LEVEL,
+    CONF_SOUND_MODE,
     CONF_IS_VOLUME_CONTROLLER,
     CONF_BRIGHTNESS,
     CONF_COLOR_TEMP,
@@ -35,6 +36,8 @@ from .const import (
     CONF_TRANSITION,
     CONF_POSITION,
     CONF_TILT_POSITION,
+    CONF_ACTION,
+    CONF_SERVICE_DATA,
     DEFAULT_POWER_ON_DELAY,
     DEFAULT_POWER_OFF_DELAY,
     SERVICE_START_ACTIVITY,
@@ -56,10 +59,12 @@ from .const import (
     STEP_TYPE_POWER_OFF,
     STEP_TYPE_SET_SOURCE,
     STEP_TYPE_SET_VOLUME,
+    STEP_TYPE_SET_SOUND_MODE,
     STEP_TYPE_SET_BRIGHTNESS,
     STEP_TYPE_SET_COLOR_TEMP,
     STEP_TYPE_SET_POSITION,
     STEP_TYPE_SET_TILT,
+    STEP_TYPE_CALL_ACTION,
     STEP_TYPE_DELAY,
 )
 
@@ -383,6 +388,9 @@ class AVScenesCoordinator(DataUpdateCoordinator):
             elif step_type == STEP_TYPE_SET_VOLUME:
                 await self._step_set_volume(entity_id, parameters)
 
+            elif step_type == STEP_TYPE_SET_SOUND_MODE:
+                await self._step_set_sound_mode(entity_id, parameters)
+
             elif step_type == STEP_TYPE_SET_BRIGHTNESS:
                 await self._step_set_brightness(entity_id, parameters)
 
@@ -394,6 +402,9 @@ class AVScenesCoordinator(DataUpdateCoordinator):
 
             elif step_type == STEP_TYPE_SET_TILT:
                 await self._step_set_tilt(entity_id, parameters)
+
+            elif step_type == STEP_TYPE_CALL_ACTION:
+                await self._step_call_action(parameters)
 
             elif step_type == STEP_TYPE_DELAY:
                 # Delay is handled by delay_after, so this is a no-op
@@ -455,6 +466,21 @@ class AVScenesCoordinator(DataUpdateCoordinator):
                 blocking=True,
             )
             _LOGGER.info(f"Set volume to {int(volume_level * 100)}% on {entity_id}")
+
+    async def _step_set_sound_mode(self, entity_id: str, parameters: dict[str, Any]) -> None:
+        """Set sound mode on media player."""
+        sound_mode = parameters.get(CONF_SOUND_MODE)
+        if sound_mode:
+            await self.hass.services.async_call(
+                "media_player",
+                "select_sound_mode",
+                {
+                    ATTR_ENTITY_ID: entity_id,
+                    "sound_mode": sound_mode,
+                },
+                blocking=True,
+            )
+            _LOGGER.info(f"Set sound mode to '{sound_mode}' on {entity_id}")
 
     async def _step_set_brightness(self, entity_id: str, parameters: dict[str, Any]) -> None:
         """Set brightness/color on light."""
@@ -525,6 +551,32 @@ class AVScenesCoordinator(DataUpdateCoordinator):
                 blocking=True,
             )
             _LOGGER.info(f"Set cover tilt to {tilt}% on {entity_id}")
+
+    async def _step_call_action(self, parameters: dict[str, Any]) -> None:
+        """Call a Home Assistant action/service."""
+        action = parameters.get(CONF_ACTION)
+        if not action:
+            _LOGGER.error("No action specified for call_action step")
+            return
+
+        # Parse domain and service from action string (e.g., "light.turn_on")
+        try:
+            domain, service = action.split(".", 1)
+        except ValueError:
+            _LOGGER.error(f"Invalid action format: {action}. Expected format: domain.service")
+            return
+
+        # Get service data if provided
+        service_data = parameters.get(CONF_SERVICE_DATA, {})
+
+        _LOGGER.info(f"Calling action: {action} with data: {service_data}")
+        await self.hass.services.async_call(
+            domain,
+            service,
+            service_data,
+            blocking=True,
+        )
+        _LOGGER.info(f"Action {action} completed")
 
     async def async_register_services(self) -> None:
         """Register services."""

@@ -198,11 +198,14 @@
           "delay_after": "Verzögerung danach (Sekunden)",
           "input_source": "Eingangsquelle",
           "volume_level": "Lautstärke (%)",
+          "sound_mode": "Tonmodus",
           "brightness": "Helligkeit (%)",
           "color_temp": "Farbtemperatur (Mired, 153-500)",
           "transition": "Übergangszeit (Sekunden)",
           "position": "Position (%)",
-          "tilt_position": "Neigungsposition (%)"
+          "tilt_position": "Neigungsposition (%)",
+          "action": "Aktion (z.B. light.turn_on)",
+          "service_data": "Service-Daten (JSON, optional)"
         }
       },
       "add_step_delay_config": {
@@ -210,6 +213,15 @@
         "description": "{info}",
         "data": {
           "delay_after": "Wie viele Sekunden warten?"
+        }
+      },
+      "add_step_action_config": {
+        "title": "Aktion aufrufen",
+        "description": "{info}",
+        "data": {
+          "action": "Aktion (z.B. light.turn_on)",
+          "service_data": "Service-Daten (JSON, optional)",
+          "delay_after": "Verzögerung danach (Sekunden)"
         }
       },
       "select_step_to_edit": {
@@ -226,11 +238,14 @@
           "delay_after": "Verzögerung danach (Sekunden)",
           "input_source": "Eingangsquelle",
           "volume_level": "Lautstärke (%)",
+          "sound_mode": "Tonmodus",
           "brightness": "Helligkeit (%)",
           "color_temp": "Farbtemperatur (Mired, 153-500)",
           "transition": "Übergangszeit (Sekunden)",
           "position": "Position (%)",
-          "tilt_position": "Neigungsposition (%)"
+          "tilt_position": "Neigungsposition (%)",
+          "action": "Aktion (z.B. light.turn_on)",
+          "service_data": "Service-Daten (JSON, optional)"
         }
       },
       "select_step_to_delete": {
