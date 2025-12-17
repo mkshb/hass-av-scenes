@@ -12,6 +12,104 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.0] - 2025-12-16
+
+### 🇩🇪 Deutsch
+
+#### Hinzugefügt
+- 🚀 **Schritt-für-Schritt-Konfiguration** - Vollständige Neuentwicklung des Aktivitätssystems
+  - Jede Aktivität besteht aus einzelnen, konfigurierbaren Schritten
+  - Granulare Kontrolle: Gerät einschalten, Eingang wählen, Lautstärke setzen - alles separate Schritte
+  - Beispiel: "1. AV Receiver einschalten → 2. 5 Sek. warten → 3. Eingang auf HDMI 1 → 4. Beamer einschalten"
+- ⏱️ **Flexible Delays** - Individuelle Wartezeit nach jedem Schritt
+  - Kein globales `power_on_delay` mehr
+  - Jeder Schritt hat eigenes `delay_after` (0-60 Sekunden)
+  - Ideal für Geräte, die Zeit zum Aufwärmen brauchen
+- 🎯 **9 Schritt-Typen** für maximale Flexibilität
+  - `power_on` - Gerät einschalten
+  - `power_off` - Gerät ausschalten
+  - `set_source` - Eingang wählen (Media Player)
+  - `set_volume` - Lautstärke setzen (Media Player)
+  - `set_brightness` - Helligkeit/Farbe setzen (Light)
+  - `set_color_temp` - Farbtemperatur setzen (Light)
+  - `set_position` - Position setzen (Cover)
+  - `set_tilt` - Neigung setzen (Cover)
+  - `delay` - Nur warten (kein Gerät)
+- 🔄 **Move Up/Down für Schritte** - Einfache Neuanordnung der Schritte
+  - Ähnlich wie bei Geräten
+  - Schritte werden von oben nach unten ausgeführt
+- 🔄 **Automatische Migration** - Alte Konfigurationen werden automatisch konvertiert
+  - Device-basierte Aktivitäten → Step-basierte Aktivitäten
+  - Läuft transparent beim Öffnen der Config
+  - Keine Daten gehen verloren
+- 📊 **Verbesserte Step-Anzeige** - Übersichtliche Liste aller Schritte mit Details
+  - "1. Turn on AV Receiver (then wait 5s)"
+  - "2. Set AV Receiver source to 'HDMI 1'"
+  - "3. Turn on Beamer (then wait 2s)"
+
+#### Geändert
+- 🏗️ **Komplett neue Datenstruktur** - Von `device_states` zu `steps`
+  - Alte Struktur: Gerät mit allen Einstellungen
+  - Neue Struktur: Liste von einzelnen Schritten
+  - Viel flexibler und erweiterbar
+- 🎛️ **Coordinator umgebaut** - Schrittweise Ausführung statt gerätebasiert
+  - Führt Schritte sequenziell aus
+  - Wartet nach jedem Schritt gemäß `delay_after`
+  - Besseres Logging für jeden Schritt
+- 🗑️ **Smart Activity Switching entfernt** - Zu komplex mit Step-System
+  - Alle Schritte werden immer ausgeführt
+  - Einfacher und vorhersehbarer
+  - Bei Bedarf manuell konfigurierbar
+
+### 🇬🇧 English
+
+#### Added
+- 🚀 **Step-by-Step Configuration** - Complete redesign of the activity system
+  - Each activity consists of individual, configurable steps
+  - Granular control: Turn on device, select input, set volume - all separate steps
+  - Example: "1. Turn on AV Receiver → 2. Wait 5 sec → 3. Input to HDMI 1 → 4. Turn on Projector"
+- ⏱️ **Flexible Delays** - Individual wait time after each step
+  - No more global `power_on_delay`
+  - Each step has its own `delay_after` (0-60 seconds)
+  - Perfect for devices that need warm-up time
+- 🎯 **9 Step Types** for maximum flexibility
+  - `power_on` - Turn on device
+  - `power_off` - Turn off device
+  - `set_source` - Select input (Media Player)
+  - `set_volume` - Set volume (Media Player)
+  - `set_brightness` - Set brightness/color (Light)
+  - `set_color_temp` - Set color temperature (Light)
+  - `set_position` - Set position (Cover)
+  - `set_tilt` - Set tilt (Cover)
+  - `delay` - Just wait (no device)
+- 🔄 **Move Up/Down for Steps** - Easy step reordering
+  - Similar to devices
+  - Steps execute from top to bottom
+- 🔄 **Automatic Migration** - Old configurations automatically converted
+  - Device-based activities → Step-based activities
+  - Runs transparently when opening config
+  - No data loss
+- 📊 **Improved Step Display** - Clear list of all steps with details
+  - "1. Turn on AV Receiver (then wait 5s)"
+  - "2. Set AV Receiver source to 'HDMI 1'"
+  - "3. Turn on Projector (then wait 2s)"
+
+#### Changed
+- 🏗️ **Completely New Data Structure** - From `device_states` to `steps`
+  - Old structure: Device with all settings
+  - New structure: List of individual steps
+  - Much more flexible and extensible
+- 🎛️ **Coordinator Rebuilt** - Step-by-step execution instead of device-based
+  - Executes steps sequentially
+  - Waits after each step according to `delay_after`
+  - Better logging for each step
+- 🗑️ **Smart Activity Switching Removed** - Too complex with step system
+  - All steps are always executed
+  - Simpler and more predictable
+  - Can be configured manually if needed
+
+---
+
 ## [0.2.1] - 2025-12-15
 
 ### 🇩🇪 Deutsch
