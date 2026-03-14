@@ -3,6 +3,9 @@ from typing import Final
 
 DOMAIN: Final = "av_scenes"
 
+# Einheitlicher Prefix für den Gerätenamen in allen Plattformen
+DEVICE_NAME_PREFIX: Final = "AV"
+
 # Configuration keys
 CONF_ROOMS: Final = "rooms"
 CONF_ACTIVITIES: Final = "activities"

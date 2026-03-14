@@ -15,6 +15,7 @@ from .const import (
     ACTIVITY_STATE_ACTIVE,
     ATTR_CURRENT_ACTIVITY,
     ATTR_AVAILABLE_ACTIVITIES,
+    DEVICE_NAME_PREFIX,
 )
 from .coordinator import AVScenesCoordinator
 
@@ -86,14 +87,15 @@ class RoomActivitySwitch(CoordinatorEntity, SwitchEntity):
         await self.coordinator.async_stop_activity(self.room_id)
 
     @property
-    def device_info(self):
+    def device_info(self) -> dict:
         """Return device information for grouping."""
         room_name = self.coordinator.rooms[self.room_id].get("name", self.room_id)
         return {
             "identifiers": {(DOMAIN, self.room_id)},
-            "name": f"AV Room: {room_name}",
+            "name": f"{DEVICE_NAME_PREFIX}: {room_name}",
             "manufacturer": "AV Scenes",
             "model": "Activity Controller",
+            "suggested_area": room_name,
         }
 
     @callback

@@ -73,6 +73,8 @@ class AVScenesCoordinator(DataUpdateCoordinator):
         self.active_activities: dict[str, str] = {}  # room_id -> activity_name
         self.activity_states: dict[str, str] = {}  # room_id -> state
         self._room_locks: dict[str, asyncio.Lock] = {}
+        # (current_step_index, total_steps) — 0-based index, 0/0 when idle
+        self.activity_progress: dict[str, tuple[int, int]] = {}
 
         # Dispatch table: step_type -> handler method
         # Built after __init__ so self is available.
@@ -152,6 +154,7 @@ class AVScenesCoordinator(DataUpdateCoordinator):
                             _LOGGER.error("Error turning off %s: %s", entity_id, ex)
 
         self.activity_states[room_id] = ACTIVITY_STATE_STARTING
+        self.activity_progress[room_id] = (0, len(new_steps))
         self.async_update_listeners()
 
         for idx, step in enumerate(new_steps, 1):
@@ -159,6 +162,9 @@ class AVScenesCoordinator(DataUpdateCoordinator):
             entity_id = step.get(CONF_ENTITY_ID, "")
             delay_after = step.get(CONF_STEP_DELAY_AFTER, 0)
             parameters = step.get(CONF_STEP_PARAMETERS, {})
+
+            self.activity_progress[room_id] = (idx, len(new_steps))
+            self.async_update_listeners()
 
             _LOGGER.info(
                 "Executing step %d/%d: %s on %s", idx, len(new_steps), step_type, entity_id
@@ -176,6 +182,7 @@ class AVScenesCoordinator(DataUpdateCoordinator):
 
         self.active_activities[room_id] = activity_name
         self.activity_states[room_id] = ACTIVITY_STATE_ACTIVE
+        self.activity_progress[room_id] = (len(new_steps), len(new_steps))
         self.async_update_listeners()
 
         _LOGGER.info(
@@ -242,6 +249,7 @@ class AVScenesCoordinator(DataUpdateCoordinator):
 
         del self.active_activities[room_id]
         self.activity_states[room_id] = ACTIVITY_STATE_IDLE
+        self.activity_progress.pop(room_id, None)
         self.async_update_listeners()
 
         _LOGGER.info("Activity '%s' stopped in room '%s'", activity_name, room_id)

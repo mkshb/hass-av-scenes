@@ -9,7 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, CONF_ACTIVITIES
+from .const import DOMAIN, CONF_ACTIVITIES, DEVICE_NAME_PREFIX
 from .coordinator import AVScenesCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ class AVScene(Scene):
         room_name = self.coordinator.rooms[self.room_id].get("name", self.room_id)
         return {
             "identifiers": {(DOMAIN, self.room_id)},
-            "name": f"AV Room: {room_name}",
+            "name": f"{DEVICE_NAME_PREFIX}: {room_name}",
             "manufacturer": "AV Scenes",
             "model": "Activity Controller",
         }

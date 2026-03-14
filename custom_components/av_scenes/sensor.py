@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -13,21 +13,27 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     DOMAIN,
     CONF_ACTIVITIES,
-    CONF_DEVICES,
-    CONF_INPUT_SOURCE,
-    CONF_POWER_ON_DELAY,
-    CONF_IS_VOLUME_CONTROLLER,
-    CONF_VOLUME_LEVEL,
-    CONF_BRIGHTNESS,
-    CONF_COLOR_TEMP,
-    CONF_TRANSITION,
-    CONF_POSITION,
-    CONF_TILT_POSITION,
-    CONF_DEVICE_ORDER,
+    CONF_STEPS,
+    CONF_STEP_TYPE,
+    CONF_ENTITY_ID,
+    CONF_STEP_DELAY_AFTER,
+    ACTIVITY_STATE_IDLE,
+    ACTIVITY_STATE_STARTING,
+    ACTIVITY_STATE_ACTIVE,
+    ACTIVITY_STATE_STOPPING,
+    DEVICE_NAME_PREFIX,
 )
 from .coordinator import AVScenesCoordinator
 
 _LOGGER = logging.getLogger(__name__)
+
+# Icon per activity state
+_STATE_ICONS: dict[str, str] = {
+    ACTIVITY_STATE_IDLE:     "mdi:television-off",
+    ACTIVITY_STATE_STARTING: "mdi:timer-sand",
+    ACTIVITY_STATE_ACTIVE:   "mdi:play-circle",
+    ACTIVITY_STATE_STOPPING: "mdi:stop-circle-outline",
+}
 
 
 async def async_setup_entry(
@@ -38,140 +44,119 @@ async def async_setup_entry(
     """Set up AV Scenes sensors from a config entry."""
     coordinator: AVScenesCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    sensors = []
-
-    # Create a sensor for each room to show configuration details
-    for room_id in coordinator.rooms.keys():
-        sensors.append(RoomConfigSensor(coordinator, room_id))
-
+    sensors = [
+        RoomActivitySensor(coordinator, room_id)
+        for room_id in coordinator.rooms
+    ]
     async_add_entities(sensors)
-    _LOGGER.info(f"Created {len(sensors)} room configuration sensors")
+    _LOGGER.debug("Created %d room activity sensors", len(sensors))
 
 
-class RoomConfigSensor(CoordinatorEntity, SensorEntity):
-    """Representation of a room configuration sensor."""
+class RoomActivitySensor(CoordinatorEntity, SensorEntity):
+    """Sensor that exposes the current activity state of a room.
+
+    State values: idle | starting | active | stopping
+    Attributes:   activity_name, current_step, total_steps, step_progress_pct,
+                  available_activities
+    """
 
     _attr_has_entity_name = True
-    _attr_translation_key = "room_config"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [
+        ACTIVITY_STATE_IDLE,
+        ACTIVITY_STATE_STARTING,
+        ACTIVITY_STATE_ACTIVE,
+        ACTIVITY_STATE_STOPPING,
+    ]
 
-    def __init__(
-        self,
-        coordinator: AVScenesCoordinator,
-        room_id: str,
-    ) -> None:
+    def __init__(self, coordinator: AVScenesCoordinator, room_id: str) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
         self.room_id = room_id
 
         room_name = coordinator.rooms[room_id].get("name", room_id)
-        self._attr_name = f"{room_name} Configuration"
-        self._attr_unique_id = f"{DOMAIN}_config_{room_id}"
+        self._room_name = room_name
+        self._attr_name = "Aktivität"
+        self._attr_unique_id = f"{DOMAIN}_activity_state_{room_id}"
+
+    # ------------------------------------------------------------------
+    # State
+    # ------------------------------------------------------------------
 
     @property
     def native_value(self) -> str:
-        """Return the state of the sensor."""
-        # Show current activity or "idle"
-        if self.room_id in self.coordinator.active_activities:
-            return self.coordinator.active_activities[self.room_id]
-        return "idle"
+        """Return the current activity state (idle/starting/active/stopping)."""
+        return self.coordinator.activity_states.get(self.room_id, ACTIVITY_STATE_IDLE)
+
+    # ------------------------------------------------------------------
+    # Attributes
+    # ------------------------------------------------------------------
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return detailed configuration as attributes."""
+        """Return progress and configuration details."""
         room_data = self.coordinator.rooms.get(self.room_id, {})
-        activities = room_data.get(CONF_ACTIVITIES, {})
+        activities: dict[str, Any] = room_data.get(CONF_ACTIVITIES, {})
 
-        attrs = {
-            "room_id": self.room_id,
-            "room_name": room_data.get("name", self.room_id),
-            "total_activities": len(activities),
-            "activity_names": list(activities.keys()),
+        # Current activity name (None when idle)
+        activity_name: str | None = self.coordinator.active_activities.get(self.room_id)
+
+        # Step progress
+        current_step, total_steps = self.coordinator.activity_progress.get(
+            self.room_id, (0, 0)
+        )
+        step_progress_pct = (
+            round(current_step / total_steps * 100) if total_steps else 0
+        )
+
+        attrs: dict[str, Any] = {
+            "activity_name": activity_name,
+            "available_activities": list(activities.keys()),
+            "current_step": current_step,
+            "total_steps": total_steps,
+            "step_progress_pct": step_progress_pct,
         }
 
-        # Add detailed information for each activity
-        activities_detail = {}
-        for activity_name, activity_data in activities.items():
-            devices = activity_data.get(CONF_DEVICES, {})
-            device_order = activity_data.get(CONF_DEVICE_ORDER, list(devices.keys()))
-
-            # Build device details in the correct order
-            devices_detail = []
-            for idx, device_id in enumerate(device_order, 1):
-                if device_id not in devices:
-                    continue
-
-                device_config = devices[device_id]
-                device_detail = {
-                    "order": idx,
-                    "entity_id": device_id,
-                    "friendly_name": self._get_friendly_name(device_id),
+        # Step summary for the active activity (label list, useful in Markdown card)
+        if activity_name and activity_name in activities:
+            steps = activities[activity_name].get(CONF_STEPS, [])
+            attrs["steps"] = [
+                {
+                    "nr": i + 1,
+                    "type": s.get(CONF_STEP_TYPE, ""),
+                    "entity": s.get(CONF_ENTITY_ID, ""),
+                    "delay_after": s.get(CONF_STEP_DELAY_AFTER, 0),
                 }
-
-                # Add relevant configuration based on what's set
-                if CONF_INPUT_SOURCE in device_config:
-                    device_detail["input_source"] = device_config[CONF_INPUT_SOURCE]
-                if CONF_POWER_ON_DELAY in device_config:
-                    device_detail["delay"] = f"{device_config[CONF_POWER_ON_DELAY]}s"
-                if CONF_IS_VOLUME_CONTROLLER in device_config:
-                    device_detail["volume_controller"] = device_config[CONF_IS_VOLUME_CONTROLLER]
-                if CONF_VOLUME_LEVEL in device_config:
-                    device_detail["volume"] = f"{device_config[CONF_VOLUME_LEVEL]}%"
-                if CONF_BRIGHTNESS in device_config:
-                    device_detail["brightness"] = f"{device_config[CONF_BRIGHTNESS]}%"
-                if CONF_COLOR_TEMP in device_config:
-                    device_detail["color_temp"] = f"{device_config[CONF_COLOR_TEMP]} mired"
-                if CONF_TRANSITION in device_config:
-                    device_detail["transition"] = f"{device_config[CONF_TRANSITION]}s"
-                if CONF_POSITION in device_config:
-                    device_detail["position"] = f"{device_config[CONF_POSITION]}%"
-                if CONF_TILT_POSITION in device_config:
-                    device_detail["tilt_position"] = f"{device_config[CONF_TILT_POSITION]}%"
-
-                devices_detail.append(device_detail)
-
-            activities_detail[activity_name] = {
-                "device_count": len(devices),
-                "devices": devices_detail,
-            }
-
-        attrs["activities"] = activities_detail
-
-        # Add current activity info if active
-        if self.room_id in self.coordinator.active_activities:
-            attrs["current_activity"] = self.coordinator.active_activities[self.room_id]
-            attrs["status"] = "active"
-        else:
-            attrs["status"] = "idle"
+                for i, s in enumerate(steps)
+            ]
 
         return attrs
 
-    def _get_friendly_name(self, entity_id: str) -> str:
-        """Get friendly name for an entity."""
-        if not self.hass:
-            return entity_id
-
-        state = self.hass.states.get(entity_id)
-        if state and state.attributes.get("friendly_name"):
-            return state.attributes["friendly_name"]
-        return entity_id
-
-    @property
-    def device_info(self):
-        """Return device information for grouping."""
-        room_name = self.coordinator.rooms[self.room_id].get("name", self.room_id)
-        return {
-            "identifiers": {(DOMAIN, self.room_id)},
-            "name": f"AV Room: {room_name}",
-            "manufacturer": "AV Scenes",
-            "model": "Activity Controller",
-        }
+    # ------------------------------------------------------------------
+    # Icon — changes with state
+    # ------------------------------------------------------------------
 
     @property
     def icon(self) -> str:
-        """Return the icon to use in the frontend."""
-        if self.room_id in self.coordinator.active_activities:
-            return "mdi:play-circle"
-        return "mdi:information-outline"
+        """Return state-dependent icon."""
+        return _STATE_ICONS.get(self.native_value, "mdi:television")
+
+    # ------------------------------------------------------------------
+    # Device — linked to HA Area via suggested_area
+    # ------------------------------------------------------------------
+
+    @property
+    def device_info(self) -> dict[str, Any]:
+        """Return device info.  suggested_area links the device to the HA Area."""
+        return {
+            "identifiers": {(DOMAIN, self.room_id)},
+            "name": f"{DEVICE_NAME_PREFIX}: {self._room_name}",
+            "manufacturer": "AV Scenes",
+            "model": "Activity Controller",
+            "suggested_area": self._room_name,   # ← verknüpft mit gleichnamiger HA-Area
+        }
+
+    # ------------------------------------------------------------------
 
     @callback
     def _handle_coordinator_update(self) -> None:

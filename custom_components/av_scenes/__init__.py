@@ -89,6 +89,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not hass.services.has_service(DOMAIN, SERVICE_START_ACTIVITY):
         _register_services(hass)
 
+    # -----------------------------------------------------------------------
+    # TEMPORARY DEBUG LOGGING — remove these two lines when no longer needed
+    from .debug_log import enable_debug_log  # noqa: PLC0415
+    enable_debug_log(hass)
+    # -----------------------------------------------------------------------
+
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     return True
