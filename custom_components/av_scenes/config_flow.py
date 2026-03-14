@@ -255,6 +255,19 @@ class AVScenesOptionsFlow(
 
             self.rooms: dict[str, Any] = copy.deepcopy(rooms_data)
 
+            # Log loaded step order so any later reordering is traceable
+            for room_id, room_data in self.rooms.items():
+                for act_name, act_data in room_data.get(CONF_ACTIVITIES, {}).items():
+                    steps = act_data.get(CONF_STEPS, [])
+                    step_summary = [
+                        f"{i+1}:{s.get(CONF_STEP_TYPE,'?')}@{s.get(CONF_ENTITY_ID,'')}"
+                        for i, s in enumerate(steps)
+                    ]
+                    _LOGGER.debug(
+                        "Loaded activity '%s' (%s) — %d steps: %s",
+                        act_name, room_id, len(steps), step_summary,
+                    )
+
             # Migrate old device_states format to new steps format
             migrated = False
             for room_id, room_data in self.rooms.items():
@@ -304,12 +317,28 @@ class AVScenesOptionsFlow(
         """Save the current configuration to the config entry."""
         import json
 
-        # Convert to JSON to check if data actually changed
+        # Convert to JSON to check if data actually changed.
+        # NOTE: sort_keys=True is intentional here — it is used ONLY for
+        # change-detection.  The actual data written to the entry is
+        # self.rooms (list order preserved).
         current_data = json.dumps(self.rooms, sort_keys=True)
 
         if current_data == self._last_save_data:
             _LOGGER.debug("Config unchanged, skipping save")
             return
+
+        # Log step order for every activity so ordering issues are traceable
+        for room_id, room_data in self.rooms.items():
+            for activity_name, activity_data in room_data.get(CONF_ACTIVITIES, {}).items():
+                steps = activity_data.get(CONF_STEPS, [])
+                step_summary = [
+                    f"{i+1}:{s.get(CONF_STEP_TYPE,'?')}@{s.get(CONF_ENTITY_ID,'')}"
+                    for i, s in enumerate(steps)
+                ]
+                _LOGGER.debug(
+                    "Saving activity '%s' (%s) — %d steps: %s",
+                    activity_name, room_id, len(steps), step_summary,
+                )
 
         _LOGGER.info("Saving configuration with %d rooms", len(self.rooms))
         self.hass.config_entries.async_update_entry(
@@ -344,4 +373,12 @@ class AVScenesOptionsFlow(
     ) -> FlowResult:
         """Manage the options."""
         _LOGGER.debug("Options flow: async_step_init called")
+
+        # Persist migration result immediately so the coordinator reloads
+        # with the correct step order — and so the migration never re-runs.
+        if self._needs_migration_save:
+            _LOGGER.info("Persisting migrated activity data")
+            self._save_config()
+            self._needs_migration_save = False
+
         return await self.async_step_room_menu()
