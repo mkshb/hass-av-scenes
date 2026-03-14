@@ -12,102 +12,94 @@ Home Assistant Integration für aktivitätsbasierte Steuerung von AV-Geräten. E
 
 ## Deutsch
 
-### 🎯 Features
+### Überblick
 
-**Kernfunktionen:**
-- 🏠 **Multiroom-Unterstützung** - Unabhängige Steuerung mehrerer Räume
-- 🎬 **Aktivitätsbasierte Szenen** - "Film schauen", "Musik hören", "Gaming", etc.
-- 🚀 **Schritt-für-Schritt-Konfiguration** - Granulare Kontrolle mit 11 verschiedenen Schritt-Typen
-- 🎯 **Intelligentes Aktivitätswechsel-Management** - Automatisches Ausschalten ungenutzter Geräte
-- 🎛️ **Mehrere Entity-Typen** - Media Player, Lichter, Steckdosen und Rollläden
-- 🔢 **Schritt-Reihenfolge** - Präzise Kontrolle über die Ausführungssequenz
-- 💾 **Persistente Konfiguration** - Alle Einstellungen bleiben nach HA-Neustart erhalten
-- 🔊 **Lautstärke & Sound Mode** - Lautstärke und Tonmodus pro Aktivität konfigurierbar
-- 💡 **Lichtsteuerung** - Helligkeit, Farbtemperatur und Übergänge
-- 🪟 **Rollladen-Steuerung** - Position und Neigung basierend auf Aktivität
-- ⚡ **Flexible Delays** - Individuelle Wartezeit nach jedem Schritt (0-60 Sekunden)
-- 🎛️ **Input Source Management** - Automatischer Input-Wechsel
-- ⚙️ **Call Action** - Beliebige Home Assistant Services in Aktivitäten einbinden
-- ✏️ **Edit Step** - Nachträgliche Bearbeitung aller Schritt-Parameter
-- 📋 **Aktivität kopieren** - Schnelles Duplizieren bestehender Aktivitäten
-- 🗑️ **Raum löschen** - Vollständige Entfernung von Räumen mit allen Aktivitäten
-- 📊 **Sensor Entities** - Vollständige Transparenz über Konfiguration in Lovelace
-- 🖥️ **UI-basierte Konfiguration** - Kein YAML erforderlich
-- 🇩🇪 **Vollständig auf Deutsch** - Komplette deutsche Übersetzung
+AV Scenes ermöglicht es, mehrere Geräte (Receiver, Beamer, TV, Lichter, Steckdosen, Rollläden) über vorkonfigurierte Aktivitäten zu steuern — ohne YAML. Aktivitäten werden Schritt für Schritt ausgeführt und können dabei beliebige Home Assistant Entities und Actions einbinden.
 
-### 🚀 Installation
+### Features
+
+| Feature | Beschreibung |
+|---------|-------------|
+| Multiroom | Unabhängige Aktivitätsverwaltung pro Raum |
+| 10 Schritt-Typen | Gerät ein/aus, Quelle, Lautstärke, Soundmodus, Helligkeit, Farbtemperatur, Position, Neigung, Delay, beliebige HA-Action |
+| Intelligenter Aktivitätswechsel | Geräte, die in der neuen Aktivität nicht mehr benötigt werden, werden automatisch abgeschaltet |
+| Flexible Delays | Konfigurierbare Wartezeit (0–60 s) nach jedem Schritt |
+| Race-Condition-Schutz | Parallele Aufrufe für denselben Raum werden serialisiert |
+| Sensor & Switch Entities | Vollständige Transparenz in Lovelace |
+| UI-Konfiguration | Keine YAML-Kenntnisse erforderlich |
+| Persistenz | Konfiguration überlebt HA-Neustarts |
+| Zweisprachig | Vollständige deutsche und englische Oberfläche |
+
+### Unterstützte Entity-Typen
+
+| Typ | Domain | Steuerung |
+|-----|--------|-----------|
+| AV-Receiver, Beamer, TV, Media Player | `media_player.*` | Ein/Aus, Eingangsquelle, Lautstärke, Soundmodus |
+| Lichter | `light.*` | Ein/Aus, Helligkeit, Farbtemperatur, Übergangszeit |
+| Steckdosen / Schalter | `switch.*` | Ein/Aus |
+| Rollläden | `cover.*` | Öffnen/Schließen, Position, Neigung |
+
+### Installation
 
 #### HACS (Empfohlen)
 
-1. Öffne HACS in Home Assistant
-2. Gehe zu "Integrationen"
-3. Klicke auf die drei Punkte oben rechts
-4. Wähle "Benutzerdefinierte Repositories"
-5. Füge hinzu:
+1. HACS in Home Assistant öffnen
+2. "Integrationen" → drei Punkte oben rechts → "Benutzerdefinierte Repositories"
+3. Repository hinzufügen:
    - **Repository:** `https://github.com/mkshb/ha_av_scenes`
    - **Kategorie:** Integration
-6. Klicke auf "AV Scenes" in der Liste
-7. Klicke auf "Herunterladen"
-8. Starte Home Assistant neu
+4. "AV Scenes" in der Liste suchen und auf "Herunterladen" klicken
+5. Home Assistant neu starten
 
 #### Manuell
 
-1. Lade die neueste Version von [Releases](https://github.com/mkshb/ha_av_scenes/releases) herunter
-2. Entpacke die Dateien
-3. Kopiere den `custom_components/av_scenes` Ordner in dein `config/custom_components/` Verzeichnis
-4. Starte Home Assistant neu
+1. Neueste Version von [Releases](https://github.com/mkshb/ha_av_scenes/releases) herunterladen
+2. Ordner `custom_components/av_scenes` in `config/custom_components/` kopieren
+3. Home Assistant neu starten
 
-### ⚙️ Konfiguration
+### Einrichtung
 
-1. Gehe zu **Einstellungen** → **Geräte & Dienste**
-2. Klicke auf **+ Integration hinzufügen**
-3. Suche nach "AV Scenes"
-4. Klicke auf **Konfigurieren** um Räume und Aktivitäten einzurichten
+1. **Einstellungen** → **Geräte & Dienste** → **+ Integration hinzufügen**
+2. "AV Scenes" suchen und auswählen
+3. Auf **Konfigurieren** klicken, um Räume und Aktivitäten einzurichten
 
-#### Raum hinzufügen
+#### Raum anlegen
 
-1. Wähle einen bestehenden Home Assistant Bereich oder erstelle einen eigenen Raum
-2. Klicke auf **Neuen Raum hinzufügen**
+1. Einen bestehenden Home Assistant Bereich auswählen **oder** einen eigenen Raumnamen vergeben
+2. Bestätigen — der Raum erscheint sofort in der Liste
 
 #### Aktivität erstellen
 
-1. Wähle einen Raum
-2. Klicke auf **Neue Aktivität hinzufügen**
-3. Gib einen Namen ein (z.B. "Film schauen")
-4. Füge Schritte hinzu:
-   - Wähle Schritt-Typ aus 11 verfügbaren Optionen:
-     - **Turn on device** - Gerät einschalten
-     - **Set input source** - Eingangsquelle wählen (Media Player)
-     - **Set volume** - Lautstärke setzen (Media Player)
-     - **Set sound mode** - Tonmodus setzen (Media Player) 🆕
-     - **Set brightness/color** - Helligkeit/Farbe setzen (Light)
-     - **Set color temperature** - Farbtemperatur setzen (Light)
-     - **Set position** - Position setzen (Cover)
-     - **Set tilt** - Neigung setzen (Cover)
-     - **Call action** - Beliebige Home Assistant Action aufrufen 🆕
-     - **Wait/Delay** - Wartezeit einfügen
-   - Wähle Gerät (außer bei Wait/Delay und Call Action)
-   - Konfiguriere schritt-spezifische Parameter
-   - Setze Verzögerung nach dem Schritt (0-60 Sekunden)
-5. **Schritte bearbeiten** (optional):
-   - Wähle "Edit step" um Parameter anzupassen
-   - Alle Einstellungen können nachträglich geändert werden
-6. **Schritt-Reihenfolge anpassen** (optional):
-   - Wähle "Change step order"
-   - Verschiebe Schritte nach oben/unten
-   - Schritte werden von oben nach unten ausgeführt
-7. **Aktivität kopieren** (optional):
-   - Nutze "Copy activity" um eine Aktivität zu duplizieren
-   - Alle Schritte und Einstellungen werden kopiert
-   - Ideal für ähnliche Aktivitäten (z.B. "Film HD" → "Film 4K")
+1. Raum auswählen → **Neue Aktivität hinzufügen**
+2. Namen vergeben (z. B. „Film schauen")
+3. Schritte hinzufügen — der Assistent führt durch die Konfiguration:
 
-### 📖 Verwendung
+| Schritt-Typ | Gerät | Konfigurierbare Parameter |
+|-------------|-------|--------------------------|
+| **Turn on device** | Alle | — |
+| **Set input source** | `media_player` | Eingangsquelle aus der Geräteliste |
+| **Set volume** | `media_player` | Lautstärke 0–100 % |
+| **Set sound mode** | `media_player` | Soundmodus aus der Geräteliste |
+| **Set brightness/color** | `light` | Helligkeit 0–100 %, Farbtemperatur, Übergangszeit |
+| **Set color temperature** | `light` | Farbtemperatur 153–500 Mired |
+| **Set position** | `cover` | Position 0–100 % |
+| **Set tilt** | `cover` | Neigung 0–100 % |
+| **Call action** | — | HA-Service (Format: `domain.service`), optionale JSON-Daten |
+| **Wait/Delay** | — | Wartezeit 1–60 Sekunden |
+
+Jeder Schritt (außer Delay) kann zusätzlich eine Wartezeit `delay_after` bekommen, die **nach** dem Schritt abgewartet wird.
+
+4. Optional: Schritte nachträglich **bearbeiten**, **löschen** oder **umsortieren**
+5. Optional: Aktivitäten **kopieren** oder **umbenennen**
+6. **Aktivität abschließen** — die Konfiguration wird sofort gespeichert
+
+### Verwendung
 
 #### Szenen
 
-Für jede Aktivität wird automatisch eine Szene erstellt:
+Für jede Aktivität wird automatisch eine HA-Szene erstellt:
+
 ```yaml
-# Beispiel: Szene aktivieren
 service: scene.turn_on
 target:
   entity_id: scene.wohnzimmer_film_schauen
@@ -115,35 +107,37 @@ target:
 
 #### Services
 
-**Aktivität starten:**
 ```yaml
+# Aktivität starten
 service: av_scenes.start_activity
 data:
   room: wohnzimmer
   activity: film_schauen
-```
 
-**Aktivität stoppen:**
-```yaml
+# Aktivität stoppen (alle Geräte ausschalten)
 service: av_scenes.stop_activity
 data:
   room: wohnzimmer
-```
 
-**Neu laden:**
-```yaml
+# Konfiguration neu laden
 service: av_scenes.reload
 ```
 
-#### Switches
+> Die `room`-ID entspricht dem internen Raum-Bezeichner, der beim Anlegen des Raums vergeben wurde (kleingeschrieben, Leerzeichen als `_`).
 
-Jeder Raum erhält einen Switch für den Aktivitätsstatus:
+#### Switch Entity
+
+Jeder Raum erhält einen Switch, der anzeigt ob gerade eine Aktivität läuft:
+
 ```yaml
-# Status prüfen
-{{ states('switch.wohnzimmer_activity') }}
+# Ist eine Aktivität aktiv?
+{{ is_state('switch.wohnzimmer_activity', 'on') }}
 
-# Aktuelle Aktivität
+# Welche Aktivität läuft gerade?
 {{ state_attr('switch.wohnzimmer_activity', 'current_activity') }}
+
+# Alle verfügbaren Aktivitäten
+{{ state_attr('switch.wohnzimmer_activity', 'available_activities') }}
 
 # Aktivität stoppen
 service: switch.turn_off
@@ -151,130 +145,111 @@ target:
   entity_id: switch.wohnzimmer_activity
 ```
 
-#### Sensors
+#### Sensor Entity
 
-Jeder Raum erhält einen Konfigurations-Sensor für vollständige Transparenz:
+Jeder Raum erhält einen Konfigurations-Sensor:
+
 ```yaml
-# Aktueller Status
+# Aktueller Status (idle / starting / active / stopping)
 {{ states('sensor.wohnzimmer_configuration') }}
 
-# Alle Aktivitäten
+# Alle Aktivitätsnamen
 {{ state_attr('sensor.wohnzimmer_configuration', 'activity_names') }}
 
-# Detaillierte Aktivitäts-Info
-{{ state_attr('sensor.wohnzimmer_configuration', 'activities') }}
-
-# Lovelace Entity Card
-type: entity
-entity: sensor.wohnzimmer_configuration
-
-# Lovelace Markdown für formatierte Anzeige
-type: markdown
-content: |
-  ## {{ states('sensor.wohnzimmer_configuration') }}
-
-  **Aktivitäten:** {{ state_attr('sensor.wohnzimmer_configuration', 'total_activities') }}
-
-  {% for activity in state_attr('sensor.wohnzimmer_configuration', 'activity_names') %}
-  - {{ activity }}
-  {% endfor %}
+# Anzahl der Aktivitäten
+{{ state_attr('sensor.wohnzimmer_configuration', 'total_activities') }}
 ```
 
-**Sensor Attributes enthalten:**
-- `activity_names` - Liste aller Aktivitäten
-- `activities` - Vollständige Details mit Geräten, Reihenfolge und allen Einstellungen
-- `current_activity` - Name der aktuell laufenden Aktivität
-- `status` - "active" oder "idle"
-- `total_activities` - Anzahl der konfigurierten Aktivitäten
+**Sensor-Attribute:**
 
-### 🎬 Beispiel-Szenarien
+| Attribut | Beschreibung |
+|----------|-------------|
+| `room_id` | Interne Raum-ID |
+| `room_name` | Anzeigename des Raums |
+| `total_activities` | Anzahl konfigurierter Aktivitäten |
+| `activity_names` | Liste aller Aktivitätsnamen |
+| `activities` | Vollständige Details inkl. Schritte und Einstellungen |
+| `current_activity` | Name der aktiven Aktivität oder `null` |
+| `status` | `idle`, `starting`, `active` oder `stopping` |
 
-#### Szenario 1: Filmabend
+### Beispielszenarien
 
-**Geräte:**
-- Receiver (Input: BD/DVD, Lautstärke: 65%)
-- Beamer (Input: HDMI1)
-- Blu-ray Player
+#### Filmabend
 
-**Was passiert:**
-1. Alle Geräte werden eingeschaltet
-2. Verzögerungen werden eingehalten
-3. Receiver-Lautstärke wird auf 65% gesetzt
-4. Receiver wechselt auf BD/DVD Input
-5. Beamer wechselt auf HDMI1
+Schritte:
 
-#### Szenario 2: Von Apple TV zu Sonos wechseln
+1. Receiver einschalten (`delay_after: 3s`)
+2. Beamer einschalten (`delay_after: 10s`)
+3. Blu-ray Player einschalten (`delay_after: 2s`)
+4. Receiver Eingang auf BD/DVD setzen (`delay_after: 1s`)
+5. Receiver Lautstärke auf 65 % setzen
+6. Rollladen auf 0 % (geschlossen) setzen
+7. Licht auf 5 % Helligkeit dimmen
 
-**Laufende Aktivität "Apple TV":**
-- Beamer einschalten
-- AV Receiver einschalten
-- AV Receiver Input: Apple TV
-- AV Receiver Lautstärke: 60%
-- Apple TV einschalten
+#### Intelligenter Aktivitätswechsel: Apple TV → Sonos
 
-**Neue Aktivität "Sonos":**
-- AV Receiver einschalten
-- AV Receiver Input: Sonos
-- AV Receiver Lautstärke: 50%
-- Sonos einschalten
+**Laufende Aktivität „Apple TV"** nutzt: Beamer, Receiver, Apple TV
 
-**Intelligentes Aktivitätswechsel-Management:**
-- ❌ Beamer wird AUSGESCHALTET (nicht mehr benötigt)
-- ❌ Apple TV wird AUSGESCHALTET (nicht mehr benötigt)
-- ✅ AV Receiver bleibt AN → Nur Input-Wechsel Apple TV→Sonos, Lautstärke 60%→50%
-- ✅ Sonos wird eingeschaltet
+**Neue Aktivität „Sonos"** nutzt: Receiver, Sonos
 
-#### Szenario 3: Schritt-Reihenfolge für Abhängigkeiten
+Was AV Scenes automatisch macht:
+- Beamer wird **ausgeschaltet** (nicht mehr benötigt)
+- Apple TV wird **ausgeschaltet** (nicht mehr benötigt)
+- Receiver bleibt **an** — nur Eingang und Lautstärke werden angepasst
+- Sonos wird **eingeschaltet**
 
-**Problem:**
-- TV ist an Steckdose angeschlossen
-- TV schaltet sich ein bevor Steckdose aktiv ist
-- TV startet nicht richtig
+Ergebnis: Wechsel in 2–3 Sekunden statt 20–30 Sekunden.
 
-**Lösung mit Schritt-Reihenfolge:**
-1. Turn on Steckdose (delay_after: 5s)
-2. Set position Rollladen 60% (delay_after: 1s)
-3. Set brightness Licht 8% (delay_after: 1s)
-4. Turn on TV (delay_after: 2s)
-5. Set source TV → HDMI_IN_4 (delay_after: 1s)
-6. Turn on Apple TV (delay_after: 2s)
+#### Abhängige Geräte (Steckdose vor TV)
 
-**Was passiert:**
-1. Steckdose wird eingeschaltet → Wartet 5 Sekunden
-2. Rollladen fährt auf 60% → Wartet 1 Sekunde
-3. Licht geht auf 8% → Wartet 1 Sekunde
-4. TV schaltet sich ein (hat jetzt Strom!) → Wartet 2 Sekunden
-5. TV wechselt auf HDMI_IN_4 → Wartet 1 Sekunde
-6. Apple TV schaltet sich ein → Wartet 2 Sekunden
+Wenn ein TV an einer schaltbaren Steckdose hängt, muss die Steckdose zuerst an sein:
 
-### 🔧 Erweiterte Konfiguration
+1. Steckdose einschalten (`delay_after: 5s`) — TV hat jetzt Strom
+2. Rollladen auf 60 % setzen (`delay_after: 1s`)
+3. Licht auf 8 % dimmen (`delay_after: 1s`)
+4. TV einschalten (`delay_after: 3s`) — bootet jetzt korrekt
+5. TV Eingang auf HDMI 1 setzen (`delay_after: 1s`)
+6. Apple TV einschalten
 
-#### Lovelace Card Beispiel
+### Lovelace Beispiele
+
+#### Aktivitäts-Karte
 
 ```yaml
 type: vertical-stack
 cards:
   - type: entities
-    title: Wohnzimmer Aktivitäten
+    title: Wohnzimmer
     entities:
       - entity: switch.wohnzimmer_activity
-        name: Aktueller Status
+        name: Status
       - type: section
+        label: Aktivitäten starten
       - entity: scene.wohnzimmer_film_schauen
-        name: 🎬 Film schauen
+        name: Film schauen
       - entity: scene.wohnzimmer_musik_hoeren
-        name: 🎵 Musik hören
+        name: Musik hören
       - entity: scene.wohnzimmer_gaming
-        name: 🎮 Gaming
-      - entity: scene.wohnzimmer_tv
-        name: 📺 TV schauen
+        name: Gaming
 ```
 
-#### Automatisierung Beispiel
+#### Markdown-Karte mit Aktivitätsliste
+
+```yaml
+type: markdown
+content: |
+  ## Wohnzimmer — {{ states('sensor.wohnzimmer_configuration') }}
+  **Aktivitäten ({{ state_attr('sensor.wohnzimmer_configuration', 'total_activities') }}):**
+  {% for a in state_attr('sensor.wohnzimmer_configuration', 'activity_names') %}
+  - {{ a }}
+  {% endfor %}
+```
+
+### Automatisierung
 
 ```yaml
 automation:
-  - alias: "Film um 20 Uhr"
+  - alias: "Filmabend um 20 Uhr"
     trigger:
       - platform: time
         at: "20:00:00"
@@ -289,142 +264,119 @@ automation:
           activity: film_schauen
 ```
 
-### 🐛 Bekannte Einschränkungen
+### Bekannte Einschränkungen
 
-- Source-Wechsel funktioniert nur wenn das Gerät das `source_list` Attribut unterstützt
-- Lautstärkeregelung funktioniert nur wenn das Gerät den `volume_set` Service unterstützt
-- Rollläden mit Neigungsfunktion benötigen Unterstützung für `set_cover_tilt_position` Service
+- Eingangsquellen-Auswahl benötigt das `source_list` Attribut am Gerät
+- Soundmodus-Auswahl benötigt das `sound_mode_list` Attribut am Gerät
+- Lautstärkeregelung benötigt den `media_player.volume_set` Service
+- Rollläden mit Neigung benötigen den `cover.set_cover_tilt_position` Service
 
-### 🆕 Unterstützte Entity-Typen
+### Beitragen
 
-- **Media Player** (media_player.*) - Vollständige Unterstützung mit Input-Auswahl und Lautstärkeregelung
-- **Lichter** (light.*) - Helligkeit, Farbtemperatur und Übergangszeit
-- **Steckdosen** (switch.*) - Ein/Aus Steuerung mit konfigurierbarer Verzögerung
-- **Rollläden** (cover.*) - Position und Neigungssteuerung
+1. Repository forken
+2. Feature Branch erstellen: `git checkout -b feature/mein-feature`
+3. Änderungen committen: `git commit -m 'Mein Feature'`
+4. Branch pushen: `git push origin feature/mein-feature`
+5. Pull Request öffnen
 
-### 🤝 Beitragen
+### Lizenz & Support
 
-Contributions sind willkommen! Bitte:
-
-1. Forke das Repository
-2. Erstelle einen Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Committe deine Änderungen (`git commit -m 'Add some AmazingFeature'`)
-4. Pushe zum Branch (`git push origin feature/AmazingFeature`)
-5. Öffne einen Pull Request
-
-### 📝 Changelog
-
-Siehe [CHANGELOG.md](CHANGELOG.md) für Details zu Änderungen.
-
-### 📄 Lizenz
-
-Dieses Projekt ist unter der MIT-Lizenz lizenziert - siehe [LICENSE](LICENSE) für Details.
-
-### 💬 Support
-
-- 🐛 [Issues](https://github.com/mkshb/ha_av_scenes/issues)
-- 💡 [Feature Requests](https://github.com/mkshb/ha_av_scenes/issues)
+- Lizenz: [MIT](LICENSE)
+- Bugs & Feature Requests: [GitHub Issues](https://github.com/mkshb/ha_av_scenes/issues)
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## English
 
-### 🎯 Features
+### Overview
 
-**Core Functionality:**
-- 🏠 **Multi-room Support** - Independent control of multiple rooms
-- 🎬 **Activity-based Scenes** - "Watch Movie", "Listen to Music", "Gaming", etc.
-- 🚀 **Step-by-Step Configuration** - Granular control with 11 different step types
-- 🎯 **Intelligent Activity Switching Management** - Automatic shutdown of unused devices
-- 🎛️ **Multiple Entity Types** - Media Players, Lights, Switches and Covers
-- 🔢 **Step Order Control** - Precise control over execution sequence
-- 💾 **Persistent Configuration** - All settings persist after HA restart
-- 🔊 **Volume & Sound Mode** - Volume and sound mode configurable per activity
-- 💡 **Light Control** - Brightness, color temperature and transitions
-- 🪟 **Cover Control** - Position and tilt based on activity
-- ⚡ **Flexible Delays** - Individual wait time after each step (0-60 seconds)
-- 🎛️ **Input Source Management** - Automatic input switching
-- ⚙️ **Call Action** - Integrate any Home Assistant service in activities
-- ✏️ **Edit Step** - Modify all step parameters afterwards
-- 📋 **Copy Activity** - Quick duplication of existing activities
-- 🗑️ **Delete Room** - Complete removal of rooms with all activities
-- 📊 **Sensor Entities** - Complete transparency of configuration in Lovelace
-- 🖥️ **UI-based Configuration** - No YAML required
-- 🇩🇪 **Fully Translated** - Complete German translation
+AV Scenes lets you control multiple devices (receivers, projectors, TVs, lights, switches, covers) through pre-configured activities — without any YAML. Activities execute step by step and can integrate any Home Assistant entity or action.
 
-### 🚀 Installation
+### Features
+
+| Feature | Description |
+|---------|-------------|
+| Multi-room | Independent activity management per room |
+| 10 step types | Power on/off, source, volume, sound mode, brightness, color temp, position, tilt, delay, any HA action |
+| Smart switching | Devices no longer needed in the new activity are turned off automatically |
+| Flexible delays | Configurable wait time (0–60 s) after each step |
+| Race condition protection | Concurrent calls for the same room are serialized |
+| Sensor & switch entities | Full transparency in Lovelace |
+| UI configuration | No YAML knowledge required |
+| Persistence | Configuration survives HA restarts |
+| Bilingual | Complete German and English UI |
+
+### Supported Entity Types
+
+| Type | Domain | Control |
+|------|--------|---------|
+| AV Receiver, Projector, TV, Media Player | `media_player.*` | On/off, input source, volume, sound mode |
+| Lights | `light.*` | On/off, brightness, color temperature, transition |
+| Outlets / Switches | `switch.*` | On/off |
+| Covers | `cover.*` | Open/close, position, tilt |
+
+### Installation
 
 #### HACS (Recommended)
 
 1. Open HACS in Home Assistant
-2. Go to "Integrations"
-3. Click the three dots in the top right
-4. Select "Custom repositories"
-5. Add:
+2. "Integrations" → three dots top right → "Custom repositories"
+3. Add repository:
    - **Repository:** `https://github.com/mkshb/ha_av_scenes`
    - **Category:** Integration
-6. Click on "AV Scenes" in the list
-7. Click "Download"
-8. Restart Home Assistant
+4. Find "AV Scenes" in the list and click "Download"
+5. Restart Home Assistant
 
 #### Manual
 
 1. Download the latest release from [Releases](https://github.com/mkshb/ha_av_scenes/releases)
-2. Unzip the files
-3. Copy the `custom_components/av_scenes` folder to your `config/custom_components/` directory
-4. Restart Home Assistant
+2. Copy the `custom_components/av_scenes` folder to `config/custom_components/`
+3. Restart Home Assistant
 
-### ⚙️ Configuration
+### Setup
 
-1. Go to **Settings** → **Devices & Services**
-2. Click **+ Add Integration**
-3. Search for "AV Scenes"
-4. Click **Configure** to set up rooms and activities
+1. **Settings** → **Devices & Services** → **+ Add Integration**
+2. Search for "AV Scenes" and select it
+3. Click **Configure** to set up rooms and activities
 
 #### Add a Room
 
-1. Select an existing Home Assistant area or create a custom room
-2. Click **Add new room**
+1. Select an existing Home Assistant area **or** enter a custom room name
+2. Confirm — the room appears in the list immediately
 
 #### Create an Activity
 
-1. Select a room
-2. Click **Add new activity**
-3. Enter a name (e.g., "Watch Movie")
-4. Add steps:
-   - Choose step type from 11 available options:
-     - **Turn on device** - Turn on a device
-     - **Set input source** - Select input source (Media Player)
-     - **Set volume** - Set volume (Media Player)
-     - **Set sound mode** - Set sound mode (Media Player) 🆕
-     - **Set brightness/color** - Set brightness/color (Light)
-     - **Set color temperature** - Set color temperature (Light)
-     - **Set position** - Set position (Cover)
-     - **Set tilt** - Set tilt (Cover)
-     - **Call action** - Call any Home Assistant action 🆕
-     - **Wait/Delay** - Insert wait time
-   - Select device (except for Wait/Delay and Call Action)
-   - Configure step-specific parameters
-   - Set delay after step (0-60 seconds)
-5. **Edit steps** (optional):
-   - Select "Edit step" to adjust parameters
-   - All settings can be modified afterwards
-6. **Adjust step order** (optional):
-   - Select "Change step order"
-   - Move steps up/down
-   - Steps execute from top to bottom
-7. **Copy activity** (optional):
-   - Use "Copy activity" to duplicate an activity
-   - All steps and settings are copied
-   - Ideal for similar activities (e.g., "Movie HD" → "Movie 4K")
+1. Select a room → **Add new activity**
+2. Enter a name (e.g., "Watch Movie")
+3. Add steps — the wizard guides through configuration:
 
-### 📖 Usage
+| Step type | Device | Configurable parameters |
+|-----------|--------|------------------------|
+| **Turn on device** | Any | — |
+| **Set input source** | `media_player` | Input source from device list |
+| **Set volume** | `media_player` | Volume 0–100 % |
+| **Set sound mode** | `media_player` | Sound mode from device list |
+| **Set brightness/color** | `light` | Brightness 0–100 %, color temp, transition |
+| **Set color temperature** | `light` | Color temperature 153–500 Mired |
+| **Set position** | `cover` | Position 0–100 % |
+| **Set tilt** | `cover` | Tilt 0–100 % |
+| **Call action** | — | HA service (`domain.service`), optional JSON data |
+| **Wait/Delay** | — | Wait 1–60 seconds |
+
+Every step (except Delay) can have an additional `delay_after` that is waited **after** the step completes.
+
+4. Optionally **edit**, **delete**, or **reorder** steps afterwards
+5. Optionally **copy** or **rename** activities
+6. **Finish activity** — configuration is saved immediately
+
+### Usage
 
 #### Scenes
 
-A scene is automatically created for each activity:
+A HA scene is automatically created for each activity:
+
 ```yaml
-# Example: Activate scene
 service: scene.turn_on
 target:
   entity_id: scene.living_room_watch_movie
@@ -432,35 +384,37 @@ target:
 
 #### Services
 
-**Start activity:**
 ```yaml
+# Start an activity
 service: av_scenes.start_activity
 data:
   room: living_room
   activity: watch_movie
-```
 
-**Stop activity:**
-```yaml
+# Stop the current activity (turns off all devices)
 service: av_scenes.stop_activity
 data:
   room: living_room
-```
 
-**Reload:**
-```yaml
+# Reload configuration
 service: av_scenes.reload
 ```
 
-#### Switches
+> The `room` ID matches the internal room identifier assigned when the room was created (lowercase, spaces as `_`).
 
-Each room gets a switch for activity status:
+#### Switch Entity
+
+Each room gets a switch showing whether an activity is running:
+
 ```yaml
-# Check status
-{{ states('switch.living_room_activity') }}
+# Is an activity active?
+{{ is_state('switch.living_room_activity', 'on') }}
 
-# Current activity
+# Which activity is running?
 {{ state_attr('switch.living_room_activity', 'current_activity') }}
+
+# All available activities
+{{ state_attr('switch.living_room_activity', 'available_activities') }}
 
 # Stop activity
 service: switch.turn_off
@@ -468,130 +422,111 @@ target:
   entity_id: switch.living_room_activity
 ```
 
-#### Sensors
+#### Sensor Entity
 
-Each room gets a configuration sensor for full transparency:
+Each room gets a configuration sensor:
+
 ```yaml
-# Current status
+# Current status (idle / starting / active / stopping)
 {{ states('sensor.living_room_configuration') }}
 
-# All activities
+# All activity names
 {{ state_attr('sensor.living_room_configuration', 'activity_names') }}
 
-# Detailed activity info
-{{ state_attr('sensor.living_room_configuration', 'activities') }}
-
-# Lovelace Entity Card
-type: entity
-entity: sensor.living_room_configuration
-
-# Lovelace Markdown for formatted display
-type: markdown
-content: |
-  ## {{ states('sensor.living_room_configuration') }}
-
-  **Activities:** {{ state_attr('sensor.living_room_configuration', 'total_activities') }}
-
-  {% for activity in state_attr('sensor.living_room_configuration', 'activity_names') %}
-  - {{ activity }}
-  {% endfor %}
+# Number of activities
+{{ state_attr('sensor.living_room_configuration', 'total_activities') }}
 ```
 
-**Sensor Attributes contain:**
-- `activity_names` - List of all activities
-- `activities` - Complete details with devices, order and all settings
-- `current_activity` - Name of currently running activity
-- `status` - "active" or "idle"
-- `total_activities` - Number of configured activities
+**Sensor attributes:**
 
-### 🎬 Example Scenarios
+| Attribute | Description |
+|-----------|-------------|
+| `room_id` | Internal room ID |
+| `room_name` | Display name of the room |
+| `total_activities` | Number of configured activities |
+| `activity_names` | List of all activity names |
+| `activities` | Full details including steps and settings |
+| `current_activity` | Name of the active activity or `null` |
+| `status` | `idle`, `starting`, `active`, or `stopping` |
 
-#### Scenario 1: Movie Night
+### Example Scenarios
 
-**Devices:**
-- Receiver (Input: BD/DVD, Volume: 65%)
-- Projector (Input: HDMI1)
-- Blu-ray Player
+#### Movie Night
 
-**What happens:**
-1. All devices power on
-2. Delays are respected
-3. Receiver volume is set to 65%
-4. Receiver switches to BD/DVD input
-5. Projector switches to HDMI1
+Steps:
 
-#### Scenario 2: Switch from Apple TV to Sonos
+1. Turn on receiver (`delay_after: 3s`)
+2. Turn on projector (`delay_after: 10s`)
+3. Turn on Blu-ray player (`delay_after: 2s`)
+4. Set receiver input to BD/DVD (`delay_after: 1s`)
+5. Set receiver volume to 65 %
+6. Set cover to 0 % (closed)
+7. Dim light to 5 % brightness
 
-**Running Activity "Apple TV":**
-- Turn on Projector
-- Turn on AV Receiver
-- AV Receiver Input: Apple TV
-- AV Receiver Volume: 60%
-- Turn on Apple TV
+#### Smart Activity Switching: Apple TV → Sonos
 
-**New Activity "Sonos":**
-- Turn on AV Receiver
-- AV Receiver Input: Sonos
-- AV Receiver Volume: 50%
-- Turn on Sonos
+**Running activity "Apple TV"** uses: Projector, Receiver, Apple TV
 
-**Intelligent Activity Switching Management:**
-- ❌ Projector turns OFF (no longer needed)
-- ❌ Apple TV turns OFF (no longer needed)
-- ✅ AV Receiver stays ON → Only input change Apple TV→Sonos, Volume 60%→50%
-- ✅ Sonos turns on
+**New activity "Sonos"** uses: Receiver, Sonos
 
-#### Scenario 3: Step Order for Dependencies
+What AV Scenes does automatically:
+- Projector is **turned off** (no longer needed)
+- Apple TV is **turned off** (no longer needed)
+- Receiver **stays on** — only input and volume are updated
+- Sonos is **turned on**
 
-**Problem:**
-- TV is connected to power outlet
-- TV powers on before outlet is active
-- TV doesn't start properly
+Result: transition in 2–3 seconds instead of 20–30 seconds.
 
-**Solution with Step Order:**
-1. Turn on Outlet (delay_after: 5s)
-2. Set position Cover 60% (delay_after: 1s)
-3. Set brightness Light 8% (delay_after: 1s)
-4. Turn on TV (delay_after: 2s)
-5. Set source TV → HDMI_IN_4 (delay_after: 1s)
-6. Turn on Apple TV (delay_after: 2s)
+#### Dependent Devices (Outlet Before TV)
 
-**What happens:**
-1. Outlet powers on → Waits 5 seconds
-2. Cover moves to 60% → Waits 1 second
-3. Light dims to 8% → Waits 1 second
-4. TV powers on (now has power!) → Waits 2 seconds
-5. TV switches to HDMI_IN_4 → Waits 1 second
-6. Apple TV powers on → Waits 2 seconds
+When a TV is connected to a smart outlet, the outlet must be on first:
 
-### 🔧 Advanced Configuration
+1. Turn on outlet (`delay_after: 5s`) — TV now has power
+2. Set cover to 60 % (`delay_after: 1s`)
+3. Dim light to 8 % (`delay_after: 1s`)
+4. Turn on TV (`delay_after: 3s`) — boots correctly now
+5. Set TV input to HDMI 1 (`delay_after: 1s`)
+6. Turn on Apple TV
 
-#### Lovelace Card Example
+### Lovelace Examples
+
+#### Activity Card
 
 ```yaml
 type: vertical-stack
 cards:
   - type: entities
-    title: Living Room Activities
+    title: Living Room
     entities:
       - entity: switch.living_room_activity
-        name: Current Status
+        name: Status
       - type: section
+        label: Start activity
       - entity: scene.living_room_watch_movie
-        name: 🎬 Watch Movie
+        name: Watch Movie
       - entity: scene.living_room_listen_music
-        name: 🎵 Listen to Music
+        name: Listen to Music
       - entity: scene.living_room_gaming
-        name: 🎮 Gaming
-      - entity: scene.living_room_watch_tv
-        name: 📺 Watch TV
+        name: Gaming
 ```
 
-#### Automation Example
+#### Markdown Card with Activity List
+
+```yaml
+type: markdown
+content: |
+  ## Living Room — {{ states('sensor.living_room_configuration') }}
+  **Activities ({{ state_attr('sensor.living_room_configuration', 'total_activities') }}):**
+  {% for a in state_attr('sensor.living_room_configuration', 'activity_names') %}
+  - {{ a }}
+  {% endfor %}
+```
+
+### Automation
 
 ```yaml
 automation:
-  - alias: "Movie at 8 PM"
+  - alias: "Movie night at 8 PM"
     trigger:
       - platform: time
         at: "20:00:00"
@@ -606,38 +541,23 @@ automation:
           activity: watch_movie
 ```
 
-### 🐛 Known Limitations
+### Known Limitations
 
-- Source switching only works if device supports `source_list` attribute
-- Volume control only works if device supports `volume_set` service
-- Covers with tilt function require support for `set_cover_tilt_position` service
+- Input source selection requires the `source_list` attribute on the device
+- Sound mode selection requires the `sound_mode_list` attribute on the device
+- Volume control requires the `media_player.volume_set` service
+- Covers with tilt require the `cover.set_cover_tilt_position` service
 
-### 🆕 Supported Entity Types
-
-- **Media Players** (media_player.*) - Full support with input selection and volume control
-- **Lights** (light.*) - Brightness, color temperature and transition time
-- **Switches** (switch.*) - On/off control with configurable delay
-- **Covers** (cover.*) - Position and tilt control
-
-### 🤝 Contributing
-
-Contributions are welcome! Please:
+### Contributing
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
+2. Create a feature branch: `git checkout -b feature/my-feature`
+3. Commit your changes: `git commit -m 'My feature'`
+4. Push the branch: `git push origin feature/my-feature`
 5. Open a Pull Request
 
-### 📝 Changelog
+### License & Support
 
-See [CHANGELOG.md](CHANGELOG.md) for details on changes.
-
-### 📄 License
-
-This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
-
-### 💬 Support
-
-- 🐛 [Issues](https://github.com/mkshb/ha_av_scenes/issues)
-- 💡 [Feature Requests](https://github.com/mkshb/ha_av_scenes/issues)
+- License: [MIT](LICENSE)
+- Bugs & feature requests: [GitHub Issues](https://github.com/mkshb/ha_av_scenes/issues)
+- Changelog: [CHANGELOG.md](CHANGELOG.md)

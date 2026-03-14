@@ -7,7 +7,6 @@ DOMAIN: Final = "av_scenes"
 CONF_ROOMS: Final = "rooms"
 CONF_ACTIVITIES: Final = "activities"
 CONF_DEVICES: Final = "devices"
-CONF_DEVICE_TYPE: Final = "device_type"
 CONF_ENTITY_ID: Final = "entity_id"
 CONF_ACTIVITY_NAME: Final = "activity_name"
 CONF_DEVICE_STATES: Final = "device_states"
@@ -29,7 +28,6 @@ CONF_STEP_PARAMETERS: Final = "parameters"
 # Light-specific configuration
 CONF_BRIGHTNESS: Final = "brightness"
 CONF_COLOR_TEMP: Final = "color_temp"
-CONF_RGB_COLOR: Final = "rgb_color"
 CONF_TRANSITION: Final = "transition"
 
 # Cover-specific configuration
@@ -39,25 +37,6 @@ CONF_TILT_POSITION: Final = "tilt_position"
 # Action call configuration
 CONF_ACTION: Final = "action"
 CONF_SERVICE_DATA: Final = "service_data"
-
-# Device types
-DEVICE_TYPE_RECEIVER: Final = "receiver"
-DEVICE_TYPE_PROJECTOR: Final = "projector"
-DEVICE_TYPE_TV: Final = "tv"
-DEVICE_TYPE_MEDIA_PLAYER: Final = "media_player"
-DEVICE_TYPE_LIGHT: Final = "light"
-DEVICE_TYPE_SWITCH: Final = "switch"
-DEVICE_TYPE_COVER: Final = "cover"
-
-DEVICE_TYPES: Final = [
-    DEVICE_TYPE_RECEIVER,
-    DEVICE_TYPE_PROJECTOR,
-    DEVICE_TYPE_TV,
-    DEVICE_TYPE_MEDIA_PLAYER,
-    DEVICE_TYPE_LIGHT,
-    DEVICE_TYPE_SWITCH,
-    DEVICE_TYPE_COVER,
-]
 
 # Step types
 STEP_TYPE_POWER_ON: Final = "power_on"
@@ -94,7 +73,6 @@ ACTIVITY_STATE_STOPPING: Final = "stopping"
 
 # Default values
 DEFAULT_POWER_ON_DELAY: Final = 2
-DEFAULT_POWER_OFF_DELAY: Final = 1
 
 # Services
 SERVICE_START_ACTIVITY: Final = "start_activity"
