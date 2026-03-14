@@ -3,56 +3,37 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Callable, Coroutine
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from homeassistant.helpers import entity_registry as er
 from homeassistant.const import (
     ATTR_ENTITY_ID,
     SERVICE_TURN_ON,
     SERVICE_TURN_OFF,
-    STATE_ON,
-    STATE_OFF,
 )
 
 from .const import (
     DOMAIN,
     CONF_ROOMS,
     CONF_ACTIVITIES,
-    CONF_DEVICES,
-    CONF_DEVICE_STATES,
-    CONF_DEVICE_ORDER,
     CONF_ENTITY_ID,
-    CONF_POWER_ON_DELAY,
-    CONF_POWER_OFF_DELAY,
     CONF_INPUT_SOURCE,
     CONF_VOLUME_LEVEL,
     CONF_SOUND_MODE,
-    CONF_IS_VOLUME_CONTROLLER,
     CONF_BRIGHTNESS,
     CONF_COLOR_TEMP,
-    CONF_RGB_COLOR,
     CONF_TRANSITION,
     CONF_POSITION,
     CONF_TILT_POSITION,
     CONF_ACTION,
     CONF_SERVICE_DATA,
-    DEFAULT_POWER_ON_DELAY,
-    DEFAULT_POWER_OFF_DELAY,
-    SERVICE_START_ACTIVITY,
-    SERVICE_STOP_ACTIVITY,
-    SERVICE_RELOAD,
-    ATTR_ROOM,
-    ATTR_ACTIVITY,
     ACTIVITY_STATE_IDLE,
     ACTIVITY_STATE_STARTING,
     ACTIVITY_STATE_ACTIVE,
     ACTIVITY_STATE_STOPPING,
-    # Step-based configuration
     CONF_STEPS,
-    CONF_STEP_ID,
     CONF_STEP_TYPE,
     CONF_STEP_DELAY_AFTER,
     CONF_STEP_PARAMETERS,
@@ -71,6 +52,9 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# Type alias for step handler coroutines
+_StepHandler = Callable[..., Coroutine[Any, Any, None]]
+
 
 class AVScenesCoordinator(DataUpdateCoordinator):
     """Class to manage AV scenes and activities."""
@@ -82,409 +66,225 @@ class AVScenesCoordinator(DataUpdateCoordinator):
             _LOGGER,
             name=DOMAIN,
             update_interval=None,  # We update manually when activities change
-            config_entry=entry,  # Pass config entry to parent
+            config_entry=entry,
         )
         self.entry = entry
         self.rooms: dict[str, dict[str, Any]] = {}
         self.active_activities: dict[str, str] = {}  # room_id -> activity_name
         self.activity_states: dict[str, str] = {}  # room_id -> state
-        self._services_registered = False
+        self._room_locks: dict[str, asyncio.Lock] = {}
+
+        # Dispatch table: step_type -> handler method
+        # Built after __init__ so self is available.
+        self._step_dispatch: dict[str, _StepHandler] = {
+            STEP_TYPE_POWER_ON: self._step_power_on,
+            STEP_TYPE_POWER_OFF: self._turn_off_device,
+            STEP_TYPE_SET_SOURCE: self._step_set_source,
+            STEP_TYPE_SET_VOLUME: self._step_set_volume,
+            STEP_TYPE_SET_SOUND_MODE: self._step_set_sound_mode,
+            STEP_TYPE_SET_BRIGHTNESS: self._step_set_brightness,
+            STEP_TYPE_SET_COLOR_TEMP: self._step_set_color_temp,
+            STEP_TYPE_SET_POSITION: self._step_set_position,
+            STEP_TYPE_SET_TILT: self._step_set_tilt,
+            STEP_TYPE_CALL_ACTION: self._step_call_action,
+            # STEP_TYPE_DELAY: no handler — the delay is applied via delay_after only
+        }
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from config."""
-        config_data = self.entry.data
-        
-        # Parse rooms and activities from config
-        self.rooms = config_data.get(CONF_ROOMS, {})
-        
+        self.rooms = self.entry.data.get(CONF_ROOMS, {})
         return {
             "rooms": self.rooms,
             "active_activities": self.active_activities,
             "activity_states": self.activity_states,
         }
 
-    async def async_start_activity(
+    async def async_start_activity(self, room_id: str, activity_name: str) -> None:
+        """Start an activity in a room."""
+        lock = self._room_locks.setdefault(room_id, asyncio.Lock())
+        async with lock:
+            await self._async_start_activity_locked(room_id, activity_name)
+
+    async def _async_start_activity_locked(
         self, room_id: str, activity_name: str
     ) -> None:
-        """Start an activity in a room."""
-        _LOGGER.info(f"Starting activity '{activity_name}' in room '{room_id}'")
+        """Start an activity in a room (must be called with room lock held)."""
+        _LOGGER.info("Starting activity '%s' in room '%s'", activity_name, room_id)
 
         if room_id not in self.rooms:
-            _LOGGER.error(f"Room '{room_id}' not found")
+            _LOGGER.error("Room '%s' not found", room_id)
             return
 
         room = self.rooms[room_id]
         activities = room.get(CONF_ACTIVITIES, {})
 
         if activity_name not in activities:
-            _LOGGER.error(f"Activity '{activity_name}' not found in room '{room_id}'")
+            _LOGGER.error("Activity '%s' not found in room '%s'", activity_name, room_id)
             return
 
-        # Get the new activity configuration
         new_activity = activities[activity_name]
         new_steps = new_activity.get(CONF_STEPS, [])
 
         if not new_steps:
-            _LOGGER.warning(f"Activity '{activity_name}' has no steps configured")
+            _LOGGER.warning("Activity '%s' has no steps configured", activity_name)
             return
 
-        # Check if there's an active activity and handle device switching
+        # Smart switching: turn off devices that are no longer needed
         if room_id in self.active_activities:
             old_activity_name = self.active_activities[room_id]
             if old_activity_name != activity_name:
-                _LOGGER.info(f"Switching from '{old_activity_name}' to '{activity_name}'")
-
-                # Get entities from old activity
-                old_activity = activities.get(old_activity_name, {})
-                old_steps = old_activity.get(CONF_STEPS, [])
+                _LOGGER.info(
+                    "Switching from '%s' to '%s'", old_activity_name, activity_name
+                )
+                old_steps = activities.get(old_activity_name, {}).get(CONF_STEPS, [])
                 old_entities = self._get_entities_from_steps(old_steps)
-
-                # Get entities from new activity
                 new_entities = self._get_entities_from_steps(new_steps)
-
-                # Find entities that need to be turned off (in old but not in new)
                 entities_to_turn_off = old_entities - new_entities
 
                 if entities_to_turn_off:
-                    _LOGGER.info(f"Turning off devices no longer needed: {entities_to_turn_off}")
+                    _LOGGER.info(
+                        "Turning off devices no longer needed: %s", entities_to_turn_off
+                    )
                     for entity_id in entities_to_turn_off:
                         try:
                             await self._turn_off_device(entity_id)
                         except Exception as ex:
-                            _LOGGER.error(f"Error turning off {entity_id}: {ex}")
+                            _LOGGER.error("Error turning off %s: %s", entity_id, ex)
 
-        # Set state to starting
         self.activity_states[room_id] = ACTIVITY_STATE_STARTING
         self.async_update_listeners()
 
-        # Execute each step in order
         for idx, step in enumerate(new_steps, 1):
             step_type = step.get(CONF_STEP_TYPE)
             entity_id = step.get(CONF_ENTITY_ID, "")
             delay_after = step.get(CONF_STEP_DELAY_AFTER, 0)
             parameters = step.get(CONF_STEP_PARAMETERS, {})
 
-            _LOGGER.info(f"Executing step {idx}/{len(new_steps)}: {step_type} on {entity_id}")
+            _LOGGER.info(
+                "Executing step %d/%d: %s on %s", idx, len(new_steps), step_type, entity_id
+            )
 
             try:
                 await self._execute_step(step_type, entity_id, parameters)
             except Exception as ex:
-                _LOGGER.error(f"Error executing step {idx}: {ex}")
+                _LOGGER.error("Error executing step %d (%s): %s", idx, step_type, ex)
                 # Continue with next step even if this one fails
 
-            # Apply delay after step
             if delay_after > 0:
-                _LOGGER.info(f"Waiting {delay_after} seconds...")
+                _LOGGER.debug("Waiting %s seconds after step %d", delay_after, idx)
                 await asyncio.sleep(delay_after)
 
-        # Mark activity as active
         self.active_activities[room_id] = activity_name
         self.activity_states[room_id] = ACTIVITY_STATE_ACTIVE
         self.async_update_listeners()
 
-        _LOGGER.info(f"Activity '{activity_name}' started successfully in room '{room_id}'")
+        _LOGGER.info(
+            "Activity '%s' started successfully in room '%s'", activity_name, room_id
+        )
 
     def _get_entities_from_steps(self, steps: list[dict[str, Any]]) -> set[str]:
         """Extract unique entity IDs from a list of steps."""
-        entities = set()
-        for step in steps:
-            entity_id = step.get(CONF_ENTITY_ID, "")
-            # Only add non-empty entity IDs (skip delay and call_action steps which have no entity_id)
-            if entity_id and entity_id.strip():
-                entities.add(entity_id)
-        return entities
+        return {
+            step[CONF_ENTITY_ID]
+            for step in steps
+            if step.get(CONF_ENTITY_ID, "").strip()
+        }
 
     async def async_stop_activity(self, room_id: str) -> None:
         """Stop the current activity in a room."""
+        lock = self._room_locks.setdefault(room_id, asyncio.Lock())
+        async with lock:
+            await self._async_stop_activity_locked(room_id)
+
+    async def _async_stop_activity_locked(self, room_id: str) -> None:
+        """Stop the current activity in a room (must be called with room lock held)."""
         if room_id not in self.active_activities:
-            _LOGGER.debug(f"No active activity in room '{room_id}'")
+            _LOGGER.debug("No active activity in room '%s'", room_id)
             return
 
         activity_name = self.active_activities[room_id]
-        _LOGGER.info(f"Stopping activity '{activity_name}' in room '{room_id}'")
+        _LOGGER.info("Stopping activity '%s' in room '%s'", activity_name, room_id)
 
-        # Set state to stopping
         self.activity_states[room_id] = ACTIVITY_STATE_STOPPING
         self.async_update_listeners()
 
         room = self.rooms[room_id]
-        activities = room.get(CONF_ACTIVITIES, {})
-        activity = activities.get(activity_name, {})
+        steps = room.get(CONF_ACTIVITIES, {}).get(activity_name, {}).get(CONF_STEPS, [])
 
-        # Get steps from activity
-        steps = activity.get(CONF_STEPS, [])
-
-        # Get all entities used in this activity
-        entities = self._get_entities_from_steps(steps)
-
-        # Turn off all devices (in reverse order of appearance in steps)
-        # Create a list that preserves order but removes duplicates
-        entity_list = []
-        seen = set()
+        # Build ordered, deduplicated entity list, then turn off in reverse order
+        seen: set[str] = set()
+        entity_list: list[str] = []
         for step in steps:
-            entity_id = step.get(CONF_ENTITY_ID, "")
-            if entity_id and entity_id.strip() and entity_id not in seen:
+            entity_id = step.get(CONF_ENTITY_ID, "").strip()
+            if entity_id and entity_id not in seen:
                 entity_list.append(entity_id)
                 seen.add(entity_id)
 
-        # Turn off in reverse order
         for entity_id in reversed(entity_list):
             try:
                 await self._turn_off_device(entity_id)
             except Exception as ex:
-                _LOGGER.error(f"Error turning off {entity_id}: {ex}")
+                _LOGGER.error("Error turning off %s: %s", entity_id, ex)
 
-        # Clear active activity
         del self.active_activities[room_id]
         self.activity_states[room_id] = ACTIVITY_STATE_IDLE
         self.async_update_listeners()
 
-        _LOGGER.info(f"Activity '{activity_name}' stopped in room '{room_id}'")
-
-    async def _execute_device_command(
-        self, entity_id: str, state_config: dict[str, Any]
-    ) -> None:
-        """Execute a command for a device."""
-        try:
-            domain = entity_id.split(".")[0]
-
-            # Cover entities use different services
-            if domain == "cover":
-                # For covers, directly apply settings (open/position/tilt)
-                # No generic turn_on, just set the desired state
-                await self._update_device_settings(entity_id, state_config)
-
-                # Wait for power-on delay (useful for sequential cover operations)
-                delay = state_config.get(CONF_POWER_ON_DELAY, DEFAULT_POWER_ON_DELAY)
-                if delay > 0:
-                    await asyncio.sleep(delay)
-            else:
-                # For other entities (media_player, light, switch), turn on first
-                await self.hass.services.async_call(
-                    "homeassistant",
-                    SERVICE_TURN_ON,
-                    {ATTR_ENTITY_ID: entity_id},
-                    blocking=True,
-                )
-
-                # Wait for power-on delay
-                delay = state_config.get(CONF_POWER_ON_DELAY, DEFAULT_POWER_ON_DELAY)
-                if delay > 0:
-                    await asyncio.sleep(delay)
-
-                # Update settings (volume, input source, brightness, etc.)
-                await self._update_device_settings(entity_id, state_config)
-
-        except Exception as ex:
-            _LOGGER.error(f"Error executing command for {entity_id}: {ex}")
-
-    async def _update_device_settings(
-        self, entity_id: str, state_config: dict[str, Any]
-    ) -> None:
-        """Update device settings without power cycling."""
-        try:
-            domain = entity_id.split(".")[0]
-
-            # Media player specific settings
-            if domain == "media_player":
-                # Set volume if this is the volume controller
-                if state_config.get(CONF_IS_VOLUME_CONTROLLER, False):
-                    volume_level = state_config.get(CONF_VOLUME_LEVEL)
-                    if volume_level is not None:
-                        await self.hass.services.async_call(
-                            domain,
-                            "volume_set",
-                            {
-                                ATTR_ENTITY_ID: entity_id,
-                                "volume_level": volume_level,
-                            },
-                            blocking=True,
-                        )
-                        _LOGGER.info(
-                            "Set volume to %.0f%% on %s",
-                            volume_level * 100,
-                            entity_id
-                        )
-
-                # Set input source if specified
-                input_source = state_config.get(CONF_INPUT_SOURCE)
-                if input_source:
-                    await self.hass.services.async_call(
-                        domain,
-                        "select_source",
-                        {
-                            ATTR_ENTITY_ID: entity_id,
-                            "source": input_source,
-                        },
-                        blocking=True,
-                    )
-                    _LOGGER.info(
-                        "Changed input source to '%s' on %s",
-                        input_source,
-                        entity_id
-                    )
-
-            # Light specific settings
-            elif domain == "light":
-                service_data = {ATTR_ENTITY_ID: entity_id}
-
-                # Set brightness
-                brightness = state_config.get(CONF_BRIGHTNESS)
-                if brightness is not None:
-                    service_data["brightness"] = brightness
-
-                # Set color temperature
-                color_temp = state_config.get(CONF_COLOR_TEMP)
-                if color_temp is not None:
-                    service_data["color_temp"] = color_temp
-
-                # Set transition
-                transition = state_config.get(CONF_TRANSITION)
-                if transition is not None:
-                    service_data["transition"] = transition
-
-                # Only call turn_on if we have settings to apply
-                if len(service_data) > 1:  # More than just entity_id
-                    await self.hass.services.async_call(
-                        domain,
-                        SERVICE_TURN_ON,
-                        service_data,
-                        blocking=True,
-                    )
-                    _LOGGER.info("Updated light settings on %s", entity_id)
-
-            # Cover specific settings
-            elif domain == "cover":
-                # Set position
-                position = state_config.get(CONF_POSITION)
-                if position is not None:
-                    await self.hass.services.async_call(
-                        domain,
-                        "set_cover_position",
-                        {
-                            ATTR_ENTITY_ID: entity_id,
-                            "position": position,
-                        },
-                        blocking=True,
-                    )
-                    _LOGGER.info("Set cover position to %d%% on %s", position, entity_id)
-                else:
-                    # If no position specified, just open the cover
-                    await self.hass.services.async_call(
-                        domain,
-                        "open_cover",
-                        {ATTR_ENTITY_ID: entity_id},
-                        blocking=True,
-                    )
-                    _LOGGER.info("Opened cover %s", entity_id)
-
-                # Set tilt position
-                tilt_position = state_config.get(CONF_TILT_POSITION)
-                if tilt_position is not None:
-                    await self.hass.services.async_call(
-                        domain,
-                        "set_cover_tilt_position",
-                        {
-                            ATTR_ENTITY_ID: entity_id,
-                            "tilt_position": tilt_position,
-                        },
-                        blocking=True,
-                    )
-                    _LOGGER.info("Set cover tilt to %d%% on %s", tilt_position, entity_id)
-
-            # Switch has no additional settings to update
-
-        except Exception as ex:
-            _LOGGER.error(f"Error updating settings for {entity_id}: {ex}")
+        _LOGGER.info("Activity '%s' stopped in room '%s'", activity_name, room_id)
 
     async def _turn_off_device(self, entity_id: str) -> None:
         """Turn off a device."""
-        try:
-            domain = entity_id.split(".")[0]
-
-            # Cover entities use close_cover instead of turn_off
-            if domain == "cover":
-                await self.hass.services.async_call(
-                    domain,
-                    "close_cover",
-                    {ATTR_ENTITY_ID: entity_id},
-                    blocking=True,
-                )
-            else:
-                # For other entities, use generic turn_off
-                await self.hass.services.async_call(
-                    "homeassistant",
-                    SERVICE_TURN_OFF,
-                    {ATTR_ENTITY_ID: entity_id},
-                    blocking=True,
-                )
-        except Exception as ex:
-            _LOGGER.error(f"Error turning off {entity_id}: {ex}")
-
-    async def _execute_step(
-        self, step_type: str, entity_id: str, parameters: dict[str, Any]
-    ) -> None:
-        """Execute a single step."""
-        try:
-            if step_type == STEP_TYPE_POWER_ON:
-                await self._step_power_on(entity_id)
-
-            elif step_type == STEP_TYPE_POWER_OFF:
-                await self._turn_off_device(entity_id)
-
-            elif step_type == STEP_TYPE_SET_SOURCE:
-                await self._step_set_source(entity_id, parameters)
-
-            elif step_type == STEP_TYPE_SET_VOLUME:
-                await self._step_set_volume(entity_id, parameters)
-
-            elif step_type == STEP_TYPE_SET_SOUND_MODE:
-                await self._step_set_sound_mode(entity_id, parameters)
-
-            elif step_type == STEP_TYPE_SET_BRIGHTNESS:
-                await self._step_set_brightness(entity_id, parameters)
-
-            elif step_type == STEP_TYPE_SET_COLOR_TEMP:
-                await self._step_set_color_temp(entity_id, parameters)
-
-            elif step_type == STEP_TYPE_SET_POSITION:
-                await self._step_set_position(entity_id, parameters)
-
-            elif step_type == STEP_TYPE_SET_TILT:
-                await self._step_set_tilt(entity_id, parameters)
-
-            elif step_type == STEP_TYPE_CALL_ACTION:
-                await self._step_call_action(parameters)
-
-            elif step_type == STEP_TYPE_DELAY:
-                # Delay is handled by delay_after, so this is a no-op
-                pass
-
-            else:
-                _LOGGER.warning(f"Unknown step type: {step_type}")
-
-        except Exception as ex:
-            _LOGGER.error(f"Error executing step {step_type} on {entity_id}: {ex}")
-            raise
-
-    async def _step_power_on(self, entity_id: str) -> None:
-        """Turn on a device."""
         domain = entity_id.split(".")[0]
-
         if domain == "cover":
-            # For covers, open instead of turn_on
             await self.hass.services.async_call(
                 domain,
-                "open_cover",
+                "close_cover",
                 {ATTR_ENTITY_ID: entity_id},
                 blocking=True,
             )
         else:
             await self.hass.services.async_call(
                 "homeassistant",
-                SERVICE_TURN_ON,
+                SERVICE_TURN_OFF,
                 {ATTR_ENTITY_ID: entity_id},
                 blocking=True,
+            )
+
+    async def _execute_step(
+        self, step_type: str, entity_id: str, parameters: dict[str, Any]
+    ) -> None:
+        """Execute a single step using the dispatch table."""
+        if step_type == STEP_TYPE_DELAY:
+            # Pure delay step: no device action — delay_after provides the wait
+            return
+
+        handler = self._step_dispatch.get(step_type)
+        if handler is None:
+            _LOGGER.warning("Unknown step type: %s", step_type)
+            return
+
+        try:
+            # power_on / power_off only need entity_id; all others need parameters too
+            if step_type in (STEP_TYPE_POWER_ON, STEP_TYPE_POWER_OFF):
+                await handler(entity_id)
+            elif step_type == STEP_TYPE_CALL_ACTION:
+                await handler(parameters)
+            else:
+                await handler(entity_id, parameters)
+        except Exception as ex:
+            _LOGGER.error("Error executing step %s on %s: %s", step_type, entity_id, ex)
+            raise
+
+    async def _step_power_on(self, entity_id: str) -> None:
+        """Turn on a device."""
+        domain = entity_id.split(".")[0]
+        if domain == "cover":
+            await self.hass.services.async_call(
+                domain, "open_cover", {ATTR_ENTITY_ID: entity_id}, blocking=True
+            )
+        else:
+            await self.hass.services.async_call(
+                "homeassistant", SERVICE_TURN_ON, {ATTR_ENTITY_ID: entity_id}, blocking=True
             )
 
     async def _step_set_source(self, entity_id: str, parameters: dict[str, Any]) -> None:
@@ -494,13 +294,10 @@ class AVScenesCoordinator(DataUpdateCoordinator):
             await self.hass.services.async_call(
                 "media_player",
                 "select_source",
-                {
-                    ATTR_ENTITY_ID: entity_id,
-                    "source": source,
-                },
+                {ATTR_ENTITY_ID: entity_id, "source": source},
                 blocking=True,
             )
-            _LOGGER.info(f"Set source to '{source}' on {entity_id}")
+            _LOGGER.info("Set source to '%s' on %s", source, entity_id)
 
     async def _step_set_volume(self, entity_id: str, parameters: dict[str, Any]) -> None:
         """Set volume on media player."""
@@ -509,83 +306,73 @@ class AVScenesCoordinator(DataUpdateCoordinator):
             await self.hass.services.async_call(
                 "media_player",
                 "volume_set",
-                {
-                    ATTR_ENTITY_ID: entity_id,
-                    "volume_level": volume_level,
-                },
+                {ATTR_ENTITY_ID: entity_id, "volume_level": volume_level},
                 blocking=True,
             )
-            _LOGGER.info(f"Set volume to {int(volume_level * 100)}% on {entity_id}")
+            _LOGGER.info("Set volume to %d%% on %s", int(volume_level * 100), entity_id)
 
-    async def _step_set_sound_mode(self, entity_id: str, parameters: dict[str, Any]) -> None:
+    async def _step_set_sound_mode(
+        self, entity_id: str, parameters: dict[str, Any]
+    ) -> None:
         """Set sound mode on media player."""
         sound_mode = parameters.get(CONF_SOUND_MODE)
         if sound_mode:
             await self.hass.services.async_call(
                 "media_player",
                 "select_sound_mode",
-                {
-                    ATTR_ENTITY_ID: entity_id,
-                    "sound_mode": sound_mode,
-                },
+                {ATTR_ENTITY_ID: entity_id, "sound_mode": sound_mode},
                 blocking=True,
             )
-            _LOGGER.info(f"Set sound mode to '{sound_mode}' on {entity_id}")
+            _LOGGER.info("Set sound mode to '%s' on %s", sound_mode, entity_id)
 
-    async def _step_set_brightness(self, entity_id: str, parameters: dict[str, Any]) -> None:
-        """Set brightness/color on light."""
-        service_data = {ATTR_ENTITY_ID: entity_id}
+    async def _step_set_brightness(
+        self, entity_id: str, parameters: dict[str, Any]
+    ) -> None:
+        """Set brightness and optional color/transition on light."""
+        service_data: dict[str, Any] = {ATTR_ENTITY_ID: entity_id}
 
-        brightness = parameters.get(CONF_BRIGHTNESS)
-        if brightness is not None:
-            service_data["brightness"] = brightness
+        for param, key in (
+            (CONF_BRIGHTNESS, "brightness"),
+            (CONF_COLOR_TEMP, "color_temp"),
+            (CONF_TRANSITION, "transition"),
+        ):
+            value = parameters.get(param)
+            if value is not None:
+                service_data[key] = value
 
-        color_temp = parameters.get(CONF_COLOR_TEMP)
-        if color_temp is not None:
-            service_data["color_temp"] = color_temp
-
-        transition = parameters.get(CONF_TRANSITION)
-        if transition is not None:
-            service_data["transition"] = transition
-
-        if len(service_data) > 1:  # More than just entity_id
+        if len(service_data) > 1:
             await self.hass.services.async_call(
-                "light",
-                SERVICE_TURN_ON,
-                service_data,
-                blocking=True,
+                "light", SERVICE_TURN_ON, service_data, blocking=True
             )
-            _LOGGER.info(f"Set light settings on {entity_id}")
+            _LOGGER.info("Set light settings on %s", entity_id)
 
-    async def _step_set_color_temp(self, entity_id: str, parameters: dict[str, Any]) -> None:
+    async def _step_set_color_temp(
+        self, entity_id: str, parameters: dict[str, Any]
+    ) -> None:
         """Set color temperature on light."""
         color_temp = parameters.get(CONF_COLOR_TEMP)
         if color_temp is not None:
             await self.hass.services.async_call(
                 "light",
                 SERVICE_TURN_ON,
-                {
-                    ATTR_ENTITY_ID: entity_id,
-                    "color_temp": color_temp,
-                },
+                {ATTR_ENTITY_ID: entity_id, "color_temp": color_temp},
                 blocking=True,
             )
-            _LOGGER.info(f"Set color temp to {color_temp}K on {entity_id}")
+            _LOGGER.info("Set color temp to %s on %s", color_temp, entity_id)
 
-    async def _step_set_position(self, entity_id: str, parameters: dict[str, Any]) -> None:
+    async def _step_set_position(
+        self, entity_id: str, parameters: dict[str, Any]
+    ) -> None:
         """Set position on cover."""
         position = parameters.get(CONF_POSITION)
         if position is not None:
             await self.hass.services.async_call(
                 "cover",
                 "set_cover_position",
-                {
-                    ATTR_ENTITY_ID: entity_id,
-                    "position": position,
-                },
+                {ATTR_ENTITY_ID: entity_id, "position": position},
                 blocking=True,
             )
-            _LOGGER.info(f"Set cover position to {position}% on {entity_id}")
+            _LOGGER.info("Set cover position to %d%% on %s", position, entity_id)
 
     async def _step_set_tilt(self, entity_id: str, parameters: dict[str, Any]) -> None:
         """Set tilt on cover."""
@@ -594,13 +381,10 @@ class AVScenesCoordinator(DataUpdateCoordinator):
             await self.hass.services.async_call(
                 "cover",
                 "set_cover_tilt_position",
-                {
-                    ATTR_ENTITY_ID: entity_id,
-                    "tilt_position": tilt,
-                },
+                {ATTR_ENTITY_ID: entity_id, "tilt_position": tilt},
                 blocking=True,
             )
-            _LOGGER.info(f"Set cover tilt to {tilt}% on {entity_id}")
+            _LOGGER.info("Set cover tilt to %d%% on %s", tilt, entity_id)
 
     async def _step_call_action(self, parameters: dict[str, Any]) -> None:
         """Call a Home Assistant action/service."""
@@ -609,66 +393,15 @@ class AVScenesCoordinator(DataUpdateCoordinator):
             _LOGGER.error("No action specified for call_action step")
             return
 
-        # Parse domain and service from action string (e.g., "light.turn_on")
         try:
             domain, service = action.split(".", 1)
         except ValueError:
-            _LOGGER.error(f"Invalid action format: {action}. Expected format: domain.service")
+            _LOGGER.error(
+                "Invalid action format: '%s'. Expected format: domain.service", action
+            )
             return
 
-        # Get service data if provided
         service_data = parameters.get(CONF_SERVICE_DATA, {})
-
-        _LOGGER.info(f"Calling action: {action} with data: {service_data}")
-        await self.hass.services.async_call(
-            domain,
-            service,
-            service_data,
-            blocking=True,
-        )
-        _LOGGER.info(f"Action {action} completed")
-
-    async def async_register_services(self) -> None:
-        """Register services."""
-        if self._services_registered:
-            return
-        
-        async def handle_start_activity(call: ServiceCall) -> None:
-            """Handle start activity service call."""
-            room_id = call.data.get(ATTR_ROOM)
-            activity_name = call.data.get(ATTR_ACTIVITY)
-            await self.async_start_activity(room_id, activity_name)
-        
-        async def handle_stop_activity(call: ServiceCall) -> None:
-            """Handle stop activity service call."""
-            room_id = call.data.get(ATTR_ROOM)
-            await self.async_stop_activity(room_id)
-        
-        async def handle_reload(call: ServiceCall) -> None:
-            """Handle reload service call."""
-            await self.async_config_entry_first_refresh()
-        
-        self.hass.services.async_register(
-            DOMAIN, SERVICE_START_ACTIVITY, handle_start_activity
-        )
-        self.hass.services.async_register(
-            DOMAIN, SERVICE_STOP_ACTIVITY, handle_stop_activity
-        )
-        self.hass.services.async_register(
-            DOMAIN, SERVICE_RELOAD, handle_reload
-        )
-        
-        self._services_registered = True
-        _LOGGER.debug("Services registered")
-
-    async def async_unregister_services(self) -> None:
-        """Unregister services."""
-        if not self._services_registered:
-            return
-        
-        self.hass.services.async_remove(DOMAIN, SERVICE_START_ACTIVITY)
-        self.hass.services.async_remove(DOMAIN, SERVICE_STOP_ACTIVITY)
-        self.hass.services.async_remove(DOMAIN, SERVICE_RELOAD)
-        
-        self._services_registered = False
-        _LOGGER.debug("Services unregistered")
+        _LOGGER.info("Calling action '%s' with data: %s", action, service_data)
+        await self.hass.services.async_call(domain, service, service_data, blocking=True)
+        _LOGGER.info("Action '%s' completed", action)
