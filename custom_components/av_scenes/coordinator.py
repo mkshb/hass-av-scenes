@@ -240,14 +240,14 @@ class AVScenesCoordinator(DataUpdateCoordinator):
                 domain,
                 "close_cover",
                 {ATTR_ENTITY_ID: entity_id},
-                blocking=True,
+                blocking=False,
             )
         else:
             await self.hass.services.async_call(
                 "homeassistant",
                 SERVICE_TURN_OFF,
                 {ATTR_ENTITY_ID: entity_id},
-                blocking=True,
+                blocking=False,
             )
 
     async def _execute_step(
@@ -280,11 +280,11 @@ class AVScenesCoordinator(DataUpdateCoordinator):
         domain = entity_id.split(".")[0]
         if domain == "cover":
             await self.hass.services.async_call(
-                domain, "open_cover", {ATTR_ENTITY_ID: entity_id}, blocking=True
+                domain, "open_cover", {ATTR_ENTITY_ID: entity_id}, blocking=False
             )
         else:
             await self.hass.services.async_call(
-                "homeassistant", SERVICE_TURN_ON, {ATTR_ENTITY_ID: entity_id}, blocking=True
+                "homeassistant", SERVICE_TURN_ON, {ATTR_ENTITY_ID: entity_id}, blocking=False
             )
 
     async def _step_set_source(self, entity_id: str, parameters: dict[str, Any]) -> None:
@@ -295,7 +295,7 @@ class AVScenesCoordinator(DataUpdateCoordinator):
                 "media_player",
                 "select_source",
                 {ATTR_ENTITY_ID: entity_id, "source": source},
-                blocking=True,
+                blocking=False,
             )
             _LOGGER.info("Set source to '%s' on %s", source, entity_id)
 
@@ -307,7 +307,7 @@ class AVScenesCoordinator(DataUpdateCoordinator):
                 "media_player",
                 "volume_set",
                 {ATTR_ENTITY_ID: entity_id, "volume_level": volume_level},
-                blocking=True,
+                blocking=False,
             )
             _LOGGER.info("Set volume to %d%% on %s", int(volume_level * 100), entity_id)
 
@@ -321,7 +321,7 @@ class AVScenesCoordinator(DataUpdateCoordinator):
                 "media_player",
                 "select_sound_mode",
                 {ATTR_ENTITY_ID: entity_id, "sound_mode": sound_mode},
-                blocking=True,
+                blocking=False,
             )
             _LOGGER.info("Set sound mode to '%s' on %s", sound_mode, entity_id)
 
@@ -342,7 +342,7 @@ class AVScenesCoordinator(DataUpdateCoordinator):
 
         if len(service_data) > 1:
             await self.hass.services.async_call(
-                "light", SERVICE_TURN_ON, service_data, blocking=True
+                "light", SERVICE_TURN_ON, service_data, blocking=False
             )
             _LOGGER.info("Set light settings on %s", entity_id)
 
@@ -356,7 +356,7 @@ class AVScenesCoordinator(DataUpdateCoordinator):
                 "light",
                 SERVICE_TURN_ON,
                 {ATTR_ENTITY_ID: entity_id, "color_temp": color_temp},
-                blocking=True,
+                blocking=False,
             )
             _LOGGER.info("Set color temp to %s on %s", color_temp, entity_id)
 
@@ -370,7 +370,7 @@ class AVScenesCoordinator(DataUpdateCoordinator):
                 "cover",
                 "set_cover_position",
                 {ATTR_ENTITY_ID: entity_id, "position": position},
-                blocking=True,
+                blocking=False,
             )
             _LOGGER.info("Set cover position to %d%% on %s", position, entity_id)
 
@@ -382,7 +382,7 @@ class AVScenesCoordinator(DataUpdateCoordinator):
                 "cover",
                 "set_cover_tilt_position",
                 {ATTR_ENTITY_ID: entity_id, "tilt_position": tilt},
-                blocking=True,
+                blocking=False,
             )
             _LOGGER.info("Set cover tilt to %d%% on %s", tilt, entity_id)
 
@@ -403,5 +403,5 @@ class AVScenesCoordinator(DataUpdateCoordinator):
 
         service_data = parameters.get(CONF_SERVICE_DATA, {})
         _LOGGER.info("Calling action '%s' with data: %s", action, service_data)
-        await self.hass.services.async_call(domain, service, service_data, blocking=True)
-        _LOGGER.info("Action '%s' completed", action)
+        await self.hass.services.async_call(domain, service, service_data, blocking=False)
+        _LOGGER.info("Dispatched action '%s'", action)
