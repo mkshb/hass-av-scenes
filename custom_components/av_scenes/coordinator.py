@@ -211,20 +211,34 @@ class AVScenesCoordinator(DataUpdateCoordinator):
         room = self.rooms[room_id]
         steps = room.get(CONF_ACTIVITIES, {}).get(activity_name, {}).get(CONF_STEPS, [])
 
-        # Build ordered, deduplicated entity list, then turn off in reverse order
-        seen: set[str] = set()
-        entity_list: list[str] = []
+        # Build an ordered, deduplicated (entity_id, delay_after) list.
+        # Preserve first-occurrence order; track the highest delay_after seen per entity
+        # so that the shutdown sequence respects the original timing requirements
+        # (e.g. a TV that needs 5 s to power up also needs time to shut down cleanly).
+        entity_delays: dict[str, int] = {}   # entity_id -> max delay_after across all steps
+        entity_order: list[str] = []
         for step in steps:
             entity_id = step.get(CONF_ENTITY_ID, "").strip()
-            if entity_id and entity_id not in seen:
-                entity_list.append(entity_id)
-                seen.add(entity_id)
+            if not entity_id:
+                continue
+            delay = step.get(CONF_STEP_DELAY_AFTER, 0)
+            if entity_id not in entity_delays:
+                entity_order.append(entity_id)
+                entity_delays[entity_id] = delay
+            else:
+                entity_delays[entity_id] = max(entity_delays[entity_id], delay)
 
-        for entity_id in reversed(entity_list):
+        shutdown_sequence = [(eid, entity_delays[eid]) for eid in entity_order]
+        for entity_id, delay_after in reversed(shutdown_sequence):
             try:
                 await self._turn_off_device(entity_id)
             except Exception as ex:
                 _LOGGER.error("Error turning off %s: %s", entity_id, ex)
+            if delay_after > 0:
+                _LOGGER.debug(
+                    "Waiting %s s after turning off %s", delay_after, entity_id
+                )
+                await asyncio.sleep(delay_after)
 
         del self.active_activities[room_id]
         self.activity_states[room_id] = ACTIVITY_STATE_IDLE
