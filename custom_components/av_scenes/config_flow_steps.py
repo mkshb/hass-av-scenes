@@ -752,6 +752,14 @@ class StepsFlowMixin:
 
         if user_input is not None:
             try:
+                # Update entity_id for steps that target a device
+                if step_type not in (STEP_TYPE_DELAY, STEP_TYPE_CALL_ACTION):
+                    new_entity_id = user_input.get(CONF_ENTITY_ID)
+                    if new_entity_id:
+                        current_step[CONF_ENTITY_ID] = new_entity_id
+                        entity_id = new_entity_id
+                        state = self.hass.states.get(entity_id)
+
                 # Update delay_after
                 delay_after = user_input.get(CONF_STEP_DELAY_AFTER, 0)
                 current_step[CONF_STEP_DELAY_AFTER] = delay_after
@@ -846,6 +854,20 @@ class StepsFlowMixin:
         # Get current parameters
         current_params = current_step.get(CONF_STEP_PARAMETERS, {})
         current_delay = current_step.get(CONF_STEP_DELAY_AFTER, 0)
+
+        # Entity selector for steps that target a device
+        if step_type not in (STEP_TYPE_DELAY, STEP_TYPE_CALL_ACTION):
+            if step_type in [STEP_TYPE_SET_SOURCE, STEP_TYPE_SET_VOLUME, STEP_TYPE_SET_SOUND_MODE]:
+                edit_domains = ["media_player"]
+            elif step_type in [STEP_TYPE_SET_BRIGHTNESS, STEP_TYPE_SET_COLOR_TEMP]:
+                edit_domains = ["light"]
+            elif step_type in [STEP_TYPE_SET_POSITION, STEP_TYPE_SET_TILT]:
+                edit_domains = ["cover"]
+            else:
+                edit_domains = ["media_player", "light", "switch", "cover"]
+            schema_dict[vol.Required(CONF_ENTITY_ID, default=entity_id)] = EntitySelector(
+                EntitySelectorConfig(domain=edit_domains)
+            )
 
         # Common field for delay
         if step_type == STEP_TYPE_DELAY:
