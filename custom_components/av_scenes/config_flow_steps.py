@@ -7,6 +7,7 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers.selector import EntitySelector, EntitySelectorConfig
 
 from .const import (
     CONF_ACTIVITIES,
@@ -259,28 +260,12 @@ class StepsFlowMixin:
         else:  # POWER_ON and others
             supported_domains = ["media_player", "light", "switch", "cover"]
 
-        entities = []
-        for domain in supported_domains:
-            for entity_id in self.hass.states.async_entity_ids(domain):
-                state = self.hass.states.get(entity_id)
-                if state:
-                    friendly_name = state.attributes.get("friendly_name", entity_id)
-                    display_name = f"[{domain}] {friendly_name}"
-                    entities.append((entity_id, display_name))
-
-        # Sort by display name
-        entities.sort(key=lambda x: x[1])
-
-        # Create entity selector options
-        entity_options = {entity_id: name for entity_id, name in entities}
-
-        if not entity_options:
-            entity_options = {"": "No entities found"}
-
         return self.async_show_form(
             step_id="add_step_entity",
             data_schema=vol.Schema({
-                vol.Required(CONF_ENTITY_ID): vol.In(entity_options),
+                vol.Required(CONF_ENTITY_ID): EntitySelector(
+                    EntitySelectorConfig(domain=supported_domains)
+                ),
             }),
             errors=errors,
             description_placeholders={
