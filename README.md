@@ -125,7 +125,9 @@ Selecting an activity name starts it. Selecting `—` stops the current activity
 
 Reports the current activity lifecycle state with step-level progress.
 
-**State values:** `idle` · `starting` · `active` · `stopping`
+**State values:** `idle` · `starting` · `active` · `stopping` · `error`
+
+`error` is reported when every step of an activity failed to execute (e.g. all target devices were unavailable).
 
 **Attributes:**
 

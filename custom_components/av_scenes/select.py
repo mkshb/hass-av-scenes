@@ -8,23 +8,20 @@ Provides one SelectEntity per room that:
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from homeassistant.components.select import SelectEntity
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     DOMAIN,
     CONF_ACTIVITIES,
-    DEVICE_NAME_PREFIX,
     ACTIVITY_STATE_IDLE,
     ACTIVITY_STATE_STARTING,
     ACTIVITY_STATE_STOPPING,
 )
-from .coordinator import AVScenesCoordinator
+from .coordinator import AVScenesConfigEntry, AVScenesCoordinator
+from .entity import AVRoomEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,11 +36,11 @@ _READONLY_OPTIONS = {_OPT_STARTING, _OPT_STOPPING}
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: AVScenesConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up AV Scenes select entities from a config entry."""
-    coordinator: AVScenesCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry.runtime_data
 
     entities = [
         RoomActivitySelect(coordinator, room_id)
@@ -53,20 +50,15 @@ async def async_setup_entry(
     _LOGGER.debug("Created %d room activity selects", len(entities))
 
 
-class RoomActivitySelect(CoordinatorEntity, SelectEntity):
+class RoomActivitySelect(AVRoomEntity, SelectEntity):
     """Select entity that shows the current activity and allows switching."""
 
-    _attr_has_entity_name = True
     _attr_icon = "mdi:play-circle-outline"
+    _attr_translation_key = "activity_select"
 
     def __init__(self, coordinator: AVScenesCoordinator, room_id: str) -> None:
         """Initialize the select entity."""
-        super().__init__(coordinator)
-        self.room_id = room_id
-
-        room_data = coordinator.rooms[room_id]
-        self._room_name: str = room_data.get("name", room_id)
-        self._attr_name = "Szene"
+        super().__init__(coordinator, room_id)
         self._attr_unique_id = f"{DOMAIN}_select_{room_id}"
 
     # ------------------------------------------------------------------
@@ -105,7 +97,11 @@ class RoomActivitySelect(CoordinatorEntity, SelectEntity):
             return _OPT_STOPPING
 
         activity = self.coordinator.active_activities.get(self.room_id)
-        return activity if activity else _OPT_IDLE
+        # Guard against a stale active activity that was removed from config:
+        # returning a value outside ``options`` triggers a HA warning.
+        if activity and activity in self.options:
+            return activity
+        return _OPT_IDLE
 
     # ------------------------------------------------------------------
     # Interaction
@@ -122,25 +118,3 @@ class RoomActivitySelect(CoordinatorEntity, SelectEntity):
             await self.coordinator.async_stop_activity(self.room_id)
         else:
             await self.coordinator.async_start_activity(self.room_id, option)
-
-    # ------------------------------------------------------------------
-    # Device
-    # ------------------------------------------------------------------
-
-    @property
-    def device_info(self) -> dict[str, Any]:
-        """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self.room_id)},
-            "name": f"{DEVICE_NAME_PREFIX}: {self._room_name}",
-            "manufacturer": "AV Scenes",
-            "model": "Activity Controller",
-            "suggested_area": self._room_name,
-        }
-
-    # ------------------------------------------------------------------
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
-        self.async_write_ha_state()

@@ -1,6 +1,8 @@
 """Config flow for AV Scenes integration."""
 from __future__ import annotations
 
+import copy
+import json
 import logging
 import uuid
 from typing import Any
@@ -10,30 +12,23 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers import area_registry as ar, selector
-import homeassistant.helpers.config_validation as cv
 
 from .const import (
     DOMAIN,
     CONF_ROOMS,
     CONF_ACTIVITIES,
-    CONF_DEVICES,
     CONF_DEVICE_STATES,
     CONF_DEVICE_ORDER,
-    CONF_ACTIVITY_NAME,
     CONF_ENTITY_ID,
     CONF_INPUT_SOURCE,
     CONF_POWER_ON_DELAY,
     CONF_VOLUME_LEVEL,
-    CONF_SOUND_MODE,
     CONF_IS_VOLUME_CONTROLLER,
     CONF_BRIGHTNESS,
     CONF_COLOR_TEMP,
     CONF_TRANSITION,
     CONF_POSITION,
     CONF_TILT_POSITION,
-    CONF_ACTION,
-    CONF_SERVICE_DATA,
     DEFAULT_POWER_ON_DELAY,
     # Step-based configuration
     CONF_STEPS,
@@ -44,17 +39,12 @@ from .const import (
     STEP_TYPE_POWER_ON,
     STEP_TYPE_SET_SOURCE,
     STEP_TYPE_SET_VOLUME,
-    STEP_TYPE_SET_SOUND_MODE,
     STEP_TYPE_SET_BRIGHTNESS,
-    STEP_TYPE_SET_COLOR_TEMP,
     STEP_TYPE_SET_POSITION,
     STEP_TYPE_SET_TILT,
-    STEP_TYPE_CALL_ACTION,
-    STEP_TYPE_DELAY,
 )
 from .config_flow_rooms import RoomsFlowMixin
 from .config_flow_activities import ActivitiesFlowMixin
-from .config_flow_devices import DevicesFlowMixin
 from .config_flow_steps import StepsFlowMixin
 
 _LOGGER = logging.getLogger(__name__)
@@ -235,7 +225,6 @@ class AVScenesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class AVScenesOptionsFlow(
     RoomsFlowMixin,
     ActivitiesFlowMixin,
-    DevicesFlowMixin,
     StepsFlowMixin,
     config_entries.OptionsFlow,
 ):
@@ -246,7 +235,6 @@ class AVScenesOptionsFlow(
         _LOGGER.debug("Initializing OptionsFlow for entry: %s", config_entry.entry_id)
 
         try:
-            import copy
             # Make a deep copy to avoid modifying the original
             rooms_data = config_entry.data.get(CONF_ROOMS, {})
             if not isinstance(rooms_data, dict):
@@ -315,8 +303,6 @@ class AVScenesOptionsFlow(
 
     def _save_config(self) -> None:
         """Save the current configuration to the config entry."""
-        import json
-
         # Convert to JSON to check if data actually changed.
         # NOTE: sort_keys=True is intentional here — it is used ONLY for
         # change-detection.  The actual data written to the entry is
@@ -340,33 +326,29 @@ class AVScenesOptionsFlow(
                     activity_name, room_id, len(steps), step_summary,
                 )
 
-        _LOGGER.info("Saving configuration with %d rooms", len(self.rooms))
+        _LOGGER.debug("Saving configuration with %d rooms", len(self.rooms))
         self.hass.config_entries.async_update_entry(
             self.config_entry,
             data={CONF_ROOMS: self.rooms}
         )
         self._last_save_data = current_data
 
-    def _ensure_device_order(self, activity_data: dict[str, Any]) -> list[str]:
-        """Ensure device_order exists and is synchronized with device_states."""
-        device_states = activity_data.get(CONF_DEVICE_STATES, {})
-        device_order = activity_data.get(CONF_DEVICE_ORDER, [])
+    def _save_if_persisted(self) -> None:
+        """Persist the current activity if it already exists in the stored config.
 
-        # If device_order doesn't exist or is out of sync, rebuild it from device_states
-        device_state_keys = list(device_states.keys())
-
-        # Remove any devices from order that no longer exist in device_states
-        device_order = [d for d in device_order if d in device_states]
-
-        # Add any new devices from device_states that aren't in order
-        for device_id in device_state_keys:
-            if device_id not in device_order:
-                device_order.append(device_id)
-
-        # Save the synchronized order back to activity_data
-        activity_data[CONF_DEVICE_ORDER] = device_order
-
-        return device_order
+        While building a *new* activity the data lives only in
+        ``current_activity_data`` and is saved on finish. When editing an
+        *existing* activity we must write each change through immediately.
+        """
+        if (
+            self.current_room in self.rooms
+            and self.current_activity
+            in self.rooms[self.current_room].get(CONF_ACTIVITIES, {})
+        ):
+            self.rooms[self.current_room][CONF_ACTIVITIES][
+                self.current_activity
+            ] = self.current_activity_data
+            self._save_config()
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None

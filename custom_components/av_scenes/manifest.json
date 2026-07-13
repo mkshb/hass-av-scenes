@@ -6,7 +6,8 @@
   "dependencies": [],
   "documentation": "https://github.com/mkshb/ha_av_scenes",
   "integration_type": "hub",
-  "iot_class": "local_polling",
+  "iot_class": "local_push",
+  "loggers": ["custom_components.av_scenes"],
   "requirements": [],
-  "version": "0.3.1"
+  "version": "0.4.0"
 }

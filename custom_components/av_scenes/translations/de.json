@@ -17,11 +17,6 @@
         "description": "Konfigurierte Räume:\n{rooms}",
         "data": {
           "action": "Aktion"
-        },
-        "menu_options": {
-          "add_room": "Neuen Raum hinzufügen",
-          "edit_room": "Bestehenden Raum bearbeiten",
-          "finish": "Fertigstellen und speichern"
         }
       },
       "add_room": {
@@ -222,6 +217,10 @@
           "action": "Aktion (z.B. light.turn_on)",
           "service_data": "Service-Daten (JSON, optional)",
           "delay_after": "Verzögerung danach (Sekunden)"
+        },
+        "data_description": {
+          "action": "Format: domain.service, z. B. media_player.volume_up",
+          "service_data": "Optionales JSON-Objekt, z. B. {\"volume_level\": 0.5}"
         }
       },
       "select_step_to_edit": {
@@ -268,17 +267,90 @@
       "already_exists": "Dieses Element existiert bereits",
       "entity_not_found": "Entität wurde in Home Assistant nicht gefunden",
       "invalid_name": "Ungültiger Name angegeben",
+      "invalid_action": "Ungültiges Aktionsformat. Erwartet: domain.service (z. B. light.turn_on)",
+      "invalid_json": "Service-Daten müssen gültiges JSON sein",
       "room_not_found": "Raum nicht gefunden",
       "unknown": "Unbekannter Fehler aufgetreten"
     }
   },
   "entity": {
     "sensor": {
-      "room_config": {
-        "name": "{room_name} Konfiguration",
+      "activity_state": {
+        "name": "Status",
         "state": {
-          "idle": "Inaktiv"
+          "idle": "Inaktiv",
+          "starting": "Startet",
+          "active": "Aktiv",
+          "stopping": "Stoppt",
+          "error": "Fehler"
         }
+      }
+    },
+    "select": {
+      "activity_select": {
+        "name": "Szene"
+      }
+    },
+    "switch": {
+      "activity_switch": {
+        "name": "Aktivität"
+      }
+    }
+  },
+  "selector": {
+    "room_action": {
+      "options": {
+        "add_room": "Neuen Raum hinzufügen",
+        "edit_room": "Bestehenden Raum bearbeiten",
+        "delete_room": "Raum löschen",
+        "finish": "Fertigstellen und speichern"
+      }
+    },
+    "activity_action": {
+      "options": {
+        "add_activity": "Neue Aktivität hinzufügen",
+        "edit_activity": "Bestehende Aktivität bearbeiten",
+        "delete_activity": "Aktivität löschen",
+        "copy_activity": "Aktivität kopieren",
+        "back": "Zurück zum Raummenü"
+      }
+    },
+    "edit_activity_action": {
+      "options": {
+        "edit_steps": "Schritte bearbeiten",
+        "rename": "Aktivität umbenennen",
+        "back": "Zurück"
+      }
+    },
+    "step_action": {
+      "options": {
+        "add_step": "Schritt hinzufügen",
+        "edit_step": "Schritt bearbeiten",
+        "delete_step": "Schritt löschen",
+        "reorder_step": "Reihenfolge ändern",
+        "finish_activity": "Aktivität abschließen"
+      }
+    },
+    "step_type": {
+      "options": {
+        "power_on": "Gerät einschalten",
+        "power_off": "Gerät ausschalten",
+        "set_source": "Eingangsquelle setzen (Media Player)",
+        "set_volume": "Lautstärke setzen (Media Player)",
+        "set_sound_mode": "Klangmodus setzen (Media Player)",
+        "set_brightness": "Helligkeit/Farbe setzen (Licht)",
+        "set_color_temp": "Farbtemperatur setzen (Licht)",
+        "set_position": "Position setzen (Rollo)",
+        "set_tilt": "Neigung setzen (Rollo)",
+        "call_action": "Aktion aufrufen",
+        "delay": "Warten/Verzögerung"
+      }
+    },
+    "reorder_direction": {
+      "options": {
+        "up": "Nach oben",
+        "down": "Nach unten",
+        "done": "Sortierung abschließen"
       }
     }
   },

@@ -5,10 +5,8 @@ import logging
 from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     DOMAIN,
@@ -21,9 +19,10 @@ from .const import (
     ACTIVITY_STATE_STARTING,
     ACTIVITY_STATE_ACTIVE,
     ACTIVITY_STATE_STOPPING,
-    DEVICE_NAME_PREFIX,
+    ACTIVITY_STATE_ERROR,
 )
-from .coordinator import AVScenesCoordinator
+from .coordinator import AVScenesConfigEntry, AVScenesCoordinator
+from .entity import AVRoomEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,16 +32,17 @@ _STATE_ICONS: dict[str, str] = {
     ACTIVITY_STATE_STARTING: "mdi:timer-sand",
     ACTIVITY_STATE_ACTIVE:   "mdi:play-circle",
     ACTIVITY_STATE_STOPPING: "mdi:stop-circle-outline",
+    ACTIVITY_STATE_ERROR:    "mdi:alert-circle",
 }
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: AVScenesConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up AV Scenes sensors from a config entry."""
-    coordinator: AVScenesCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry.runtime_data
 
     sensors = [
         RoomActivitySensor(coordinator, room_id)
@@ -52,31 +52,28 @@ async def async_setup_entry(
     _LOGGER.debug("Created %d room activity sensors", len(sensors))
 
 
-class RoomActivitySensor(CoordinatorEntity, SensorEntity):
+class RoomActivitySensor(AVRoomEntity, SensorEntity):
     """Sensor that exposes the current activity state of a room.
 
-    State values: idle | starting | active | stopping
+    State values: idle | starting | active | stopping | error
     Attributes:   activity_name, current_step, total_steps, step_progress_pct,
                   available_activities
     """
 
-    _attr_has_entity_name = True
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = [
         ACTIVITY_STATE_IDLE,
         ACTIVITY_STATE_STARTING,
         ACTIVITY_STATE_ACTIVE,
         ACTIVITY_STATE_STOPPING,
+        ACTIVITY_STATE_ERROR,
     ]
+
+    _attr_translation_key = "activity_state"
 
     def __init__(self, coordinator: AVScenesCoordinator, room_id: str) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator)
-        self.room_id = room_id
-
-        room_name = coordinator.rooms[room_id].get("name", room_id)
-        self._room_name = room_name
-        self._attr_name = "Aktivität"
+        super().__init__(coordinator, room_id)
         self._attr_unique_id = f"{DOMAIN}_activity_state_{room_id}"
 
     # ------------------------------------------------------------------
@@ -140,25 +137,3 @@ class RoomActivitySensor(CoordinatorEntity, SensorEntity):
     def icon(self) -> str:
         """Return state-dependent icon."""
         return _STATE_ICONS.get(self.native_value, "mdi:television")
-
-    # ------------------------------------------------------------------
-    # Device — linked to HA Area via suggested_area
-    # ------------------------------------------------------------------
-
-    @property
-    def device_info(self) -> dict[str, Any]:
-        """Return device info.  suggested_area links the device to the HA Area."""
-        return {
-            "identifiers": {(DOMAIN, self.room_id)},
-            "name": f"{DEVICE_NAME_PREFIX}: {self._room_name}",
-            "manufacturer": "AV Scenes",
-            "model": "Activity Controller",
-            "suggested_area": self._room_name,   # ← verknüpft mit gleichnamiger HA-Area
-        }
-
-    # ------------------------------------------------------------------
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
-        self.async_write_ha_state()

@@ -217,6 +217,10 @@
           "action": "Action (e.g., light.turn_on)",
           "service_data": "Service Data (JSON, optional)",
           "delay_after": "Delay after (seconds)"
+        },
+        "data_description": {
+          "action": "Format: domain.service, for example media_player.volume_up",
+          "service_data": "Optional JSON object, e.g. {\"volume_level\": 0.5}"
         }
       },
       "select_step_to_edit": {
@@ -263,17 +267,90 @@
       "already_exists": "This item already exists",
       "entity_not_found": "Entity not found in Home Assistant",
       "invalid_name": "Invalid name provided",
+      "invalid_action": "Invalid action format. Expected domain.service (e.g. light.turn_on)",
+      "invalid_json": "Service data must be valid JSON",
       "room_not_found": "Room not found",
       "unknown": "Unknown error occurred"
     }
   },
   "entity": {
     "sensor": {
-      "room_config": {
-        "name": "{room_name} Configuration",
+      "activity_state": {
+        "name": "State",
         "state": {
-          "idle": "Idle"
+          "idle": "Idle",
+          "starting": "Starting",
+          "active": "Active",
+          "stopping": "Stopping",
+          "error": "Error"
         }
+      }
+    },
+    "select": {
+      "activity_select": {
+        "name": "Activity"
+      }
+    },
+    "switch": {
+      "activity_switch": {
+        "name": "Activity"
+      }
+    }
+  },
+  "selector": {
+    "room_action": {
+      "options": {
+        "add_room": "Add new room",
+        "edit_room": "Edit existing room",
+        "delete_room": "Delete room",
+        "finish": "Finish and save"
+      }
+    },
+    "activity_action": {
+      "options": {
+        "add_activity": "Add new activity",
+        "edit_activity": "Edit existing activity",
+        "delete_activity": "Delete activity",
+        "copy_activity": "Copy activity",
+        "back": "Back to room menu"
+      }
+    },
+    "edit_activity_action": {
+      "options": {
+        "edit_steps": "Edit steps",
+        "rename": "Rename activity",
+        "back": "Back"
+      }
+    },
+    "step_action": {
+      "options": {
+        "add_step": "Add step",
+        "edit_step": "Edit step",
+        "delete_step": "Delete step",
+        "reorder_step": "Change step order",
+        "finish_activity": "Finish activity"
+      }
+    },
+    "step_type": {
+      "options": {
+        "power_on": "Turn on device",
+        "power_off": "Turn off device",
+        "set_source": "Set input source (media player)",
+        "set_volume": "Set volume (media player)",
+        "set_sound_mode": "Set sound mode (media player)",
+        "set_brightness": "Set brightness/color (light)",
+        "set_color_temp": "Set color temperature (light)",
+        "set_position": "Set position (cover)",
+        "set_tilt": "Set tilt (cover)",
+        "call_action": "Call action",
+        "delay": "Wait/Delay"
+      }
+    },
+    "reorder_direction": {
+      "options": {
+        "up": "Move up",
+        "down": "Move down",
+        "done": "Done reordering"
       }
     }
   },

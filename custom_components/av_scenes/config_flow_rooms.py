@@ -7,11 +7,15 @@ from typing import Any
 import voluptuous as vol
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import area_registry as ar
-
-from .const import (
-    CONF_ROOMS,
-    CONF_ACTIVITIES,
+from homeassistant.helpers.selector import (
+    SelectOptionDict,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
 )
+
+from .const import CONF_ACTIVITIES
+from .config_flow_helpers import translatable_select, value_select
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,33 +40,22 @@ class RoomsFlowMixin:
             elif action == "delete_room":
                 return await self.async_step_delete_room()
             elif action == "finish":
-                # Update the config entry with new data
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry,
-                    data={CONF_ROOMS: self.rooms}
-                )
+                self._save_config()
                 return self.async_create_entry(title="", data={})
 
         room_list = "\n".join([f"- {room_id}" for room_id in self.rooms.keys()])
         if not room_list:
             room_list = "No rooms configured yet"
 
-        actions = {
-            "add_room": "Add new room",
-        }
-
-        # Only show edit/delete if there are rooms
+        options = ["add_room"]
         if self.rooms:
-            actions["edit_room"] = "Edit existing room"
-            actions["delete_room"] = "Delete room"
-
-        # Finish always at the bottom
-        actions["finish"] = "Finish and save"
+            options += ["edit_room", "delete_room"]
+        options.append("finish")
 
         return self.async_show_form(
             step_id="room_menu",
             data_schema=vol.Schema({
-                vol.Required("action"): vol.In(actions),
+                vol.Required("action"): translatable_select(options, "room_action"),
             }),
             description_placeholders={
                 "rooms": room_list,
@@ -111,29 +104,26 @@ class RoomsFlowMixin:
                 _LOGGER.exception("Error in add_room: %s", ex)
                 errors["base"] = "unknown"
 
-        # Get all areas from Home Assistant
+        # Get all areas from Home Assistant, sorted by name
         area_registry = ar.async_get(self.hass)
-        areas = []
+        areas = sorted(area_registry.async_list_areas(), key=lambda a: a.name)
 
-        for area in area_registry.async_list_areas():
-            # Use id as key and name as display
-            areas.append((area.id, area.name))
-
-        # Sort by name
-        areas.sort(key=lambda x: x[1])
-
-        # Create area options
-        area_options = {"custom": "-- Create custom room --"}
-        for area_id, area_name in areas:
-            area_options[area_id] = area_name
-
-        if not areas:
-            area_options["custom"] = "-- Enter custom room name --"
+        custom_label = (
+            "-- Enter custom room name --" if not areas else "-- Create custom room --"
+        )
+        area_options = [SelectOptionDict(value="custom", label=custom_label)]
+        area_options += [
+            SelectOptionDict(value=area.id, label=area.name) for area in areas
+        ]
 
         return self.async_show_form(
             step_id="add_room",
             data_schema=vol.Schema({
-                vol.Required("room_id"): vol.In(area_options),
+                vol.Required("room_id"): SelectSelector(
+                    SelectSelectorConfig(
+                        options=area_options, mode=SelectSelectorMode.DROPDOWN
+                    )
+                ),
                 vol.Optional("room_name"): str,
             }),
             errors=errors,
@@ -196,7 +186,7 @@ class RoomsFlowMixin:
         return self.async_show_form(
             step_id="select_room",
             data_schema=vol.Schema({
-                vol.Required("room_id"): vol.In(list(self.rooms.keys())),
+                vol.Required("room_id"): value_select(list(self.rooms.keys())),
             }),
         )
 
@@ -222,7 +212,7 @@ class RoomsFlowMixin:
         return self.async_show_form(
             step_id="delete_room",
             data_schema=vol.Schema({
-                vol.Required("room_id"): vol.In(list(self.rooms.keys())),
+                vol.Required("room_id"): value_select(list(self.rooms.keys())),
             }),
             description_placeholders={
                 "warning": "This will delete the room and all its activities. This action cannot be undone!",

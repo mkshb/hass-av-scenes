@@ -73,6 +73,7 @@ ACTIVITY_STATE_IDLE: Final = "idle"
 ACTIVITY_STATE_STARTING: Final = "starting"
 ACTIVITY_STATE_ACTIVE: Final = "active"
 ACTIVITY_STATE_STOPPING: Final = "stopping"
+ACTIVITY_STATE_ERROR: Final = "error"
 
 # Default values
 DEFAULT_POWER_ON_DELAY: Final = 2

@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -33,6 +34,7 @@ from .const import (
     ACTIVITY_STATE_STARTING,
     ACTIVITY_STATE_ACTIVE,
     ACTIVITY_STATE_STOPPING,
+    ACTIVITY_STATE_ERROR,
     CONF_STEPS,
     CONF_STEP_TYPE,
     CONF_STEP_DELAY_AFTER,
@@ -56,7 +58,15 @@ _LOGGER = logging.getLogger(__name__)
 _StepHandler = Callable[..., Coroutine[Any, Any, None]]
 
 
-class AVScenesCoordinator(DataUpdateCoordinator):
+def _mired_to_kelvin(mired: int) -> int:
+    """Convert a Mired colour temperature to Kelvin (guarding against zero)."""
+    return round(1_000_000 / mired) if mired else 0
+
+
+type AVScenesConfigEntry = ConfigEntry[AVScenesCoordinator]
+
+
+class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Class to manage AV scenes and activities."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -68,7 +78,6 @@ class AVScenesCoordinator(DataUpdateCoordinator):
             update_interval=None,  # We update manually when activities change
             config_entry=entry,
         )
-        self.entry = entry
         self.rooms: dict[str, dict[str, Any]] = {}
         self.active_activities: dict[str, str] = {}  # room_id -> activity_name
         self.activity_states: dict[str, str] = {}  # room_id -> state
@@ -94,7 +103,7 @@ class AVScenesCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from config."""
-        self.rooms = self.entry.data.get(CONF_ROOMS, {})
+        self.rooms = self.config_entry.data.get(CONF_ROOMS, {})
         return {
             "rooms": self.rooms,
             "active_activities": self.active_activities,
@@ -157,6 +166,7 @@ class AVScenesCoordinator(DataUpdateCoordinator):
         self.activity_progress[room_id] = (0, len(new_steps))
         self.async_update_listeners()
 
+        failed_steps = 0
         for idx, step in enumerate(new_steps, 1):
             step_type = step.get(CONF_STEP_TYPE)
             entity_id = step.get(CONF_ENTITY_ID, "")
@@ -166,13 +176,14 @@ class AVScenesCoordinator(DataUpdateCoordinator):
             self.activity_progress[room_id] = (idx, len(new_steps))
             self.async_update_listeners()
 
-            _LOGGER.info(
+            _LOGGER.debug(
                 "Executing step %d/%d: %s on %s", idx, len(new_steps), step_type, entity_id
             )
 
             try:
                 await self._execute_step(step_type, entity_id, parameters)
             except Exception as ex:
+                failed_steps += 1
                 _LOGGER.error("Error executing step %d (%s): %s", idx, step_type, ex)
                 # Continue with next step even if this one fails
 
@@ -181,13 +192,30 @@ class AVScenesCoordinator(DataUpdateCoordinator):
                 await asyncio.sleep(delay_after)
 
         self.active_activities[room_id] = activity_name
-        self.activity_states[room_id] = ACTIVITY_STATE_ACTIVE
         self.activity_progress[room_id] = (len(new_steps), len(new_steps))
+
+        if failed_steps >= len(new_steps):
+            # Every step failed — surface this instead of pretending success.
+            self.activity_states[room_id] = ACTIVITY_STATE_ERROR
+            self.async_update_listeners()
+            _LOGGER.error(
+                "Activity '%s' in room '%s' failed: all %d steps errored",
+                activity_name, room_id, len(new_steps),
+            )
+            return
+
+        self.activity_states[room_id] = ACTIVITY_STATE_ACTIVE
         self.async_update_listeners()
 
-        _LOGGER.info(
-            "Activity '%s' started successfully in room '%s'", activity_name, room_id
-        )
+        if failed_steps:
+            _LOGGER.warning(
+                "Activity '%s' started in room '%s' with %d/%d steps failing",
+                activity_name, room_id, failed_steps, len(new_steps),
+            )
+        else:
+            _LOGGER.info(
+                "Activity '%s' started successfully in room '%s'", activity_name, room_id
+            )
 
     def _get_entities_from_steps(self, steps: list[dict[str, Any]]) -> set[str]:
         """Extract unique entity IDs from a list of steps."""
@@ -319,7 +347,7 @@ class AVScenesCoordinator(DataUpdateCoordinator):
                 {ATTR_ENTITY_ID: entity_id, "source": source},
                 blocking=False,
             )
-            _LOGGER.info("Set source to '%s' on %s", source, entity_id)
+            _LOGGER.debug("Set source to '%s' on %s", source, entity_id)
 
     async def _step_set_volume(self, entity_id: str, parameters: dict[str, Any]) -> None:
         """Set volume on media player."""
@@ -331,7 +359,7 @@ class AVScenesCoordinator(DataUpdateCoordinator):
                 {ATTR_ENTITY_ID: entity_id, "volume_level": volume_level},
                 blocking=False,
             )
-            _LOGGER.info("Set volume to %d%% on %s", int(volume_level * 100), entity_id)
+            _LOGGER.debug("Set volume to %d%% on %s", int(volume_level * 100), entity_id)
 
     async def _step_set_sound_mode(
         self, entity_id: str, parameters: dict[str, Any]
@@ -345,7 +373,7 @@ class AVScenesCoordinator(DataUpdateCoordinator):
                 {ATTR_ENTITY_ID: entity_id, "sound_mode": sound_mode},
                 blocking=False,
             )
-            _LOGGER.info("Set sound mode to '%s' on %s", sound_mode, entity_id)
+            _LOGGER.debug("Set sound mode to '%s' on %s", sound_mode, entity_id)
 
     async def _step_set_brightness(
         self, entity_id: str, parameters: dict[str, Any]
@@ -353,20 +381,25 @@ class AVScenesCoordinator(DataUpdateCoordinator):
         """Set brightness and optional color/transition on light."""
         service_data: dict[str, Any] = {ATTR_ENTITY_ID: entity_id}
 
-        for param, key in (
-            (CONF_BRIGHTNESS, "brightness"),
-            (CONF_COLOR_TEMP, "color_temp"),
-            (CONF_TRANSITION, "transition"),
-        ):
-            value = parameters.get(param)
-            if value is not None:
-                service_data[key] = value
+        brightness = parameters.get(CONF_BRIGHTNESS)
+        if brightness is not None:
+            service_data["brightness"] = brightness
+
+        color_temp = parameters.get(CONF_COLOR_TEMP)
+        if color_temp is not None:
+            # Stored value is Mired; HA's color_temp arg is deprecated in favour
+            # of color_temp_kelvin, so convert on the way out.
+            service_data["color_temp_kelvin"] = _mired_to_kelvin(color_temp)
+
+        transition = parameters.get(CONF_TRANSITION)
+        if transition is not None:
+            service_data["transition"] = transition
 
         if len(service_data) > 1:
             await self.hass.services.async_call(
                 "light", SERVICE_TURN_ON, service_data, blocking=False
             )
-            _LOGGER.info("Set light settings on %s", entity_id)
+            _LOGGER.debug("Set light settings on %s", entity_id)
 
     async def _step_set_color_temp(
         self, entity_id: str, parameters: dict[str, Any]
@@ -377,10 +410,10 @@ class AVScenesCoordinator(DataUpdateCoordinator):
             await self.hass.services.async_call(
                 "light",
                 SERVICE_TURN_ON,
-                {ATTR_ENTITY_ID: entity_id, "color_temp": color_temp},
+                {ATTR_ENTITY_ID: entity_id, "color_temp_kelvin": _mired_to_kelvin(color_temp)},
                 blocking=False,
             )
-            _LOGGER.info("Set color temp to %s on %s", color_temp, entity_id)
+            _LOGGER.debug("Set color temp to %s mired on %s", color_temp, entity_id)
 
     async def _step_set_position(
         self, entity_id: str, parameters: dict[str, Any]
@@ -394,7 +427,7 @@ class AVScenesCoordinator(DataUpdateCoordinator):
                 {ATTR_ENTITY_ID: entity_id, "position": position},
                 blocking=False,
             )
-            _LOGGER.info("Set cover position to %d%% on %s", position, entity_id)
+            _LOGGER.debug("Set cover position to %d%% on %s", position, entity_id)
 
     async def _step_set_tilt(self, entity_id: str, parameters: dict[str, Any]) -> None:
         """Set tilt on cover."""
@@ -406,7 +439,7 @@ class AVScenesCoordinator(DataUpdateCoordinator):
                 {ATTR_ENTITY_ID: entity_id, "tilt_position": tilt},
                 blocking=False,
             )
-            _LOGGER.info("Set cover tilt to %d%% on %s", tilt, entity_id)
+            _LOGGER.debug("Set cover tilt to %d%% on %s", tilt, entity_id)
 
     async def _step_call_action(self, parameters: dict[str, Any]) -> None:
         """Call a Home Assistant action/service."""
@@ -424,6 +457,6 @@ class AVScenesCoordinator(DataUpdateCoordinator):
             return
 
         service_data = parameters.get(CONF_SERVICE_DATA, {})
-        _LOGGER.info("Calling action '%s' with data: %s", action, service_data)
+        _LOGGER.debug("Calling action '%s' with data: %s", action, service_data)
         await self.hass.services.async_call(domain, service, service_data, blocking=False)
-        _LOGGER.info("Dispatched action '%s'", action)
+        _LOGGER.debug("Dispatched action '%s'", action)

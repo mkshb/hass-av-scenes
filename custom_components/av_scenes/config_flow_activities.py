@@ -1,6 +1,7 @@
 """Activities management mixin for AV Scenes config flow."""
 from __future__ import annotations
 
+import copy
 import logging
 from typing import Any
 
@@ -11,29 +12,8 @@ from .const import (
     CONF_ACTIVITIES,
     CONF_ACTIVITY_NAME,
     CONF_STEPS,
-    CONF_STEP_TYPE,
-    CONF_ENTITY_ID,
-    CONF_STEP_DELAY_AFTER,
-    CONF_STEP_PARAMETERS,
-    CONF_INPUT_SOURCE,
-    CONF_VOLUME_LEVEL,
-    CONF_SOUND_MODE,
-    CONF_BRIGHTNESS,
-    CONF_COLOR_TEMP,
-    CONF_POSITION,
-    CONF_TILT_POSITION,
-    CONF_ACTION,
-    STEP_TYPE_POWER_ON,
-    STEP_TYPE_SET_SOURCE,
-    STEP_TYPE_SET_VOLUME,
-    STEP_TYPE_SET_SOUND_MODE,
-    STEP_TYPE_SET_BRIGHTNESS,
-    STEP_TYPE_SET_COLOR_TEMP,
-    STEP_TYPE_SET_POSITION,
-    STEP_TYPE_SET_TILT,
-    STEP_TYPE_CALL_ACTION,
-    STEP_TYPE_DELAY,
 )
+from .config_flow_helpers import describe_step, translatable_select, value_select
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -71,23 +51,15 @@ class ActivitiesFlowMixin:
         if not activity_list:
             activity_list = "No activities configured yet"
 
-        actions = {
-            "add_activity": "Add new activity",
-        }
-
-        # Only show edit/delete/copy if there are activities
+        options = ["add_activity"]
         if activities:
-            actions["edit_activity"] = "Edit existing activity"
-            actions["delete_activity"] = "Delete activity"
-            actions["copy_activity"] = "Copy activity"
-
-        # Back always at the bottom
-        actions["back"] = "Back to room menu"
+            options += ["edit_activity", "delete_activity", "copy_activity"]
+        options.append("back")
 
         return self.async_show_form(
             step_id="activity_menu",
             data_schema=vol.Schema({
-                vol.Required("action"): vol.In(actions),
+                vol.Required("action"): translatable_select(options, "activity_action"),
             }),
             description_placeholders={
                 "room": self.current_room,
@@ -155,7 +127,7 @@ class ActivitiesFlowMixin:
         return self.async_show_form(
             step_id="select_activity",
             data_schema=vol.Schema({
-                vol.Required("activity_name"): vol.In(list(activities.keys())),
+                vol.Required("activity_name"): value_select(list(activities.keys())),
             }),
             description_placeholders={
                 "room": self.current_room or "unknown",
@@ -184,70 +156,18 @@ class ActivitiesFlowMixin:
         activity_data = room_data.get(CONF_ACTIVITIES, {}).get(self.current_activity, {})
         steps = activity_data.get(CONF_STEPS, [])
 
-        step_list = []
-        for idx, step in enumerate(steps, 1):
-            step_type = step.get(CONF_STEP_TYPE, "unknown")
-            entity_id = step.get(CONF_ENTITY_ID, "")
-            delay_after = step.get(CONF_STEP_DELAY_AFTER, 0)
-            parameters = step.get(CONF_STEP_PARAMETERS, {})
-
-            # Get friendly name
-            state = self.hass.states.get(entity_id) if entity_id else None
-            friendly_name = state.attributes.get("friendly_name", entity_id) if state else entity_id
-
-            # Build step description
-            if step_type == STEP_TYPE_POWER_ON:
-                step_desc = f"Turn on {friendly_name}"
-            elif step_type == STEP_TYPE_SET_SOURCE:
-                source = parameters.get(CONF_INPUT_SOURCE, "")
-                step_desc = f"Set {friendly_name} source to '{source}'"
-            elif step_type == STEP_TYPE_SET_VOLUME:
-                volume_level = parameters.get(CONF_VOLUME_LEVEL, 0.5)
-                volume_pct = int(volume_level * 100)
-                step_desc = f"Set {friendly_name} volume to {volume_pct}%"
-            elif step_type == STEP_TYPE_SET_SOUND_MODE:
-                sound_mode = parameters.get(CONF_SOUND_MODE, "")
-                step_desc = f"Set {friendly_name} sound mode to '{sound_mode}'"
-            elif step_type == STEP_TYPE_SET_BRIGHTNESS:
-                brightness = parameters.get(CONF_BRIGHTNESS)
-                if brightness is not None:
-                    brightness_pct = int(brightness * 100 / 255)
-                    step_desc = f"Set {friendly_name} brightness to {brightness_pct}%"
-                else:
-                    step_desc = f"Configure {friendly_name}"
-            elif step_type == STEP_TYPE_SET_COLOR_TEMP:
-                color_temp = parameters.get(CONF_COLOR_TEMP, 0)
-                step_desc = f"Set {friendly_name} color temp to {color_temp}K"
-            elif step_type == STEP_TYPE_SET_POSITION:
-                position = parameters.get(CONF_POSITION, 0)
-                step_desc = f"Set {friendly_name} position to {position}%"
-            elif step_type == STEP_TYPE_SET_TILT:
-                tilt = parameters.get(CONF_TILT_POSITION, 0)
-                step_desc = f"Set {friendly_name} tilt to {tilt}%"
-            elif step_type == STEP_TYPE_CALL_ACTION:
-                action = parameters.get(CONF_ACTION, "")
-                step_desc = f"Call action: {action}"
-            elif step_type == STEP_TYPE_DELAY:
-                step_desc = f"Wait {delay_after} seconds"
-            else:
-                step_desc = f"{step_type} on {friendly_name}"
-
-            # Add delay information if > 0
-            if delay_after > 0 and step_type != STEP_TYPE_DELAY:
-                step_desc += f" (then wait {delay_after}s)"
-
-            step_list.append(f"{idx}. {step_desc}")
-
+        step_list = [
+            f"{idx}. {describe_step(self.hass, step)}"
+            for idx, step in enumerate(steps, 1)
+        ]
         step_list_str = "\n".join(step_list) if step_list else "No steps configured"
 
         return self.async_show_form(
             step_id="edit_activity",
             data_schema=vol.Schema({
-                vol.Required("action"): vol.In({
-                    "edit_steps": "Edit steps",
-                    "rename": "Rename activity",
-                    "back": "Back",
-                }),
+                vol.Required("action"): translatable_select(
+                    ["edit_steps", "rename", "back"], "edit_activity_action"
+                ),
             }),
             description_placeholders={
                 "activity": self.current_activity or "unknown",
@@ -322,7 +242,7 @@ class ActivitiesFlowMixin:
         return self.async_show_form(
             step_id="delete_activity",
             data_schema=vol.Schema({
-                vol.Required("activity_name"): vol.In(list(activities.keys())),
+                vol.Required("activity_name"): value_select(list(activities.keys())),
             }),
             description_placeholders={
                 "room": self.current_room or "unknown",
@@ -350,7 +270,6 @@ class ActivitiesFlowMixin:
                     errors["new_activity_name"] = "already_exists"
                 elif source_activity in activities:
                     # Deep copy the source activity
-                    import copy
                     activities[new_activity_name] = copy.deepcopy(activities[source_activity])
                     _LOGGER.info("Copied activity %s to %s", source_activity, new_activity_name)
                     # Save immediately
@@ -368,7 +287,7 @@ class ActivitiesFlowMixin:
         return self.async_show_form(
             step_id="copy_activity",
             data_schema=vol.Schema({
-                vol.Required("source_activity"): vol.In(list(activities.keys())),
+                vol.Required("source_activity"): value_select(list(activities.keys())),
                 vol.Required("new_activity_name"): str,
             }),
             errors=errors,
