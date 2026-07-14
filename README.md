@@ -1,8 +1,8 @@
 # AV Scenes — Home Assistant Integration
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
-[![GitHub Release](https://img.shields.io/github/release/mkshb/ha_av_scenes.svg)](https://github.com/mkshb/ha_av_scenes/releases)
-[![License](https://img.shields.io/github/license/mkshb/ha_av_scenes.svg)](LICENSE)
+[![GitHub Release](https://img.shields.io/github/release/mkshb/hass-av-scenes.svg)](https://github.com/mkshb/hass-av-scenes/releases)
+[![License](https://img.shields.io/github/license/mkshb/hass-av-scenes.svg)](LICENSE)
 
 Activity-based AV control for Home Assistant — an open-source alternative to Logitech Harmony and Roomie Remote.
 
@@ -52,14 +52,14 @@ Everything is configured through the Home Assistant UI — no YAML required.
 1. Open HACS in Home Assistant
 2. **Integrations** → three dots top right → **Custom repositories**
 3. Add repository:
-   - **Repository:** `https://github.com/mkshb/ha_av_scenes`
+   - **Repository:** `https://github.com/mkshb/hass-av-scenes`
    - **Category:** Integration
 4. Find "AV Scenes" in the list and click **Download**
 5. Restart Home Assistant
 
 ### Manual
 
-1. Download the latest release from [Releases](https://github.com/mkshb/ha_av_scenes/releases)
+1. Download the latest release from [Releases](https://github.com/mkshb/hass-av-scenes/releases)
 2. Copy the `custom_components/av_scenes` folder into your `config/custom_components/` directory
 3. Restart Home Assistant
 
@@ -316,5 +316,5 @@ automation:
 ## License & Support
 
 - License: [MIT](LICENSE)
-- Bugs & feature requests: [GitHub Issues](https://github.com/mkshb/ha_av_scenes/issues)
+- Bugs & feature requests: [GitHub Issues](https://github.com/mkshb/hass-av-scenes/issues)
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
