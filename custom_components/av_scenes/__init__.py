@@ -24,6 +24,8 @@ from .const import (
     ATTR_ROOM,
     ATTR_VALUE,
     CARD_FILENAME,
+    PANEL_FILENAME,
+    PANEL_URL_PATH,
     CONF_ROOMS,
     CONFIG_MINOR_VERSION,
     CONFIG_VERSION,
@@ -61,7 +63,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the services, the websocket API and the remote control card."""
     _register_services(hass)
     websocket.async_register(hass)
-    await _async_register_card(hass)
+    await _async_register_frontend(hass)
     return True
 
 
@@ -132,20 +134,25 @@ def _register_services(hass: HomeAssistant) -> None:
     hass.services.async_register(DOMAIN, SERVICE_RELOAD, handle_reload)
 
 
-async def _async_register_card(hass: HomeAssistant) -> None:
-    """Serve the remote control card and load it on every dashboard.
+async def _async_register_frontend(hass: HomeAssistant) -> None:
+    """Serve the remote control card and the configuration panel.
 
-    The card is built by the release workflow; a plain checkout has none.
+    The card is loaded on every dashboard; the panel is shown to admins in
+    the sidebar. Both are built by the release workflow; a plain checkout has
+    none.
     """
     directory = Path(__file__).parent / "frontend"
-    card = directory / CARD_FILENAME
 
-    def _mtime() -> int | None:
-        return int(card.stat().st_mtime) if card.is_file() else None
+    def _mtimes() -> dict[str, int]:
+        return {
+            name: int((directory / name).stat().st_mtime)
+            for name in (CARD_FILENAME, PANEL_FILENAME)
+            if (directory / name).is_file()
+        }
 
-    mtime = await hass.async_add_executor_job(_mtime)
-    if mtime is None:
-        _LOGGER.warning("Remote control card %s not found; build the frontend", card)
+    mtimes = await hass.async_add_executor_job(_mtimes)
+    if CARD_FILENAME not in mtimes:
+        _LOGGER.warning("Frontend not found in %s; build it first", directory)
         return
     await hass.http.async_register_static_paths(
         [StaticPathConfig(FRONTEND_URL_BASE, str(directory), cache_headers=False)]
@@ -153,10 +160,26 @@ async def _async_register_card(hass: HomeAssistant) -> None:
     if "frontend" not in hass.config.components:
         return
     # Imported late: the frontend is only an after-dependency
+    from homeassistant.components import panel_custom
     from homeassistant.components.frontend import add_extra_js_url
 
     version = (await async_get_integration(hass, DOMAIN)).version
-    add_extra_js_url(hass, f"{FRONTEND_URL_BASE}/{CARD_FILENAME}?v={version}-{mtime}")
+
+    def url(name: str) -> str:
+        return f"{FRONTEND_URL_BASE}/{name}?v={version}-{mtimes[name]}"
+
+    add_extra_js_url(hass, url(CARD_FILENAME))
+    if PANEL_FILENAME in mtimes:
+        await panel_custom.async_register_panel(
+            hass,
+            frontend_url_path=PANEL_URL_PATH,
+            webcomponent_name="av-scenes-panel",
+            sidebar_title="AV Scenes",
+            sidebar_icon="mdi:remote-tv",
+            module_url=url(PANEL_FILENAME),
+            require_admin=True,
+            config_panel_domain=DOMAIN,
+        )
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

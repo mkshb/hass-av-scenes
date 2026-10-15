@@ -116,3 +116,5 @@ SIGNAL_ROOMS_UPDATED: Final = f"{DOMAIN}_rooms_updated"
 # Frontend
 FRONTEND_URL_BASE: Final = f"/{DOMAIN}_static"
 CARD_FILENAME: Final = "av-scenes-card.js"
+PANEL_FILENAME: Final = "av-scenes-panel.js"
+PANEL_URL_PATH: Final = "av-scenes"
