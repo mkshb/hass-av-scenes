@@ -230,18 +230,21 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     @staticmethod
     def entity_layout(rooms: dict[str, Any]) -> list[tuple[str, str, list[tuple[str, str]]]]:
-        """What the entities are made of: rooms and activities with their names."""
-        return [
+        """What the entities are made of: rooms and activities with their names.
+
+        Sorted, since the order of the stored keys is not stable.
+        """
+        return sorted(
             (
                 room_id,
                 room.get(CONF_NAME, room_id),
-                [
+                sorted(
                     (activity_id, activity.get(CONF_NAME, activity_id))
                     for activity_id, activity in (room.get(CONF_ACTIVITIES) or {}).items()
-                ],
+                ),
             )
             for room_id, room in rooms.items()
-        ]
+        )
 
     def resolve_activity(self, room_id: str, activity: str) -> str | None:
         """Map an activity id or display name to its id."""
@@ -445,7 +448,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         await self.async_start_activity(room_id, target)
 
     def default_activity(self, room_id: str) -> str | None:
-        """Activity a plain "on" starts: the last one, else the first."""
+        """Activity a plain "on" starts: the last one, else the first in order."""
         activities = self.rooms.get(room_id, {}).get(CONF_ACTIVITIES, {})
         last = self.runtime(room_id).last_activity
         if last in activities:

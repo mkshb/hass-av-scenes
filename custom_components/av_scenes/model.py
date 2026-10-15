@@ -18,6 +18,7 @@ Layout of ``entry.data``::
           <activity_id>:
             name: TV
             icon: mdi:television
+            order: 1                       # position in lists (HA stores keys sorted)
             devices: [onkyo, beamer]       # power-on order
             steps: [...]                   # settings once the devices are up
             on_start: [...]                # HA actions
@@ -63,6 +64,7 @@ from .const import (
     CONF_ON_START,
     CONF_ON_STOP,
     CONF_ON_TIMEOUT,
+    CONF_ORDER,
     CONF_POSITION,
     CONF_POWER_SWITCH,
     CONF_READY,
@@ -241,6 +243,7 @@ ACTIVITY_SCHEMA = vol.Schema(
     {
         vol.Optional(CONF_NAME): str,
         vol.Optional(CONF_ICON): cv.icon,
+        vol.Optional(CONF_ORDER): vol.Coerce(int),
         vol.Optional(CONF_DEVICES, default=list): [_KEY],
         vol.Optional(CONF_STEPS, default=list): [_step],
         # Validated in depth by async_validate_config (needs hass)
@@ -297,10 +300,29 @@ def _check_references(rooms: dict[str, Any]) -> None:
                     )
 
 
+def ordered_activities(activities: dict[str, Any]) -> dict[str, Any]:
+    """Activities in display order: by ``order``, then by name.
+
+    Home Assistant stores config entries with sorted keys, so the order the
+    activities were written in does not survive a restart.
+    """
+    return dict(
+        sorted(
+            activities.items(),
+            key=lambda item: (
+                item[1].get(CONF_ORDER, 1000),
+                str(item[1].get(CONF_NAME) or item[0]).casefold(),
+            ),
+        )
+    )
+
+
 def validate_config(data: dict[str, Any]) -> dict[str, Any]:
     """Validate v2 data synchronously (schema and cross references)."""
     validated = CONFIG_SCHEMA(data)
     _check_references(validated[CONF_ROOMS])
+    for room in validated[CONF_ROOMS].values():
+        room[CONF_ACTIVITIES] = ordered_activities(room[CONF_ACTIVITIES])
     return validated
 
 

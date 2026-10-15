@@ -40,6 +40,7 @@ def remote_room() -> dict[str, Any]:
         "ok": [{"action": "test.key", "data": {"code": "KEY_OK", "entity": "{{ entity_id }}"}}],
         "1": {"action": "test.key", "data": {"code": "KEY_1"}},
     }
+    room["activities"]["tv"]["order"] = 1
     room["activities"]["tv"]["remote"] = {"buttons": ["guide", {"command": "netflix",
                                                                "name": "Netflix"}]}
     room["activities"]["tv"]["commands"] = {

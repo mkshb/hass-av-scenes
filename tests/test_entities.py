@@ -46,7 +46,7 @@ async def test_translated_names_and_states(hass: HomeAssistant) -> None:
 
     assert sensor.state == "idle"
     assert select.state == "idle"
-    assert select.attributes["options"] == ["idle", "TV", "Musik"]
+    assert select.attributes["options"] == ["idle", "Musik", "TV"]  # by name without `order`
     assert switch.state == "off"
 
 

@@ -103,3 +103,15 @@ async def test_find_missing_entities(hass: HomeAssistant) -> None:
     assert [(m.path, m.entity_id) for m in missing] == [
         ("devices.beamer.entity_id", "media_player.epson_ehtw7400")
     ]
+
+
+def test_activity_order() -> None:
+    """HA stores keys sorted; activities follow `order`, then their name."""
+    activities = {
+        "kino": {"name": "Kino"},
+        "musik": {"name": "Musik", "order": 2},
+        "tv": {"name": "TV", "order": 1},
+        "alt": {"name": "Zuletzt"},
+    }
+    validated = validate_config({"rooms": {"wz": {"activities": activities}}})
+    assert list(validated["rooms"]["wz"]["activities"]) == ["tv", "musik", "kino", "alt"]
