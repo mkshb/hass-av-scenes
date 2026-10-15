@@ -14,4 +14,8 @@ htmlcov/
 venv/
 
 # Local Claude Code settings
-.claude/settings.local.json
+.claude/*
+
+# Frontend: dependencies and the build output (built by the release workflow)
+frontend/node_modules
+custom_components/av_scenes/frontend/
