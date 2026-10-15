@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "AV Scenes einrichten",
-        "description": "Diese Integration ermöglicht es dir, aktivitätsbasierte Szenen für deine AV-Geräte zu erstellen. Nach der Einrichtung kannst du über den Optionen-Flow Räume und Aktivitäten konfigurieren."
+        "description": "Nach der Einrichtung legst du Räume, Geräte und Aktivitäten über „Konfigurieren“ an."
       }
     },
     "abort": {
@@ -12,264 +12,64 @@
   },
   "options": {
     "step": {
-      "room_menu": {
-        "title": "Raumverwaltung",
-        "description": "Konfigurierte Räume:\n{rooms}",
-        "data": {
-          "action": "Aktion"
-        },
+      "init": {
+        "title": "AV Scenes",
         "menu_options": {
-          "add_room": "Neuen Raum hinzufügen",
-          "edit_room": "Bestehenden Raum bearbeiten",
-          "finish": "Fertigstellen und speichern"
+          "select_room": "Raum bearbeiten",
+          "add_room": "Raum hinzufügen",
+          "delete_room": "Raum löschen",
+          "edit_all": "Gesamte Konfiguration bearbeiten (YAML)"
+        }
+      },
+      "select_room": {
+        "title": "Raum bearbeiten",
+        "data": {
+          "room": "Raum"
         }
       },
       "add_room": {
         "title": "Raum hinzufügen",
-        "description": "{info}",
+        "description": "Wähle einen Bereich aus Home Assistant oder gib einen Namen ein. Danach öffnet sich der Editor für den neuen Raum.",
         "data": {
-          "room_id": "Bereich / Raum",
-          "room_name": "Eigener Anzeigename (optional)"
-        }
-      },
-      "add_custom_room": {
-        "title": "Eigenen Raum hinzufügen",
-        "description": "{info}",
-        "data": {
-          "custom_room_id": "Raum-ID (z.B. heimkino)",
-          "custom_room_name": "Raumname (z.B. Heimkino)"
-        }
-      },
-      "select_room": {
-        "title": "Raum auswählen",
-        "description": "Wähle einen Raum zum Bearbeiten",
-        "data": {
-          "room_id": "Raum"
+          "area_id": "Bereich",
+          "name": "Name"
         }
       },
       "delete_room": {
         "title": "Raum löschen",
-        "description": "{warning}",
+        "description": "Der Raum wird mit allen Geräten und Aktivitäten gelöscht.",
         "data": {
-          "room_id": "Zu löschender Raum"
+          "room": "Raum"
         }
       },
-      "activity_menu": {
-        "title": "Aktivitäten für {room}",
-        "description": "Konfigurierte Aktivitäten:\n{activities}",
+      "edit_room": {
+        "title": "Raum „{room}“",
+        "description": "Geräte, Aktivitäten und Schritte als YAML. Schritttypen: `power_on`, `power_off`, `set_source`, `set_volume`, `set_sound_mode`, `set_brightness`, `set_color_temp`, `set_position`, `set_tilt`, `call_action`, `delay`, `wait_available`. `on_start` und `on_stop` nehmen beliebige Home-Assistant-Aktionen auf. Beispiel:\n\n```yaml\nname: Wohnzimmer\ndevices:\n  onkyo:\n    entity_id: media_player.onkyo_receiver\n    power_switch: switch.steckdose_multimedia\n    ready: {timeout: 60, reload_integration: true, on_timeout: abort}\n  beamer:\n    entity_id: media_player.epson_ehtw7400\n    power_switch: switch.steckdose_beamer\n    ready: {timeout: 60, reload_integration: true, on_timeout: continue}\n    delay_after_off: 180\nactivities:\n  tv:\n    name: TV\n    devices: [onkyo, beamer]\n    steps:\n      - {type: set_source, device: onkyo, source: SAT}\n      - {type: set_volume, device: onkyo, volume_level: 0.35}\n    on_start:\n      - action: cover.close_cover\n        target: {area_id: wohnzimmer}\n```",
         "data": {
-          "action": "Aktion"
+          "config": "Konfiguration"
         }
       },
-      "add_activity": {
-        "title": "Aktivität zu {room} hinzufügen",
-        "description": "Erstelle eine neue Aktivität (z.B. Film schauen, Musik hören)",
+      "edit_all": {
+        "title": "Gesamte Konfiguration",
+        "description": "Alle Räume als YAML – praktisch zum Sichern, Kopieren oder für größere Umbauten.",
         "data": {
-          "activity_name": "Aktivitätsname"
+          "config": "Konfiguration"
         }
       },
-      "select_activity": {
-        "title": "Aktivität auswählen",
-        "description": "Wähle eine Aktivität zum Bearbeiten in {room}",
-        "data": {
-          "activity_name": "Aktivität"
-        }
-      },
-      "edit_activity": {
-        "title": "Aktivität bearbeiten: {activity}",
-        "description": "Aktuelle Schritte:\n{steps}",
-        "data": {
-          "action": "Aktion"
-        }
-      },
-      "rename_activity": {
-        "title": "Aktivität umbenennen",
-        "description": "Aktueller Name: {old_name}",
-        "data": {
-          "new_name": "Neuer Aktivitätsname"
-        }
-      },
-      "delete_activity": {
-        "title": "Aktivität löschen",
-        "description": "Wähle eine zu löschende Aktivität aus {room}\n\n{warning}",
-        "data": {
-          "activity_name": "Zu löschende Aktivität"
-        }
-      },
-      "copy_activity": {
-        "title": "Aktivität kopieren",
-        "description": "{info}",
-        "data": {
-          "source_activity": "Zu kopierende Aktivität",
-          "new_activity_name": "Name für die neue Aktivität"
-        }
-      },
-      "add_device": {
-        "title": "Gerät zu {activity} hinzufügen",
-        "description": "Wähle ein Gerät (Media Player, Licht, Steckdose, Rollladen) für diese Aktivität in {room}",
-        "data": {
-          "entity_id": "Gerät"
-        }
-      },
-      "add_device_details": {
-        "title": "{domain} konfigurieren: {device}",
-        "description": "Einstellungen für {device} festlegen",
-        "data": {
-          "input_source": "Eingangsquelle",
-          "power_on_delay": "Einschaltverzögerung (Sekunden)",
-          "is_volume_controller": "Dieses Gerät für Lautstärkeregelung verwenden",
-          "volume_level": "Anfangslautstärke (%)",
-          "brightness": "Helligkeit (%)",
-          "color_temp": "Farbtemperatur (Mired, 153-500)",
-          "transition": "Übergangszeit (Sekunden)",
-          "position": "Position (%)",
-          "tilt_position": "Neigungsposition (%)"
-        }
-      },
-      "device_menu": {
-        "title": "Geräte in Aktivität",
-        "description": "Konfigurierte Geräte:\n{devices}",
-        "data": {
-          "action": "Aktion"
-        }
-      },
-      "select_device_to_edit": {
-        "title": "Gerät zum Bearbeiten auswählen",
-        "description": "Wähle ein Gerät zum Bearbeiten",
-        "data": {
-          "device_id": "Gerät"
-        }
-      },
-      "edit_device": {
-        "title": "{domain} bearbeiten: {device}",
-        "description": "Gerätekonfiguration ändern",
-        "data": {
-          "input_source": "Eingangsquelle",
-          "power_on_delay": "Einschaltverzögerung (Sekunden)",
-          "is_volume_controller": "Dieses Gerät für Lautstärkeregelung verwenden",
-          "volume_level": "Anfangslautstärke (%)",
-          "brightness": "Helligkeit (%)",
-          "color_temp": "Farbtemperatur (Mired, 153-500)",
-          "transition": "Übergangszeit (Sekunden)",
-          "position": "Position (%)",
-          "tilt_position": "Neigungsposition (%)"
-        }
-      },
-      "select_device_to_delete": {
-        "title": "Gerät löschen",
-        "description": "{warning}",
-        "data": {
-          "device_id": "Zu löschendes Gerät"
-        }
-      },
-      "reorder_device": {
-        "title": "Geräte-Reihenfolge ändern",
-        "description": "{info}",
-        "data": {
-          "device_id": "Gerät zum Verschieben",
-          "direction": "Richtung"
-        }
-      },
-      "step_menu": {
-        "title": "Schritte in Aktivität",
-        "description": "Konfigurierte Schritte:\n{steps}",
-        "data": {
-          "action": "Aktion"
-        }
-      },
-      "add_step": {
-        "title": "Schritt hinzufügen",
-        "description": "{info}",
-        "data": {
-          "step_type": "Schritt-Typ"
-        }
-      },
-      "add_step_entity": {
-        "title": "Gerät für Schritt auswählen",
-        "description": "Wähle ein Gerät für: {step_type}",
-        "data": {
-          "entity_id": "Gerät"
-        }
-      },
-      "add_step_config": {
-        "title": "{step_type} konfigurieren: {device}",
-        "description": "{info}",
-        "data": {
-          "delay_after": "Verzögerung danach (Sekunden)",
-          "input_source": "Eingangsquelle",
-          "volume_level": "Lautstärke (%)",
-          "sound_mode": "Tonmodus",
-          "brightness": "Helligkeit (%)",
-          "color_temp": "Farbtemperatur (Mired, 153-500)",
-          "transition": "Übergangszeit (Sekunden)",
-          "position": "Position (%)",
-          "tilt_position": "Neigungsposition (%)",
-          "action": "Aktion (z.B. light.turn_on)",
-          "service_data": "Service-Daten (JSON, optional)"
-        }
-      },
-      "add_step_delay_config": {
-        "title": "Wartezeit konfigurieren",
-        "description": "{info}",
-        "data": {
-          "delay_after": "Wie viele Sekunden warten?"
-        }
-      },
-      "add_step_action_config": {
-        "title": "Aktion aufrufen",
-        "description": "{info}",
-        "data": {
-          "action": "Aktion (z.B. light.turn_on)",
-          "service_data": "Service-Daten (JSON, optional)",
-          "delay_after": "Verzögerung danach (Sekunden)"
-        }
-      },
-      "select_step_to_edit": {
-        "title": "Schritt zum Bearbeiten auswählen",
-        "description": "Wähle einen Schritt zum Bearbeiten",
-        "data": {
-          "step_id": "Schritt"
-        }
-      },
-      "edit_step": {
-        "title": "{step_type} bearbeiten: {device}",
-        "description": "{info}",
-        "data": {
-          "delay_after": "Verzögerung danach (Sekunden)",
-          "input_source": "Eingangsquelle",
-          "volume_level": "Lautstärke (%)",
-          "sound_mode": "Tonmodus",
-          "brightness": "Helligkeit (%)",
-          "color_temp": "Farbtemperatur (Mired, 153-500)",
-          "transition": "Übergangszeit (Sekunden)",
-          "position": "Position (%)",
-          "tilt_position": "Neigungsposition (%)",
-          "action": "Aktion (z.B. light.turn_on)",
-          "service_data": "Service-Daten (JSON, optional)"
-        }
-      },
-      "select_step_to_delete": {
-        "title": "Schritt löschen",
-        "description": "{warning}",
-        "data": {
-          "step_id": "Zu löschender Schritt"
-        }
-      },
-      "reorder_step": {
-        "title": "Schritt-Reihenfolge ändern",
-        "description": "{info}",
-        "data": {
-          "step_id": "Schritt zum Verschieben",
-          "direction": "Richtung"
+      "confirm_missing": {
+        "title": "Unbekannte Entitäten",
+        "description": "Diese Entitäten gibt es in Home Assistant nicht:\n\n{entities}\n\nEin Gerät ohne Strom ist der Registry normalerweise trotzdem bekannt – meist handelt es sich um einen Tippfehler oder eine umbenannte Entität.",
+        "menu_options": {
+          "save_anyway": "Trotzdem speichern",
+          "back_to_room": "Zurück zum Editor",
+          "back_to_all": "Zurück zum Editor"
         }
       }
     },
     "error": {
-      "already_exists": "Dieses Element existiert bereits",
-      "entity_not_found": "Entität wurde in Home Assistant nicht gefunden",
-      "invalid_name": "Ungültiger Name angegeben",
-      "room_not_found": "Raum nicht gefunden",
-      "unknown": "Unbekannter Fehler aufgetreten"
+      "invalid_config": "Ungültige Konfiguration – {error}",
+      "name_required": "Bitte einen Bereich oder einen Namen angeben",
+      "room_exists": "Einen Raum mit diesem Namen gibt es bereits"
     }
   },
   "entity": {
@@ -310,6 +110,26 @@
     "reload": {
       "name": "Neu laden",
       "description": "Lädt die AV Scenes Konfiguration neu"
+    },
+    "toggle_activity": {
+      "name": "Aktivität umschalten",
+      "description": "Stoppt die laufende Aktivität eines Raums oder startet eine – ohne Angabe die zuletzt genutzte.",
+      "fields": {
+        "room": {
+          "name": "Raum",
+          "description": "Die ID des Raums"
+        },
+        "activity": {
+          "name": "Aktivität",
+          "description": "Optional: Aktivität, die gestartet werden soll, wenn im Raum nichts läuft"
+        }
+      }
+    }
+  },
+  "issues": {
+    "missing_entity": {
+      "title": "AV Scenes: Entität {entity_id} fehlt",
+      "description": "Im Raum **{room}** verweist `{path}` auf `{entity_id}`. Diese Entität gibt es in Home Assistant nicht – vermutlich wurde sie umbenannt oder entfernt. Korrigiere den Eintrag in der Konfiguration von AV Scenes."
     }
   }
 }
