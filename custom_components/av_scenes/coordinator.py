@@ -55,6 +55,7 @@ from homeassistant.core import (
     Event,
     EventStateChangedData,
     HomeAssistant,
+    State,
     callback,
 )
 from homeassistant.exceptions import (
@@ -105,6 +106,7 @@ from .const import (
     CONF_ROOMS,
     CONF_SOUND_MODE,
     CONF_SOURCE,
+    CONF_STATE,
     CONF_STEPS,
     CONF_TARGET,
     CONF_TILT_POSITION,
@@ -194,6 +196,8 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._scripts: dict[tuple[str, str, str], Script] = {}
         # (room, "device"|"activity", id, command) -> command actions
         self._command_scripts: dict[tuple[str, str, str, str], Script] = {}
+        # config entry -> running reload, so repeated checks do not pile up
+        self._reloads: dict[str, asyncio.Task] = {}
         self._store: Store[dict[str, Any]] = Store(
             hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.state"
         )
@@ -620,6 +624,18 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         device = devices[device_id]
         entity_id = device[CONF_ENTITY_ID]
+        ready = device.get(CONF_READY)
+        if ready and not self._is_ready(entity_id, ready):
+            # The connection got lost while the activity runs: bring it back
+            # before the command goes nowhere
+            try:
+                await self._async_wait_ready(entity_id, ready, f"device '{device_id}'")
+            except ActivityAborted as err:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="device_not_ready",
+                    translation_placeholders={"command": command, "reason": str(err)},
+                ) from err
         if command in device[CONF_COMMANDS]:
             script = self._command_scripts[(room_id, "device", device_id, command)]
             await self._async_run_command_script(
@@ -916,19 +932,33 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # Readiness
     # ------------------------------------------------------------------
 
-    def _is_available(self, entity_id: str) -> bool:
-        state = self.hass.states.get(entity_id)
-        return state is not None and state.state != STATE_UNAVAILABLE
+    @staticmethod
+    def _state_ok(state: State | None, wanted: list[str] | None) -> bool:
+        if state is None:
+            return False
+        if wanted:
+            return state.state in wanted
+        return state.state != STATE_UNAVAILABLE
+
+    def _is_ready(self, entity_id: str, options: dict[str, Any]) -> bool:
+        target = options.get(CONF_ENTITY_ID) or entity_id
+        return self._state_ok(self.hass.states.get(target), options.get(CONF_STATE))
 
     async def _async_wait_ready(
         self, entity_id: str, options: dict[str, Any], label: str
     ) -> bool:
-        """Wait until an entity exists and is not unavailable.
+        """Wait until an entity is ready.
+
+        Ready means it exists and is not unavailable, or, with ``state``, has
+        one of those states. ``entity_id`` in the options checks another
+        entity than the given one.
 
         Returns False on a timeout with ``on_timeout: continue`` and raises
         ActivityAborted on a timeout with ``on_timeout: abort``.
         """
-        if self._is_available(entity_id):
+        entity_id = options.get(CONF_ENTITY_ID) or entity_id
+        wanted: list[str] | None = options.get(CONF_STATE)
+        if self._state_ok(self.hass.states.get(entity_id), wanted):
             return True
 
         timeout: float = options[CONF_TIMEOUT]
@@ -937,12 +967,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         @callback
         def _state_changed(event: Event[EventStateChangedData]) -> None:
-            new_state = event.data["new_state"]
-            if (
-                new_state is not None
-                and new_state.state != STATE_UNAVAILABLE
-                and not ready.done()
-            ):
+            if self._state_ok(event.data["new_state"], wanted) and not ready.done():
                 ready.set_result(None)
 
         unsub: CALLBACK_TYPE = async_track_state_change_event(
@@ -952,14 +977,22 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if options[CONF_RELOAD_INTEGRATION]:
                 self._reload_integration_of(entity_id)
             # The entity may have come up between the first check and subscribing
-            if self._is_available(entity_id):
+            if self._state_ok(self.hass.states.get(entity_id), wanted):
                 return True
-            _LOGGER.info("Waiting up to %s s for %s to become available", timeout, entity_id)
+            _LOGGER.info(
+                "Waiting up to %s s for %s to become %s",
+                timeout,
+                entity_id,
+                " or ".join(wanted) if wanted else "available",
+            )
             try:
                 async with asyncio.timeout(timeout):
                     await ready
             except TimeoutError:
-                message = f"{label}: {entity_id} not available after {timeout:g} s"
+                message = (
+                    f"{label}: {entity_id} not "
+                    f"{' or '.join(wanted) if wanted else 'available'} after {timeout:g} s"
+                )
                 if options[CONF_ON_TIMEOUT] == ON_TIMEOUT_ABORT:
                     raise ActivityAborted(message) from None
                 _LOGGER.warning("%s, continuing", message)
@@ -981,6 +1014,9 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.warning("Cannot reload integration of %s: not in the entity registry", entity_id)
             return None
         entry_id = entity.config_entry_id
+        running = self._reloads.get(entry_id)
+        if running is not None and not running.done():
+            return running
         _LOGGER.info("Reloading config entry %s to bring up %s", entry_id, entity_id)
 
         async def _reload() -> None:
@@ -989,9 +1025,9 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             except Exception:  # noqa: BLE001 - only logged, the wait decides
                 _LOGGER.exception("Reloading config entry %s failed", entry_id)
 
-        return self.hass.async_create_background_task(
-            _reload(), f"{DOMAIN} reload {entry_id}"
-        )
+        task = self.hass.async_create_background_task(_reload(), f"{DOMAIN} reload {entry_id}")
+        self._reloads[entry_id] = task
+        return task
 
     # ------------------------------------------------------------------
     # Steps and service calls

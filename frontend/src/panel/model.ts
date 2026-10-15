@@ -10,7 +10,13 @@ export interface Device extends Obj {
   entity_id: string;
   name?: string;
   power_switch?: string | null;
-  ready?: { timeout?: number; reload_integration?: boolean; on_timeout?: string } | null;
+  ready?: {
+    entity_id?: string;
+    state?: string | string[];
+    timeout?: number;
+    reload_integration?: boolean;
+    on_timeout?: string;
+  } | null;
   delay_after_power?: number;
   delay_after_on?: number;
   delay_after_off?: number;

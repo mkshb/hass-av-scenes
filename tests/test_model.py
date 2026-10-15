@@ -115,3 +115,12 @@ def test_activity_order() -> None:
     }
     validated = validate_config({"rooms": {"wz": {"activities": activities}}})
     assert list(validated["rooms"]["wz"]["activities"]) == ["tv", "musik", "kino", "alt"]
+
+
+def test_ready_entity_and_state() -> None:
+    """ready may check another entity for given states."""
+    room = {"devices": {"atv": {"entity_id": "media_player.atv",
+                                "ready": {"entity_id": "remote.atv", "state": "on"}}}}
+    ready = validate_config({"rooms": {"wz": room}})["rooms"]["wz"]["devices"]["atv"]["ready"]
+    assert ready["entity_id"] == "remote.atv"
+    assert ready["state"] == ["on"]

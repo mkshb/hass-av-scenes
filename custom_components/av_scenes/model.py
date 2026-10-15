@@ -75,6 +75,7 @@ from .const import (
     CONF_ROOMS,
     CONF_SOUND_MODE,
     CONF_SOURCE,
+    CONF_STATE,
     CONF_STEPS,
     CONF_TARGET,
     CONF_TILT_POSITION,
@@ -107,8 +108,15 @@ _KEY = vol.All(str, vol.Length(min=1))
 # Command name -> HA actions; validated in depth by async_validate_config
 _COMMANDS = {_KEY: vol.Any(dict, [dict])}
 
+# Wait for these states instead of "not unavailable"
+_STATES = vol.All(cv.ensure_list, [cv.string], vol.Length(min=1))
+
 READY_SCHEMA = vol.Schema(
     {
+        # Check another entity than the device's own, e.g. the remote of an
+        # Apple TV, which is "on" only while the integration is connected
+        vol.Optional(CONF_ENTITY_ID): cv.entity_id,
+        vol.Optional(CONF_STATE): _STATES,
         vol.Optional(CONF_TIMEOUT, default=DEFAULT_READY_TIMEOUT): vol.All(
             vol.Coerce(float), vol.Range(min=1, max=3600)
         ),
@@ -191,6 +199,7 @@ STEP_SCHEMAS: dict[str, vol.Schema] = {
                 **_STEP_BASE,
                 vol.Exclusive(CONF_DEVICE, "target"): _KEY,
                 vol.Exclusive(CONF_ENTITY_ID, "target"): cv.entity_id,
+                vol.Optional(CONF_STATE): _STATES,
                 vol.Optional(CONF_TIMEOUT, default=DEFAULT_READY_TIMEOUT): vol.All(
                     vol.Coerce(float), vol.Range(min=1, max=3600)
                 ),
@@ -380,6 +389,10 @@ def iter_entity_references(data: dict[str, Any]):
             if device.get(CONF_POWER_SWITCH):
                 yield EntityReference(
                     room_id, f"{base}.power_switch", device[CONF_POWER_SWITCH]
+                )
+            if (device.get(CONF_READY) or {}).get(CONF_ENTITY_ID):
+                yield EntityReference(
+                    room_id, f"{base}.ready.entity_id", device[CONF_READY][CONF_ENTITY_ID]
                 )
         for activity_id, activity in (room.get(CONF_ACTIVITIES) or {}).items():
             for idx, step in enumerate(activity.get(CONF_STEPS) or []):

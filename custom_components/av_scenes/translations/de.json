@@ -196,6 +196,9 @@
     },
     "command_timeout": {
       "message": "Befehl „{command}“ wurde nicht rechtzeitig fertig ({target})"
+    },
+    "device_not_ready": {
+      "message": "Befehl „{command}“ nicht gesendet: {reason}"
     }
   }
 }

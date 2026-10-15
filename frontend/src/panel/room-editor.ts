@@ -25,6 +25,12 @@ import { t } from "./strings";
 
 type Tab = "devices" | "activities" | "yaml";
 
+/** "on, idle" -> ["on", "idle"]; one state stays a plain string. */
+function splitStates(value: string | undefined): string | string[] | undefined {
+  const states = (value ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  return states.length > 1 ? states : states[0];
+}
+
 const SECONDS = { number: { min: 0, max: 3600, step: 1, mode: "box", unit_of_measurement: "s" } };
 
 export class AvScenesRoomEditor extends LitElement {
@@ -130,6 +136,8 @@ export class AvScenesRoomEditor extends LitElement {
       delay_after_on: device.delay_after_on,
       delay_after_off: device.delay_after_off,
       ready_enabled: ready !== null,
+      ready_entity: ready?.entity_id,
+      ready_state: Array.isArray(ready?.state) ? ready?.state.join(", ") : ready?.state,
       ready_timeout: ready?.timeout,
       ready_reload: ready?.reload_integration,
       ready_on_timeout: ready?.on_timeout,
@@ -145,6 +153,8 @@ export class AvScenesRoomEditor extends LitElement {
       { name: "ready_enabled", selector: { boolean: {} } },
       ...(ready !== null
         ? [
+            { name: "ready_entity", selector: { entity: {} } },
+            { name: "ready_state", selector: { text: {} } },
             { name: "ready_timeout", selector: SECONDS },
             { name: "ready_reload", selector: { boolean: {} } },
             {
@@ -204,6 +214,8 @@ export class AvScenesRoomEditor extends LitElement {
       power_switch: v.power_switch as string | undefined,
       ready: v.ready_enabled
         ? clean({
+            entity_id: v.ready_entity as string | undefined,
+            state: splitStates(v.ready_state as string | undefined),
             timeout: v.ready_timeout as number | undefined,
             reload_integration: v.ready_reload as boolean | undefined,
             on_timeout: v.ready_on_timeout as string | undefined,

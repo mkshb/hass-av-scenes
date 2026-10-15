@@ -1,13 +1,14 @@
 """Tests for the remote control: command routing, service and websocket."""
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import pytest
 import voluptuous as vol
 
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from .common import BEAMER, ONKYO, VU, Devices, living_room, setup
 from custom_components.av_scenes.const import DOMAIN
@@ -202,3 +203,53 @@ async def test_websocket_rooms_and_subscribe(
     # Unloading for good sends null
     await hass.config_entries.async_unload(coordinator.entry.entry_id)
     assert (await client.receive_json())["event"] is None
+
+
+async def test_send_command_reconnects_first(
+    hass: HomeAssistant, devices: Devices, player_calls
+) -> None:
+    """A lost connection is brought back (one reload) before the command goes out."""
+    from unittest.mock import patch
+
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from homeassistant.helpers import entity_registry as er
+
+    apple = MockConfigEntry(domain="apple_tv")
+    apple.add_to_hass(hass)
+    er.async_get(hass).async_get_or_create(
+        "remote", "apple_tv", "x", suggested_object_id="vu", config_entry=apple
+    )
+    data = remote_room()
+    data["rooms"]["wz"]["devices"]["vu"]["ready"] = {
+        "entity_id": "remote.vu", "state": "on", "timeout": 5,
+        "reload_integration": True, "on_timeout": "abort",
+    }
+    hass.states.async_set("remote.vu", "on")
+    coordinator = await setup(hass, devices, data)
+    await coordinator.async_start_activity("wz", "tv")
+    hass.states.async_set("remote.vu", "off")  # connection lost
+    reloads: list[str] = []
+
+    async def fake_reload(entry_id: str) -> bool:
+        reloads.append(entry_id)
+        await asyncio.sleep(0.05)
+        hass.states.async_set("remote.vu", "on")
+        return True
+
+    with patch.object(hass.config_entries, "async_reload", side_effect=fake_reload):
+        # Held button: several presses while reconnecting, one reload
+        await asyncio.gather(send(hass, "channel_up"), send(hass, "channel_up"))
+
+    assert reloads == [apple.entry_id]
+    assert player_calls == [
+        ("media_player.media_next_track", {"entity_id": VU}),
+        ("media_player.media_next_track", {"entity_id": VU}),
+    ]
+
+    # Still not connected after the timeout: the caller gets an error
+    hass.states.async_set("remote.vu", "off")
+    coordinator.rooms["wz"]["devices"]["vu"]["ready"].update(timeout=1, reload_integration=False)
+    with pytest.raises(HomeAssistantError) as err:
+        await send(hass, "channel_up")
+    assert err.value.translation_key == "device_not_ready"

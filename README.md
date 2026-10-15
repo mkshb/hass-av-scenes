@@ -149,9 +149,19 @@ activities:
 
 | Key | Default | Description |
 |-----|---------|-------------|
+| `entity_id` | the device | Check another entity, e.g. `remote.apple_tv`: the Apple TV integration reports its media player as `off` while it is not connected, while its remote is `on` only when connected |
+| `state` | — | Wait for this state (or a list of states) instead of "not `unavailable`" |
 | `timeout` | `60` | Seconds to wait for the entity |
 | `reload_integration` | `false` | Reload the integration that provides the entity once, before waiting. This skips the back-off of an integration in `setup_retry`, which can otherwise take more than a minute after the device got power |
 | `on_timeout` | `abort` | `abort` stops the start and puts the room into `error`; `continue` logs a warning and goes on |
+
+The check also runs before a remote button (`send_command`) reaches the device: if the connection was lost while the activity runs, it is brought back first, then the command is sent. Example for an Apple TV:
+
+```yaml
+aptv:
+  entity_id: media_player.apple_tv
+  ready: {entity_id: remote.apple_tv, state: "on", timeout: 30, reload_integration: true, on_timeout: continue}
+```
 
 ### Activities
 
@@ -184,7 +194,7 @@ Every step has a `type` and may have `delay_after` (seconds to wait afterwards).
 | `set_tilt` | `device`, `tilt_position` (0–100) | `cover.set_cover_tilt_position` |
 | `power_on` / `power_off` | `device` | Switch a device on or off in the middle of the sequence |
 | `call_action` | `action`, `data`, `target` | Any Home Assistant action |
-| `wait_available` | `device` or `entity_id`, `timeout`, `reload_integration`, `on_timeout` | Same as a device's `ready`, for any entity at any point |
+| `wait_available` | `device` or `entity_id`, `state`, `timeout`, `reload_integration`, `on_timeout` | Same as a device's `ready`, for any entity at any point |
 | `delay` | `delay_after` | Only wait |
 
 Every service call waits for the device to finish (`blocking`), at most 15 seconds. A failing step is logged and listed in the sensor's `warnings` attribute; the activity continues.

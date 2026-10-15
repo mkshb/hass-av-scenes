@@ -196,6 +196,9 @@
     },
     "command_timeout": {
       "message": "Command \"{command}\" did not finish in time ({target})"
+    },
+    "device_not_ready": {
+      "message": "Command \"{command}\" not sent: {reason}"
     }
   }
 }

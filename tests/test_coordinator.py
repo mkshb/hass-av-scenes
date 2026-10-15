@@ -293,3 +293,38 @@ async def test_delay_after_power_skipped_when_powered(
     await coordinator.async_start_activity("wz", "musik")
 
     assert devices.sleeps == []
+
+
+async def test_ready_waits_for_state_of_other_entity(
+    hass: HomeAssistant, devices: Devices
+) -> None:
+    """An Apple TV reports off while disconnected; its remote tells the truth."""
+    apple = MockConfigEntry(domain="apple_tv")
+    apple.add_to_hass(hass)
+    er.async_get(hass).async_get_or_create(
+        "remote", "apple_tv", "x", suggested_object_id="vu", config_entry=apple
+    )
+    data = living_room()
+    data["rooms"]["wz"]["devices"]["vu"]["ready"] = {
+        "entity_id": "remote.vu", "state": "on", "timeout": 5,
+        "reload_integration": True, "on_timeout": "continue",
+    }
+    hass.states.async_set("remote.vu", "off")
+    coordinator = await setup(hass, devices, data)
+    order: list[str] = []
+
+    async def fake_reload(entry_id: str) -> bool:
+        await asyncio.sleep(0.05)
+        order.append("reloaded")
+        hass.states.async_set("remote.vu", "on")
+        return True
+
+    with patch.object(hass.config_entries, "async_reload", side_effect=fake_reload):
+        await coordinator.async_start_activity("wz", "tv")
+        await hass.async_block_till_done()
+
+    # The VU+ is switched on only once its remote is connected
+    names = devices.names()
+    assert order == ["reloaded"]
+    assert ("homeassistant.turn_on", (VU,)) in names
+    assert coordinator.activity_states["wz"] == "active"
