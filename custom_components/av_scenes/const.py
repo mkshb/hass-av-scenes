@@ -30,6 +30,11 @@ CONF_ON_START: Final = "on_start"
 CONF_ON_STOP: Final = "on_stop"
 CONF_ID: Final = "id"
 CONF_TYPE: Final = "type"
+CONF_ICON: Final = "icon"
+CONF_COMMANDS: Final = "commands"
+CONF_REMOTE: Final = "remote"
+CONF_BUTTONS: Final = "buttons"
+CONF_COMMAND: Final = "command"
 
 # Step parameters
 CONF_SOURCE: Final = "source"
@@ -78,9 +83,34 @@ SERVICE_START_ACTIVITY: Final = "start_activity"
 SERVICE_STOP_ACTIVITY: Final = "stop_activity"
 SERVICE_TOGGLE_ACTIVITY: Final = "toggle_activity"
 SERVICE_RELOAD: Final = "reload"
+SERVICE_SEND_COMMAND: Final = "send_command"
 
 # Attributes
 ATTR_ROOM: Final = "room"
 ATTR_ACTIVITY: Final = "activity"
+ATTR_COMMAND: Final = "command"
+ATTR_DEVICE: Final = "device"
+ATTR_VALUE: Final = "value"
 ATTR_CURRENT_ACTIVITY: Final = "current_activity"
 ATTR_AVAILABLE_ACTIVITIES: Final = "available_activities"
+
+# Remote control: command groups an activity routes to one device each
+GROUP_VOLUME: Final = "volume"
+GROUP_CHANNELS: Final = "channels"
+GROUP_TRANSPORT: Final = "transport"
+GROUP_NAVIGATION: Final = "navigation"
+COMMAND_GROUPS: Final[dict[str, tuple[str, ...]]] = {
+    GROUP_VOLUME: ("volume_up", "volume_down", "mute", "volume_set"),
+    GROUP_CHANNELS: ("channel_up", "channel_down"),
+    GROUP_TRANSPORT: ("play_pause", "play", "pause", "stop", "next", "previous"),
+    GROUP_NAVIGATION: (
+        "up", "down", "left", "right", "ok", "back", "menu", "home", "info", "guide", "exit",
+    ),
+}
+
+# Signal sent whenever the state or configuration of a room changes
+SIGNAL_ROOMS_UPDATED: Final = f"{DOMAIN}_rooms_updated"
+
+# Frontend
+FRONTEND_URL_BASE: Final = f"/{DOMAIN}_static"
+CARD_FILENAME: Final = "av-scenes-card.js"

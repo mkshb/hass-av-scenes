@@ -12,13 +12,23 @@ Layout of ``entry.data``::
             ready: {timeout: 60, reload_integration: true, on_timeout: abort}
             delay_after_on: 0
             delay_after_off: 0
+            commands:                      # remote buttons -> HA actions
+              guide: [...]
         activities:
           <activity_id>:
             name: TV
+            icon: mdi:television
             devices: [onkyo, beamer]       # power-on order
             steps: [...]                   # settings once the devices are up
             on_start: [...]                # HA actions
             on_stop: [...]                 # HA actions
+            remote:                        # which device gets which buttons
+              volume: onkyo
+              channels: vu
+              transport: vu
+              navigation: vu
+              buttons: [{command: netflix, name: Netflix, icon: mdi:netflix}]
+            commands: {netflix: [...]}     # activity-only commands
 """
 from __future__ import annotations
 
@@ -32,17 +42,22 @@ from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.script import async_validate_actions_config
 
 from .const import (
+    COMMAND_GROUPS,
     CONF_ACTION,
     CONF_ACTIVITIES,
     CONF_AREA_ID,
     CONF_BRIGHTNESS_PCT,
+    CONF_BUTTONS,
     CONF_COLOR_TEMP_KELVIN,
+    CONF_COMMAND,
+    CONF_COMMANDS,
     CONF_DATA,
     CONF_DELAY_AFTER_OFF,
     CONF_DELAY_AFTER_ON,
     CONF_DEVICE,
     CONF_DEVICES,
     CONF_ENTITY_ID,
+    CONF_ICON,
     CONF_ID,
     CONF_NAME,
     CONF_ON_START,
@@ -52,6 +67,7 @@ from .const import (
     CONF_POWER_SWITCH,
     CONF_READY,
     CONF_RELOAD_INTEGRATION,
+    CONF_REMOTE,
     CONF_ROOMS,
     CONF_SOUND_MODE,
     CONF_SOURCE,
@@ -84,6 +100,8 @@ CONF_DELAY_AFTER = "delay_after"
 _SECONDS = vol.All(vol.Coerce(float), vol.Range(min=0, max=3600))
 _PERCENT = vol.All(vol.Coerce(int), vol.Range(min=0, max=100))
 _KEY = vol.All(str, vol.Length(min=1))
+# Command name -> HA actions; validated in depth by async_validate_config
+_COMMANDS = {_KEY: vol.Any(dict, [dict])}
 
 READY_SCHEMA = vol.Schema(
     {
@@ -105,6 +123,7 @@ DEVICE_SCHEMA = vol.Schema(
         vol.Optional(CONF_READY): vol.Any(None, READY_SCHEMA),
         vol.Optional(CONF_DELAY_AFTER_ON, default=0): _SECONDS,
         vol.Optional(CONF_DELAY_AFTER_OFF, default=0): _SECONDS,
+        vol.Optional(CONF_COMMANDS, default=dict): _COMMANDS,
     }
 )
 
@@ -194,14 +213,41 @@ def _step(value: Any) -> dict[str, Any]:
     return schema(value)
 
 
+def _button(value: Any) -> dict[str, Any]:
+    """A remote button: a command name, optionally with label and icon."""
+    if isinstance(value, str):
+        value = {CONF_COMMAND: value}
+    return BUTTON_SCHEMA(value)
+
+
+BUTTON_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_COMMAND): _KEY,
+        vol.Optional(CONF_NAME): str,
+        vol.Optional(CONF_ICON): cv.icon,
+        vol.Optional(CONF_DEVICE): _KEY,
+    }
+)
+
+REMOTE_SCHEMA = vol.Schema(
+    {
+        # A device id, or null to hide the group
+        **{vol.Optional(group): vol.Any(None, _KEY) for group in COMMAND_GROUPS},
+        vol.Optional(CONF_BUTTONS, default=list): [_button],
+    }
+)
+
 ACTIVITY_SCHEMA = vol.Schema(
     {
         vol.Optional(CONF_NAME): str,
+        vol.Optional(CONF_ICON): cv.icon,
         vol.Optional(CONF_DEVICES, default=list): [_KEY],
         vol.Optional(CONF_STEPS, default=list): [_step],
         # Validated in depth by async_validate_config (needs hass)
         vol.Optional(CONF_ON_START, default=list): vol.Any(None, [dict]),
         vol.Optional(CONF_ON_STOP, default=list): vol.Any(None, [dict]),
+        vol.Optional(CONF_REMOTE, default=dict): REMOTE_SCHEMA,
+        vol.Optional(CONF_COMMANDS, default=dict): _COMMANDS,
     }
 )
 
@@ -235,6 +281,20 @@ def _check_references(rooms: dict[str, Any]) -> None:
                         f"unknown device '{device}'",
                         path=[*base, CONF_STEPS, idx, CONF_DEVICE],
                     )
+            remote = activity[CONF_REMOTE]
+            for group in COMMAND_GROUPS:
+                device = remote.get(group)
+                if device is not None and device not in devices:
+                    raise vol.Invalid(
+                        f"unknown device '{device}'", path=[*base, CONF_REMOTE, group]
+                    )
+            for idx, button in enumerate(remote[CONF_BUTTONS]):
+                device = button.get(CONF_DEVICE)
+                if device is not None and device not in devices:
+                    raise vol.Invalid(
+                        f"unknown device '{device}'",
+                        path=[*base, CONF_REMOTE, CONF_BUTTONS, idx, CONF_DEVICE],
+                    )
 
 
 def validate_config(data: dict[str, Any]) -> dict[str, Any]:
@@ -244,22 +304,35 @@ def validate_config(data: dict[str, Any]) -> dict[str, Any]:
     return validated
 
 
+async def _async_validate_actions(
+    hass: HomeAssistant, actions: Any, path: list[str | int]
+) -> list[dict[str, Any]]:
+    try:
+        return await async_validate_actions_config(hass, cv.SCRIPT_SCHEMA(actions or []))
+    except vol.Invalid as err:
+        raise vol.Invalid(err.msg, path=[*path, *err.path]) from err
+
+
 async def async_validate_config(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
-    """Validate v2 data including the HA actions in on_start / on_stop."""
+    """Validate v2 data including the HA actions in hooks and commands."""
     validated = validate_config(data)
     for room_id, room in validated[CONF_ROOMS].items():
+        base = [CONF_ROOMS, room_id]
+        for device_id, device in room[CONF_DEVICES].items():
+            for name, actions in device[CONF_COMMANDS].items():
+                device[CONF_COMMANDS][name] = await _async_validate_actions(
+                    hass, actions, [*base, CONF_DEVICES, device_id, CONF_COMMANDS, name]
+                )
         for activity_id, activity in room[CONF_ACTIVITIES].items():
+            path = [*base, CONF_ACTIVITIES, activity_id]
             for key in (CONF_ON_START, CONF_ON_STOP):
-                actions = activity.get(key) or []
-                try:
-                    activity[key] = await async_validate_actions_config(
-                        hass, cv.SCRIPT_SCHEMA(actions)
-                    )
-                except vol.Invalid as err:
-                    raise vol.Invalid(
-                        err.msg,
-                        path=[CONF_ROOMS, room_id, CONF_ACTIVITIES, activity_id, key, *err.path],
-                    ) from err
+                activity[key] = await _async_validate_actions(
+                    hass, activity.get(key), [*path, key]
+                )
+            for name, actions in activity[CONF_COMMANDS].items():
+                activity[CONF_COMMANDS][name] = await _async_validate_actions(
+                    hass, actions, [*path, CONF_COMMANDS, name]
+                )
     return validated
 
 

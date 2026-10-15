@@ -21,6 +21,9 @@ Stopping an activity
 
 A new command for a room cancels whatever runs there (a stop during a long
 start, a different activity while starting).
+
+Remote buttons (``send_command``) are routed to the devices of the running
+activity, see control.py. They do not interfere with starting or stopping.
 """
 from __future__ import annotations
 
@@ -52,8 +55,13 @@ from homeassistant.core import (
     HomeAssistant,
     callback,
 )
-from homeassistant.exceptions import ConfigEntryError
+from homeassistant.exceptions import (
+    ConfigEntryError,
+    HomeAssistantError,
+    ServiceValidationError,
+)
 from homeassistant.helpers import entity_registry as er, issue_registry as ir
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.script import SCRIPT_MODE_PARALLEL, Script
 from homeassistant.helpers.storage import Store
@@ -66,16 +74,22 @@ from .const import (
     ACTIVITY_STATE_IDLE,
     ACTIVITY_STATE_STARTING,
     ACTIVITY_STATE_STOPPING,
+    COMMAND_GROUPS,
     CONF_ACTION,
     CONF_ACTIVITIES,
+    CONF_AREA_ID,
     CONF_BRIGHTNESS_PCT,
+    CONF_BUTTONS,
     CONF_COLOR_TEMP_KELVIN,
+    CONF_COMMAND,
+    CONF_COMMANDS,
     CONF_DATA,
     CONF_DELAY_AFTER_OFF,
     CONF_DELAY_AFTER_ON,
     CONF_DEVICE,
     CONF_DEVICES,
     CONF_ENTITY_ID,
+    CONF_ICON,
     CONF_NAME,
     CONF_ON_START,
     CONF_ON_STOP,
@@ -84,6 +98,7 @@ from .const import (
     CONF_POWER_SWITCH,
     CONF_READY,
     CONF_RELOAD_INTEGRATION,
+    CONF_REMOTE,
     CONF_ROOMS,
     CONF_SOUND_MODE,
     CONF_SOURCE,
@@ -97,6 +112,7 @@ from .const import (
     DEFAULT_SERVICE_TIMEOUT,
     DOMAIN,
     ON_TIMEOUT_ABORT,
+    SIGNAL_ROOMS_UPDATED,
     STEP_TYPE_CALL_ACTION,
     STEP_TYPE_DELAY,
     STEP_TYPE_POWER_OFF,
@@ -110,6 +126,7 @@ from .const import (
     STEP_TYPE_SET_VOLUME,
     STEP_TYPE_WAIT_AVAILABLE,
 )
+from .control import builtin_call, command_group, device_commands, routing
 from .model import CONF_DELAY_AFTER, async_validate_config, find_missing_entities
 
 _LOGGER = logging.getLogger(__name__)
@@ -170,7 +187,10 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.rooms: dict[str, dict[str, Any]] = {}
         self.service_timeout: float = DEFAULT_SERVICE_TIMEOUT
         self._runtime: dict[str, RoomRuntime] = {}
+        # (room, activity, on_start|on_stop) -> hook
         self._scripts: dict[tuple[str, str, str], Script] = {}
+        # (room, "device"|"activity", id, command) -> command actions
+        self._command_scripts: dict[tuple[str, str, str, str], Script] = {}
         self._store: Store[dict[str, Any]] = Store(
             hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.state"
         )
@@ -257,19 +277,36 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _build_scripts(self) -> None:
         self._scripts = {}
+        self._command_scripts = {}
+
+        def script(actions: list[dict[str, Any]], name: str) -> Script:
+            return Script(
+                self.hass,
+                actions,
+                f"AV Scenes {name}",
+                DOMAIN,
+                script_mode=SCRIPT_MODE_PARALLEL,
+                logger=_LOGGER,
+            )
+
         for room_id, room in self.rooms.items():
+            room_name = room.get(CONF_NAME, room_id)
+            for device_id, device in room[CONF_DEVICES].items():
+                for command, actions in device[CONF_COMMANDS].items():
+                    self._command_scripts[(room_id, "device", device_id, command)] = script(
+                        actions, f"{room_name} {device_id} {command}"
+                    )
             for activity_id, activity in room[CONF_ACTIVITIES].items():
+                activity_name = activity.get(CONF_NAME, activity_id)
                 for key in (CONF_ON_START, CONF_ON_STOP):
                     if activity.get(key):
-                        self._scripts[(room_id, activity_id, key)] = Script(
-                            self.hass,
-                            activity[key],
-                            f"AV Scenes {room.get(CONF_NAME, room_id)} "
-                            f"{activity.get(CONF_NAME, activity_id)} {key}",
-                            DOMAIN,
-                            script_mode=SCRIPT_MODE_PARALLEL,
-                            logger=_LOGGER,
+                        self._scripts[(room_id, activity_id, key)] = script(
+                            activity[key], f"{room_name} {activity_name} {key}"
                         )
+                for command, actions in activity[CONF_COMMANDS].items():
+                    self._command_scripts[(room_id, "activity", activity_id, command)] = (
+                        script(actions, f"{room_name} {activity_name} {command}")
+                    )
 
     @callback
     def _update_issues(self) -> None:
@@ -346,6 +383,12 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _changed(self) -> None:
         self._schedule_save()
         self.async_update_listeners()
+
+    @callback
+    def async_update_listeners(self) -> None:
+        """Update the entities and tell subscribed remote controls."""
+        super().async_update_listeners()
+        async_dispatcher_send(self.hass, SIGNAL_ROOMS_UPDATED)
 
     async def async_shutdown(self) -> None:
         """Cancel running work when the entry unloads."""
@@ -453,6 +496,167 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # The task was cancelled by another command; wait until it is gone
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+
+    # ------------------------------------------------------------------
+    # Remote control
+    # ------------------------------------------------------------------
+
+    def room_view(self, room_id: str) -> dict[str, Any]:
+        """Everything a remote control needs to show a room."""
+        room = self.rooms[room_id]
+        rt = self.runtime(room_id)
+        activities: dict[str, Any] = room[CONF_ACTIVITIES]
+        activity = activities.get(rt.activity) if rt.activity else None
+        return {
+            "entry_id": self.entry.entry_id,
+            "room": room_id,
+            "name": room.get(CONF_NAME, room_id),
+            "area_id": room.get(CONF_AREA_ID),
+            "state": rt.state,
+            "activity": rt.activity,
+            "error": rt.error,
+            "warnings": list(rt.warnings),
+            "progress": list(rt.progress),
+            "default_activity": self.default_activity(room_id),
+            "activities": [
+                {
+                    "id": activity_id,
+                    "name": data.get(CONF_NAME, activity_id),
+                    "icon": data.get(CONF_ICON),
+                }
+                for activity_id, data in activities.items()
+            ],
+            "remote": self._remote_view(room, activity) if activity is not None else None,
+        }
+
+    @staticmethod
+    def _remote_view(room: dict[str, Any], activity: dict[str, Any]) -> dict[str, Any]:
+        devices = room[CONF_DEVICES]
+        own: list[str] = list(activity[CONF_COMMANDS])
+        groups: dict[str, Any] = {}
+        for group, device_id in routing(room, activity).items():
+            available = set(own)
+            if device_id is not None:
+                available.update(device_commands(devices[device_id]))
+            commands = [c for c in COMMAND_GROUPS[group] if c in available]
+            if commands:
+                groups[group] = {
+                    "device": device_id,
+                    "entity_id": devices[device_id][CONF_ENTITY_ID] if device_id else None,
+                    "commands": commands,
+                }
+        return {
+            "groups": groups,
+            "buttons": [
+                {
+                    "command": button[CONF_COMMAND],
+                    "name": button.get(CONF_NAME),
+                    "icon": button.get(CONF_ICON),
+                    "device": button.get(CONF_DEVICE),
+                }
+                for button in activity[CONF_REMOTE][CONF_BUTTONS]
+            ],
+        }
+
+    async def async_send_command(
+        self,
+        room_id: str,
+        command: str,
+        *,
+        value: Any = None,
+        device_id: str | None = None,
+        context: Context | None = None,
+    ) -> None:
+        """Run a remote command on the devices of the running activity.
+
+        With ``device_id`` the command goes to that device, even while
+        nothing runs. Errors are raised, so the caller sees them.
+        """
+        room = self.rooms[room_id]
+        devices: dict[str, Any] = room[CONF_DEVICES]
+        activity_id = self.runtime(room_id).activity
+        activity = room[CONF_ACTIVITIES].get(activity_id) if activity_id else None
+        placeholders = {"room": room.get(CONF_NAME, room_id), "command": command}
+        variables = {"command": command, "value": value}
+
+        if device_id is not None:
+            if device_id not in devices:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="unknown_device",
+                    translation_placeholders={**placeholders, "device": device_id},
+                )
+        else:
+            if activity is None:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="no_activity",
+                    translation_placeholders=placeholders,
+                )
+            if command in activity[CONF_COMMANDS]:
+                script = self._command_scripts[(room_id, "activity", activity_id, command)]
+                await self._async_run_command_script(script, variables, context)
+                return
+            group = command_group(command)
+            if group is not None:
+                device_id = routing(room, activity)[group]
+            else:
+                device_id = next(
+                    (d for d in activity[CONF_DEVICES] if command in devices[d][CONF_COMMANDS]),
+                    None,
+                )
+            if device_id is None:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="unknown_command",
+                    translation_placeholders=placeholders,
+                )
+
+        device = devices[device_id]
+        entity_id = device[CONF_ENTITY_ID]
+        if command in device[CONF_COMMANDS]:
+            script = self._command_scripts[(room_id, "device", device_id, command)]
+            await self._async_run_command_script(
+                script, {**variables, "entity_id": entity_id}, context
+            )
+            return
+
+        try:
+            call = builtin_call(command, entity_id, self.hass.states.get(entity_id), value)
+        except ValueError as err:
+            raise ServiceValidationError(str(err)) from err
+        if call is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="unknown_command",
+                translation_placeholders=placeholders,
+            )
+        domain, service, data = call
+        _LOGGER.debug("Room '%s': %s -> %s.%s %s", room_id, command, domain, service, data)
+        try:
+            async with asyncio.timeout(self.service_timeout):
+                await self.hass.services.async_call(
+                    domain, service, data, blocking=True, context=context
+                )
+        except TimeoutError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="command_timeout",
+                translation_placeholders={"command": command, "target": entity_id},
+            ) from err
+
+    async def _async_run_command_script(
+        self, script: Script, variables: dict[str, Any], context: Context | None
+    ) -> None:
+        try:
+            async with asyncio.timeout(self.service_timeout):
+                await script.async_run(run_variables=variables, context=context or Context())
+        except TimeoutError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="command_timeout",
+                translation_placeholders={"command": variables["command"], "target": script.name},
+            ) from err
 
     # ------------------------------------------------------------------
     # Start

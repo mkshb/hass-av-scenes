@@ -144,6 +144,28 @@
           "description": "Optional: Aktivität, die gestartet werden soll, wenn im Raum nichts läuft"
         }
       }
+    },
+    "send_command": {
+      "name": "Befehl senden",
+      "description": "Sendet einen Fernbedienungsbefehl (z. B. volume_up, channel_down, ok) an das Gerät, dem die laufende Aktivität ihn zuordnet.",
+      "fields": {
+        "room": {
+          "name": "Raum",
+          "description": "Die Raum-ID"
+        },
+        "command": {
+          "name": "Befehl",
+          "description": "volume_up, volume_down, mute, volume_set, channel_up, channel_down, play_pause, play, pause, stop, next, previous, up, down, left, right, ok, back, menu, home, info, guide, exit – oder ein Name aus `commands`"
+        },
+        "value": {
+          "name": "Wert",
+          "description": "Wert für den Befehl, z. B. 0.4 für volume_set"
+        },
+        "device": {
+          "name": "Gerät",
+          "description": "Optional: an dieses Gerät statt an das zugeordnete senden; geht auch, wenn nichts läuft"
+        }
+      }
     }
   },
   "issues": {
@@ -154,6 +176,26 @@
     "activity_aborted": {
       "title": "AV Scenes: Start von „{activity}“ abgebrochen",
       "description": "Im Raum **{room}** wurde der Start der Aktivität **{activity}** abgebrochen:\n\n`{reason}`\n\nPrüfe, ob das Gerät Strom hat und seine Integration lädt, oder erhöhe `timeout` bzw. setze `on_timeout: continue`. Der Hinweis verschwindet beim nächsten Start oder Stopp des Raums."
+    }
+  },
+  "exceptions": {
+    "unknown_room": {
+      "message": "AV Scenes hat keinen Raum „{room}“"
+    },
+    "unknown_activity": {
+      "message": "Raum „{room}“ hat keine Aktivität „{activity}“"
+    },
+    "unknown_device": {
+      "message": "Raum „{room}“ hat kein Gerät „{device}“"
+    },
+    "no_activity": {
+      "message": "In Raum „{room}“ läuft nichts, daher gibt es kein Gerät für „{command}“"
+    },
+    "unknown_command": {
+      "message": "Kein Gerät in Raum „{room}“ kennt den Befehl „{command}“"
+    },
+    "command_timeout": {
+      "message": "Befehl „{command}“ wurde nicht rechtzeitig fertig ({target})"
     }
   }
 }

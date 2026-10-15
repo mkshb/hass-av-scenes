@@ -2,23 +2,39 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
-from homeassistant.config_entries import ConfigEntry
+import voluptuous as vol
+
+from homeassistant.components.http import StaticPathConfig
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.typing import ConfigType
+from homeassistant.loader import async_get_integration
 
+from . import websocket
 from .const import (
+    ATTR_ACTIVITY,
+    ATTR_COMMAND,
+    ATTR_DEVICE,
+    ATTR_ROOM,
+    ATTR_VALUE,
+    CARD_FILENAME,
+    CONF_ROOMS,
     CONFIG_MINOR_VERSION,
     CONFIG_VERSION,
-    CONF_ROOMS,
     DOMAIN,
+    FRONTEND_URL_BASE,
+    SERVICE_RELOAD,
+    SERVICE_SEND_COMMAND,
     SERVICE_START_ACTIVITY,
     SERVICE_STOP_ACTIVITY,
-    SERVICE_RELOAD,
     SERVICE_TOGGLE_ACTIVITY,
-    ATTR_ROOM,
-    ATTR_ACTIVITY,
+    SIGNAL_ROOMS_UPDATED,
 )
 from .coordinator import AVScenesCoordinator
 from .migration import migrate_v1_to_v2
@@ -29,62 +45,118 @@ PLATFORMS: list[Platform] = [Platform.SCENE, Platform.SWITCH, Platform.SENSOR, P
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
+_ROOM_SCHEMA = vol.Schema({vol.Required(ATTR_ROOM): cv.string})
+_ACTIVITY_SCHEMA = _ROOM_SCHEMA.extend({vol.Optional(ATTR_ACTIVITY): cv.string})
+_START_SCHEMA = _ROOM_SCHEMA.extend({vol.Required(ATTR_ACTIVITY): cv.string})
+_SEND_COMMAND_SCHEMA = _ROOM_SCHEMA.extend(
+    {
+        vol.Required(ATTR_COMMAND): cv.string,
+        vol.Optional(ATTR_VALUE): vol.Any(vol.Coerce(float), cv.string),
+        vol.Optional(ATTR_DEVICE): cv.string,
+    }
+)
 
-def _get_coordinator_for_room(hass: HomeAssistant, room_id: str) -> AVScenesCoordinator | None:
-    """Find the coordinator that manages the given room."""
-    for coordinator in hass.data.get(DOMAIN, {}).values():
-        if isinstance(coordinator, AVScenesCoordinator) and room_id in coordinator.rooms:
-            return coordinator
-    return None
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the services, the websocket API and the remote control card."""
+    _register_services(hass)
+    websocket.async_register(hass)
+    await _async_register_card(hass)
+    return True
+
+
+def _coordinator_for_room(hass: HomeAssistant, room_id: str) -> AVScenesCoordinator:
+    """Find the coordinator that manages a room, or raise."""
+    coordinator = websocket.find_room(hass, room_id)
+    if coordinator is None:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="unknown_room",
+            translation_placeholders={"room": room_id},
+        )
+    return coordinator
 
 
 def _register_services(hass: HomeAssistant) -> None:
-    """Register domain-level services (called once when first entry is set up)."""
+    """Register the domain services."""
 
     async def handle_start_activity(call: ServiceCall) -> None:
-        room_id = call.data.get(ATTR_ROOM)
-        activity_name = call.data.get(ATTR_ACTIVITY)
-        coordinator = _get_coordinator_for_room(hass, room_id)
-        if coordinator is None:
-            _LOGGER.error("No coordinator found for room '%s'", room_id)
-            return
-        await coordinator.async_start_activity(room_id, activity_name)
+        room_id = call.data[ATTR_ROOM]
+        coordinator = _coordinator_for_room(hass, room_id)
+        activity = call.data[ATTR_ACTIVITY]
+        if coordinator.resolve_activity(room_id, activity) is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="unknown_activity",
+                translation_placeholders={"room": room_id, "activity": activity},
+            )
+        await coordinator.async_start_activity(room_id, activity)
 
     async def handle_stop_activity(call: ServiceCall) -> None:
-        room_id = call.data.get(ATTR_ROOM)
-        coordinator = _get_coordinator_for_room(hass, room_id)
-        if coordinator is None:
-            _LOGGER.error("No coordinator found for room '%s'", room_id)
-            return
-        await coordinator.async_stop_activity(room_id)
+        room_id = call.data[ATTR_ROOM]
+        await _coordinator_for_room(hass, room_id).async_stop_activity(room_id)
 
     async def handle_toggle_activity(call: ServiceCall) -> None:
-        room_id = call.data.get(ATTR_ROOM)
-        coordinator = _get_coordinator_for_room(hass, room_id)
-        if coordinator is None:
-            _LOGGER.error("No coordinator found for room '%s'", room_id)
-            return
-        await coordinator.async_toggle_activity(room_id, call.data.get(ATTR_ACTIVITY))
+        room_id = call.data[ATTR_ROOM]
+        await _coordinator_for_room(hass, room_id).async_toggle_activity(
+            room_id, call.data.get(ATTR_ACTIVITY)
+        )
+
+    async def handle_send_command(call: ServiceCall) -> None:
+        room_id = call.data[ATTR_ROOM]
+        await _coordinator_for_room(hass, room_id).async_send_command(
+            room_id,
+            call.data[ATTR_COMMAND],
+            value=call.data.get(ATTR_VALUE),
+            device_id=call.data.get(ATTR_DEVICE),
+            context=call.context,
+        )
 
     async def handle_reload(call: ServiceCall) -> None:
-        for entry_id, coordinator in list(hass.data.get(DOMAIN, {}).items()):
-            if isinstance(coordinator, AVScenesCoordinator):
-                await hass.config_entries.async_reload(entry_id)
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            if entry.state is ConfigEntryState.LOADED:
+                await hass.config_entries.async_reload(entry.entry_id)
 
-    hass.services.async_register(DOMAIN, SERVICE_START_ACTIVITY, handle_start_activity)
-    hass.services.async_register(DOMAIN, SERVICE_STOP_ACTIVITY, handle_stop_activity)
-    hass.services.async_register(DOMAIN, SERVICE_TOGGLE_ACTIVITY, handle_toggle_activity)
+    hass.services.async_register(
+        DOMAIN, SERVICE_START_ACTIVITY, handle_start_activity, schema=_START_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_STOP_ACTIVITY, handle_stop_activity, schema=_ROOM_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_TOGGLE_ACTIVITY, handle_toggle_activity, schema=_ACTIVITY_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_SEND_COMMAND, handle_send_command, schema=_SEND_COMMAND_SCHEMA
+    )
     hass.services.async_register(DOMAIN, SERVICE_RELOAD, handle_reload)
-    _LOGGER.debug("Domain services registered")
 
 
-def _unregister_services(hass: HomeAssistant) -> None:
-    """Unregister domain-level services (called when last entry is removed)."""
-    hass.services.async_remove(DOMAIN, SERVICE_START_ACTIVITY)
-    hass.services.async_remove(DOMAIN, SERVICE_STOP_ACTIVITY)
-    hass.services.async_remove(DOMAIN, SERVICE_TOGGLE_ACTIVITY)
-    hass.services.async_remove(DOMAIN, SERVICE_RELOAD)
-    _LOGGER.debug("Domain services unregistered")
+async def _async_register_card(hass: HomeAssistant) -> None:
+    """Serve the remote control card and load it on every dashboard.
+
+    The card is built by the release workflow; a plain checkout has none.
+    """
+    directory = Path(__file__).parent / "frontend"
+    card = directory / CARD_FILENAME
+
+    def _mtime() -> int | None:
+        return int(card.stat().st_mtime) if card.is_file() else None
+
+    mtime = await hass.async_add_executor_job(_mtime)
+    if mtime is None:
+        _LOGGER.warning("Remote control card %s not found; build the frontend", card)
+        return
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(FRONTEND_URL_BASE, str(directory), cache_headers=False)]
+    )
+    if "frontend" not in hass.config.components:
+        return
+    # Imported late: the frontend is only an after-dependency
+    from homeassistant.components.frontend import add_extra_js_url
+
+    version = (await async_get_integration(hass, DOMAIN)).version
+    add_extra_js_url(hass, f"{FRONTEND_URL_BASE}/{CARD_FILENAME}?v={version}-{mtime}")
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -122,10 +194,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
-    # Register services once for the whole domain
-    if not hass.services.has_service(DOMAIN, SERVICE_START_ACTIVITY):
-        _register_services(hass)
+    async_dispatcher_send(hass, SIGNAL_ROOMS_UPDATED)
 
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
@@ -141,11 +210,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         coordinator: AVScenesCoordinator = hass.data[DOMAIN].pop(entry.entry_id)
         await coordinator.async_shutdown()
-
-        # Unregister services when the last entry is removed
-        remaining = [v for v in hass.data[DOMAIN].values() if isinstance(v, AVScenesCoordinator)]
-        if not remaining:
-            _unregister_services(hass)
+        async_dispatcher_send(hass, SIGNAL_ROOMS_UPDATED)
 
     return unload_ok
 

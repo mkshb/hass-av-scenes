@@ -144,6 +144,28 @@
           "description": "Optional: activity to start when nothing runs in the room"
         }
       }
+    },
+    "send_command": {
+      "name": "Send command",
+      "description": "Sends a remote control command (e.g. volume_up, channel_down, ok) to the device the running activity routes it to.",
+      "fields": {
+        "room": {
+          "name": "Room",
+          "description": "The room identifier"
+        },
+        "command": {
+          "name": "Command",
+          "description": "volume_up, volume_down, mute, volume_set, channel_up, channel_down, play_pause, play, pause, stop, next, previous, up, down, left, right, ok, back, menu, home, info, guide, exit – or a name from `commands`"
+        },
+        "value": {
+          "name": "Value",
+          "description": "Value for the command, e.g. 0.4 for volume_set"
+        },
+        "device": {
+          "name": "Device",
+          "description": "Optional: send to this device instead of the routed one; works while nothing runs"
+        }
+      }
     }
   },
   "issues": {
@@ -154,6 +176,26 @@
     "activity_aborted": {
       "title": "AV Scenes: start of \"{activity}\" aborted",
       "description": "In room **{room}**, the start of activity **{activity}** was aborted:\n\n`{reason}`\n\nCheck that the device has power and its integration loads, or raise `timeout` or set `on_timeout: continue`. This message disappears with the next start or stop of the room."
+    }
+  },
+  "exceptions": {
+    "unknown_room": {
+      "message": "AV Scenes has no room \"{room}\""
+    },
+    "unknown_activity": {
+      "message": "Room \"{room}\" has no activity \"{activity}\""
+    },
+    "unknown_device": {
+      "message": "Room \"{room}\" has no device \"{device}\""
+    },
+    "no_activity": {
+      "message": "Nothing runs in room \"{room}\", so there is no device for \"{command}\""
+    },
+    "unknown_command": {
+      "message": "No device in room \"{room}\" handles the command \"{command}\""
+    },
+    "command_timeout": {
+      "message": "Command \"{command}\" did not finish in time ({target})"
     }
   }
 }

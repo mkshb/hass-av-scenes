@@ -2,3 +2,11 @@
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+
+[tool.ruff.lint.isort]
+# Home Assistant's import style
+force-sort-within-sections = true
+combine-as-imports = true
+split-on-trailing-comma = false
+known-first-party = ["homeassistant"]
+known-local-folder = ["custom_components", "tests"]
