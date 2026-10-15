@@ -32,7 +32,7 @@ from .const import (
     CONFIG_VERSION,
     DOMAIN,
 )
-from .model import async_validate_config, find_missing_entities
+from .model import EntityReference, async_validate_config, find_missing_entities
 
 CONF_ROOM = "room"
 CONF_CONFIG = "config"
@@ -236,7 +236,7 @@ class AVScenesOptionsFlow(OptionsFlow):
             placeholders["error"] = f"{path}: {err.msg}" if path else str(err.msg)
             return None
 
-        missing = find_missing_entities(self.hass, data)
+        missing = self._missing_entities(rooms)
         if missing:
             self._pending = rooms
             return await self.async_step_confirm_missing()
@@ -247,9 +247,7 @@ class AVScenesOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         """Show unknown entities before saving."""
         assert self._pending is not None
-        missing = find_missing_entities(
-            self.hass, {**self.config_entry.data, CONF_ROOMS: self._pending}
-        )
+        missing = self._missing_entities(self._pending)
         lines = "\n".join(
             f"- `{ref.entity_id}` ({ref.room_id}: {ref.path})" for ref in missing
         )
@@ -258,6 +256,13 @@ class AVScenesOptionsFlow(OptionsFlow):
             menu_options=["save_anyway", self._return_step_back()],
             description_placeholders={"entities": lines},
         )
+
+    def _missing_entities(self, rooms: dict[str, Any]) -> list[EntityReference]:
+        """Unknown entities; the room editor only warns about its own room."""
+        missing = find_missing_entities(self.hass, {CONF_ROOMS: rooms})
+        if self._return_step == "edit_room":
+            missing = [ref for ref in missing if ref.room_id == self._room_id]
+        return missing
 
     def _return_step_back(self) -> str:
         return "back_to_room" if self._return_step == "edit_room" else "back_to_all"

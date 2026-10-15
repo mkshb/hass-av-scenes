@@ -200,3 +200,19 @@ async def test_edit_all(hass: HomeAssistant) -> None:
     await hass.async_block_till_done()
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert entry.data["rooms"] == rooms
+
+
+async def test_room_editor_ignores_other_rooms(hass: HomeAssistant) -> None:
+    """A wrong entity in another room does not show up when saving this one."""
+    other = {"name": "Kino", "devices": {"beamer": {"entity_id": "media_player.epson_beamer"}}}
+    entry = await setup_entry(hass, {"wz": ROOM, "kino": other})
+    result = await open_room_editor(hass, entry)
+    room = copy.deepcopy(ROOM)
+    room["devices"]["onkyo"]["delay_after_off"] = 5
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"config": room}
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.data["rooms"]["wz"] == room
