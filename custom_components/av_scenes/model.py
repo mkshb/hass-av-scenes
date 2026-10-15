@@ -1,0 +1,308 @@
+"""Configuration schema (v2) and validation for AV Scenes.
+
+Layout of ``entry.data``::
+
+    rooms:
+      <room_id>:
+        name: Wohnzimmer
+        devices:
+          <device_id>:
+            entity_id: media_player.onkyo_receiver
+            power_switch: switch.wz_steckdose_multimedia   # optional
+            ready: {timeout: 60, reload_integration: true, on_timeout: abort}
+            delay_after_on: 0
+            delay_after_off: 0
+        activities:
+          <activity_id>:
+            name: TV
+            devices: [onkyo, beamer]       # power-on order
+            steps: [...]                   # settings once the devices are up
+            on_start: [...]                # HA actions
+            on_stop: [...]                 # HA actions
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+import voluptuous as vol
+
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import config_validation as cv, entity_registry as er
+from homeassistant.helpers.script import async_validate_actions_config
+
+from .const import (
+    CONF_ACTION,
+    CONF_ACTIVITIES,
+    CONF_AREA_ID,
+    CONF_BRIGHTNESS_PCT,
+    CONF_COLOR_TEMP_KELVIN,
+    CONF_DATA,
+    CONF_DELAY_AFTER_OFF,
+    CONF_DELAY_AFTER_ON,
+    CONF_DEVICE,
+    CONF_DEVICES,
+    CONF_ENTITY_ID,
+    CONF_ID,
+    CONF_NAME,
+    CONF_ON_START,
+    CONF_ON_STOP,
+    CONF_ON_TIMEOUT,
+    CONF_POSITION,
+    CONF_POWER_SWITCH,
+    CONF_READY,
+    CONF_RELOAD_INTEGRATION,
+    CONF_ROOMS,
+    CONF_SOUND_MODE,
+    CONF_SOURCE,
+    CONF_STEPS,
+    CONF_TARGET,
+    CONF_TILT_POSITION,
+    CONF_TIMEOUT,
+    CONF_TRANSITION,
+    CONF_TYPE,
+    CONF_VOLUME_LEVEL,
+    DEFAULT_READY_TIMEOUT,
+    ON_TIMEOUT_ABORT,
+    ON_TIMEOUT_OPTIONS,
+    STEP_TYPE_CALL_ACTION,
+    STEP_TYPE_DELAY,
+    STEP_TYPE_POWER_OFF,
+    STEP_TYPE_POWER_ON,
+    STEP_TYPE_SET_BRIGHTNESS,
+    STEP_TYPE_SET_COLOR_TEMP,
+    STEP_TYPE_SET_POSITION,
+    STEP_TYPE_SET_SOUND_MODE,
+    STEP_TYPE_SET_SOURCE,
+    STEP_TYPE_SET_TILT,
+    STEP_TYPE_SET_VOLUME,
+    STEP_TYPE_WAIT_AVAILABLE,
+)
+
+CONF_DELAY_AFTER = "delay_after"
+
+_SECONDS = vol.All(vol.Coerce(float), vol.Range(min=0, max=3600))
+_PERCENT = vol.All(vol.Coerce(int), vol.Range(min=0, max=100))
+_KEY = vol.All(str, vol.Length(min=1))
+
+READY_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_TIMEOUT, default=DEFAULT_READY_TIMEOUT): vol.All(
+            vol.Coerce(float), vol.Range(min=1, max=3600)
+        ),
+        vol.Optional(CONF_RELOAD_INTEGRATION, default=False): cv.boolean,
+        vol.Optional(CONF_ON_TIMEOUT, default=ON_TIMEOUT_ABORT): vol.In(
+            ON_TIMEOUT_OPTIONS
+        ),
+    }
+)
+
+DEVICE_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_ENTITY_ID): cv.entity_id,
+        vol.Optional(CONF_NAME): str,
+        vol.Optional(CONF_POWER_SWITCH): vol.Any(None, cv.entity_id),
+        vol.Optional(CONF_READY): vol.Any(None, READY_SCHEMA),
+        vol.Optional(CONF_DELAY_AFTER_ON, default=0): _SECONDS,
+        vol.Optional(CONF_DELAY_AFTER_OFF, default=0): _SECONDS,
+    }
+)
+
+_STEP_BASE = {
+    vol.Optional(CONF_ID): str,
+    vol.Required(CONF_TYPE): str,
+    vol.Optional(CONF_DELAY_AFTER, default=0): _SECONDS,
+}
+_DEVICE_STEP = {**_STEP_BASE, vol.Required(CONF_DEVICE): _KEY}
+
+STEP_SCHEMAS: dict[str, vol.Schema] = {
+    STEP_TYPE_POWER_ON: vol.Schema(_DEVICE_STEP),
+    STEP_TYPE_POWER_OFF: vol.Schema(_DEVICE_STEP),
+    STEP_TYPE_SET_SOURCE: vol.Schema({**_DEVICE_STEP, vol.Required(CONF_SOURCE): str}),
+    STEP_TYPE_SET_VOLUME: vol.Schema(
+        {
+            **_DEVICE_STEP,
+            vol.Required(CONF_VOLUME_LEVEL): vol.All(
+                vol.Coerce(float), vol.Range(min=0, max=1)
+            ),
+        }
+    ),
+    STEP_TYPE_SET_SOUND_MODE: vol.Schema(
+        {**_DEVICE_STEP, vol.Required(CONF_SOUND_MODE): str}
+    ),
+    STEP_TYPE_SET_BRIGHTNESS: vol.Schema(
+        {
+            **_DEVICE_STEP,
+            vol.Optional(CONF_BRIGHTNESS_PCT): _PERCENT,
+            vol.Optional(CONF_COLOR_TEMP_KELVIN): vol.All(
+                vol.Coerce(int), vol.Range(min=1000, max=12000)
+            ),
+            vol.Optional(CONF_TRANSITION): _SECONDS,
+        }
+    ),
+    STEP_TYPE_SET_COLOR_TEMP: vol.Schema(
+        {
+            **_DEVICE_STEP,
+            vol.Required(CONF_COLOR_TEMP_KELVIN): vol.All(
+                vol.Coerce(int), vol.Range(min=1000, max=12000)
+            ),
+        }
+    ),
+    STEP_TYPE_SET_POSITION: vol.Schema({**_DEVICE_STEP, vol.Required(CONF_POSITION): _PERCENT}),
+    STEP_TYPE_SET_TILT: vol.Schema(
+        {**_DEVICE_STEP, vol.Required(CONF_TILT_POSITION): _PERCENT}
+    ),
+    STEP_TYPE_CALL_ACTION: vol.Schema(
+        {
+            **_STEP_BASE,
+            vol.Required(CONF_ACTION): cv.service,
+            vol.Optional(CONF_DATA): dict,
+            vol.Optional(CONF_TARGET): dict,
+        }
+    ),
+    STEP_TYPE_DELAY: vol.Schema(_STEP_BASE),
+    STEP_TYPE_WAIT_AVAILABLE: vol.All(
+        vol.Schema(
+            {
+                **_STEP_BASE,
+                vol.Exclusive(CONF_DEVICE, "target"): _KEY,
+                vol.Exclusive(CONF_ENTITY_ID, "target"): cv.entity_id,
+                vol.Optional(CONF_TIMEOUT, default=DEFAULT_READY_TIMEOUT): vol.All(
+                    vol.Coerce(float), vol.Range(min=1, max=3600)
+                ),
+                vol.Optional(CONF_RELOAD_INTEGRATION, default=False): cv.boolean,
+                vol.Optional(CONF_ON_TIMEOUT, default=ON_TIMEOUT_ABORT): vol.In(
+                    ON_TIMEOUT_OPTIONS
+                ),
+            }
+        ),
+        cv.has_at_least_one_key(CONF_DEVICE, CONF_ENTITY_ID),
+    ),
+}
+
+
+def _step(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise vol.Invalid("step must be a mapping")
+    step_type = value.get(CONF_TYPE)
+    schema = STEP_SCHEMAS.get(step_type)
+    if schema is None:
+        raise vol.Invalid(
+            f"unknown step type '{step_type}', expected one of: {', '.join(STEP_SCHEMAS)}",
+            path=[CONF_TYPE],
+        )
+    return schema(value)
+
+
+ACTIVITY_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_NAME): str,
+        vol.Optional(CONF_DEVICES, default=list): [_KEY],
+        vol.Optional(CONF_STEPS, default=list): [_step],
+        # Validated in depth by async_validate_config (needs hass)
+        vol.Optional(CONF_ON_START, default=list): vol.Any(None, [dict]),
+        vol.Optional(CONF_ON_STOP, default=list): vol.Any(None, [dict]),
+    }
+)
+
+ROOM_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_NAME): str,
+        vol.Optional(CONF_AREA_ID): vol.Any(None, str),
+        vol.Optional(CONF_DEVICES, default=dict): {_KEY: DEVICE_SCHEMA},
+        vol.Optional(CONF_ACTIVITIES, default=dict): {_KEY: ACTIVITY_SCHEMA},
+    }
+)
+
+CONFIG_SCHEMA = vol.Schema({vol.Optional(CONF_ROOMS, default=dict): {_KEY: ROOM_SCHEMA}})
+
+
+def _check_references(rooms: dict[str, Any]) -> None:
+    """Raise vol.Invalid when an activity or step points to an unknown device."""
+    for room_id, room in rooms.items():
+        devices = room[CONF_DEVICES]
+        for activity_id, activity in room[CONF_ACTIVITIES].items():
+            base = [CONF_ROOMS, room_id, CONF_ACTIVITIES, activity_id]
+            for idx, device in enumerate(activity[CONF_DEVICES]):
+                if device not in devices:
+                    raise vol.Invalid(
+                        f"unknown device '{device}'", path=[*base, CONF_DEVICES, idx]
+                    )
+            for idx, step in enumerate(activity[CONF_STEPS]):
+                device = step.get(CONF_DEVICE)
+                if device is not None and device not in devices:
+                    raise vol.Invalid(
+                        f"unknown device '{device}'",
+                        path=[*base, CONF_STEPS, idx, CONF_DEVICE],
+                    )
+
+
+def validate_config(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate v2 data synchronously (schema and cross references)."""
+    validated = CONFIG_SCHEMA(data)
+    _check_references(validated[CONF_ROOMS])
+    return validated
+
+
+async def async_validate_config(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
+    """Validate v2 data including the HA actions in on_start / on_stop."""
+    validated = validate_config(data)
+    for room_id, room in validated[CONF_ROOMS].items():
+        for activity_id, activity in room[CONF_ACTIVITIES].items():
+            for key in (CONF_ON_START, CONF_ON_STOP):
+                actions = activity.get(key) or []
+                try:
+                    activity[key] = await async_validate_actions_config(
+                        hass, cv.SCRIPT_SCHEMA(actions)
+                    )
+                except vol.Invalid as err:
+                    raise vol.Invalid(
+                        err.msg,
+                        path=[CONF_ROOMS, room_id, CONF_ACTIVITIES, activity_id, key, *err.path],
+                    ) from err
+    return validated
+
+
+@dataclass(frozen=True, slots=True)
+class EntityReference:
+    """An entity referenced from the configuration."""
+
+    room_id: str
+    path: str
+    entity_id: str
+
+
+def iter_entity_references(data: dict[str, Any]):
+    """Yield every entity_id the configuration references directly."""
+    for room_id, room in (data.get(CONF_ROOMS) or {}).items():
+        for device_id, device in (room.get(CONF_DEVICES) or {}).items():
+            base = f"devices.{device_id}"
+            if device.get(CONF_ENTITY_ID):
+                yield EntityReference(room_id, f"{base}.entity_id", device[CONF_ENTITY_ID])
+            if device.get(CONF_POWER_SWITCH):
+                yield EntityReference(
+                    room_id, f"{base}.power_switch", device[CONF_POWER_SWITCH]
+                )
+        for activity_id, activity in (room.get(CONF_ACTIVITIES) or {}).items():
+            for idx, step in enumerate(activity.get(CONF_STEPS) or []):
+                if step.get(CONF_ENTITY_ID):
+                    yield EntityReference(
+                        room_id,
+                        f"activities.{activity_id}.steps[{idx}].entity_id",
+                        step[CONF_ENTITY_ID],
+                    )
+
+
+def find_missing_entities(hass: HomeAssistant, data: dict[str, Any]) -> list[EntityReference]:
+    """Return references to entities that are neither registered nor have a state.
+
+    A powered-off device that sits in setup_retry keeps its registry entry, so
+    it does not count as missing.
+    """
+    registry = er.async_get(hass)
+    return [
+        ref
+        for ref in iter_entity_references(data)
+        if registry.async_get(ref.entity_id) is None
+        and hass.states.get(ref.entity_id) is None
+    ]
