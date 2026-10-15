@@ -43,6 +43,9 @@ async def async_setup_entry(
 class RoomActivitySwitch(CoordinatorEntity, SwitchEntity):
     """Representation of a room activity status."""
 
+    _attr_has_entity_name = True
+    _attr_translation_key = "active"
+
     def __init__(
         self,
         coordinator: AVScenesCoordinator,
@@ -51,9 +54,6 @@ class RoomActivitySwitch(CoordinatorEntity, SwitchEntity):
         """Initialize the switch."""
         super().__init__(coordinator)
         self.room_id = room_id
-        
-        room_name = coordinator.rooms[room_id].get("name", room_id)
-        self._attr_name = f"{room_name} Activity"
         self._attr_unique_id = f"{DOMAIN}_activity_{room_id}"
 
     @property

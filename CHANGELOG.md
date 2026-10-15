@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🪝 **`on_start` / `on_stop`** – any Home Assistant actions with conditions, run by Home Assistant's script engine
 - 🔁 **`toggle_activity` action** – stops if something runs, otherwise starts the last used activity; meant for push buttons (e.g. KNX)
 - 🛑 **Cancelling** – a stop during a running start takes effect immediately
-- ⚠️ **`error` state** – an aborted start is never reported as `active`; reason in the sensor attribute `error` plus a persistent notification; failed steps in `warnings`
+- ⚠️ **`error` state** – an aborted start is never reported as `active`; reason in the sensor attribute `error` and in Settings → Repairs; failed steps in `warnings`
 - 💾 **State survives restarts** – the running activity is restored after a Home Assistant restart
 - 🩺 **Repairs** – entities that do not exist (typo, renamed entity) are reported under Settings → Repairs
 - 🧪 **Tests** with `pytest-homeassistant-custom-component`
@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔀 **Smart switching** – outlets that are no longer needed are switched off in the background after the cool-down; the new activity does not wait
 - 🎚️ **Switch** – `turn_on` now starts the last used activity
 - 🏷️ **Select and scenes** show the activity's display name; actions accept ID or name
+- 🌐 **Translated entities** – sensor, select and switch use Home Assistant entity translations (English, German) for their names and state labels. **Breaking:** the select's state values are now stable keys: `idle` (was `—`), `starting` (was `⏳ Startet …`), `stopping` (was `⏹ Stoppt …`) and `error`; the labels shown in the UI are unchanged. Automations comparing these values need an update. The switch is now named "Active" ("Aktiv"); existing entity IDs are kept
 - 💡 **Lights** – brightness as `brightness_pct`, color temperature as `color_temp_kelvin`
 
 ### Fixed

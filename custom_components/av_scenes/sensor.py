@@ -63,6 +63,7 @@ class RoomActivitySensor(CoordinatorEntity, SensorEntity):
     """
 
     _attr_has_entity_name = True
+    _attr_translation_key = "activity"
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = [
         ACTIVITY_STATE_IDLE,
@@ -79,7 +80,6 @@ class RoomActivitySensor(CoordinatorEntity, SensorEntity):
 
         room_name = coordinator.rooms[room_id].get("name", room_id)
         self._room_name = room_name
-        self._attr_name = "Aktivität"
         self._attr_unique_id = f"{DOMAIN}_activity_state_{room_id}"
 
     # ------------------------------------------------------------------

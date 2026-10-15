@@ -217,13 +217,16 @@ async def test_wait_available_timeout_abort(hass: HomeAssistant, devices: Device
     assert "not available after 1 s" in coordinator.runtime("wz").error
     assert ("media_player.select_source", (ONKYO,)) not in devices.names()
     assert ("homeassistant.turn_on", (BEAMER,)) not in devices.names()
-    notifications = hass.data["persistent_notification"]
-    assert any("aborted" in n["message"] for n in notifications.values())
+    issue_id = f"activity_aborted_{coordinator.entry.entry_id}_wz"
+    issue = ir.async_get(hass).async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.translation_placeholders["activity"] == "TV"
 
     # A stop from the error state cleans up whatever was powered
     await coordinator.async_stop_activity("wz")
     assert coordinator.activity_states["wz"] == "idle"
     assert devices.names()[-1] == ("homeassistant.turn_off", (PLUG_BEAMER, PLUG_MM))
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
 
 
 async def test_wait_available_step_timeout_continue(

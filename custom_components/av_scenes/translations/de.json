@@ -74,11 +74,31 @@
   },
   "entity": {
     "sensor": {
-      "room_config": {
-        "name": "{room_name} Konfiguration",
+      "activity": {
+        "name": "Aktivität",
         "state": {
-          "idle": "Inaktiv"
+          "idle": "Inaktiv",
+          "starting": "Startet",
+          "active": "Aktiv",
+          "stopping": "Stoppt",
+          "error": "Fehler"
         }
+      }
+    },
+    "select": {
+      "scene": {
+        "name": "Szene",
+        "state": {
+          "idle": "—",
+          "starting": "⏳ Startet …",
+          "stopping": "⏹ Stoppt …",
+          "error": "⚠ Fehler"
+        }
+      }
+    },
+    "switch": {
+      "active": {
+        "name": "Aktiv"
       }
     }
   },
@@ -130,6 +150,10 @@
     "missing_entity": {
       "title": "AV Scenes: Entität {entity_id} fehlt",
       "description": "Im Raum **{room}** verweist `{path}` auf `{entity_id}`. Diese Entität gibt es in Home Assistant nicht – vermutlich wurde sie umbenannt oder entfernt. Korrigiere den Eintrag in der Konfiguration von AV Scenes."
+    },
+    "activity_aborted": {
+      "title": "AV Scenes: Start von „{activity}“ abgebrochen",
+      "description": "Im Raum **{room}** wurde der Start der Aktivität **{activity}** abgebrochen:\n\n`{reason}`\n\nPrüfe, ob das Gerät Strom hat und seine Integration lädt, oder erhöhe `timeout` bzw. setze `on_timeout: continue`. Der Hinweis verschwindet beim nächsten Start oder Stopp des Raums."
     }
   }
 }

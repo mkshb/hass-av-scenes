@@ -34,7 +34,6 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     ATTR_ENTITY_ID,
@@ -482,7 +481,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         rt.warnings = []
         total = len(new_devices) + len(steps)
         rt.progress = (0, total)
-        persistent_notification.async_dismiss(self.hass, self._notification_id(room_id))
+        ir.async_delete_issue(self.hass, DOMAIN, self._aborted_issue_id(room_id))
         self._changed()
 
         needed_switches = self._power_switches(devices, new_devices)
@@ -537,12 +536,18 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             rt.state = ACTIVITY_STATE_ERROR
             rt.error = str(err)
             _LOGGER.error("Room '%s': start of '%s' aborted: %s", room_id, activity_id, err)
-            persistent_notification.async_create(
+            ir.async_create_issue(
                 self.hass,
-                f"Start of **{self.activity_name(room_id, activity_id)}** "
-                f"aborted: {err}",
-                title=f"AV Scenes: {room.get(CONF_NAME, room_id)}",
-                notification_id=self._notification_id(room_id),
+                DOMAIN,
+                self._aborted_issue_id(room_id),
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="activity_aborted",
+                translation_placeholders={
+                    "room": room.get(CONF_NAME, room_id),
+                    "activity": self.activity_name(room_id, activity_id),
+                    "reason": str(err),
+                },
             )
             self._changed()
             return
@@ -666,7 +671,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         rt.state = ACTIVITY_STATE_IDLE
         rt.error = None
         rt.progress = (0, 0)
-        persistent_notification.async_dismiss(self.hass, self._notification_id(room_id))
+        ir.async_delete_issue(self.hass, DOMAIN, self._aborted_issue_id(room_id))
         self._changed()
         _LOGGER.info("Room '%s': '%s' stopped", room_id, activity_id)
 
@@ -921,5 +926,5 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 switches.append(switch)
         return switches
 
-    def _notification_id(self, room_id: str) -> str:
-        return f"{DOMAIN}_{self.entry.entry_id}_{room_id}"
+    def _aborted_issue_id(self, room_id: str) -> str:
+        return f"activity_aborted_{self.entry.entry_id}_{room_id}"

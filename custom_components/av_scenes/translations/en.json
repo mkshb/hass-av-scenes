@@ -74,11 +74,31 @@
   },
   "entity": {
     "sensor": {
-      "room_config": {
-        "name": "{room_name} Configuration",
+      "activity": {
+        "name": "Activity",
         "state": {
-          "idle": "Idle"
+          "idle": "Idle",
+          "starting": "Starting",
+          "active": "Active",
+          "stopping": "Stopping",
+          "error": "Error"
         }
+      }
+    },
+    "select": {
+      "scene": {
+        "name": "Scene",
+        "state": {
+          "idle": "—",
+          "starting": "⏳ Starting …",
+          "stopping": "⏹ Stopping …",
+          "error": "⚠ Error"
+        }
+      }
+    },
+    "switch": {
+      "active": {
+        "name": "Active"
       }
     }
   },
@@ -130,6 +150,10 @@
     "missing_entity": {
       "title": "AV Scenes: entity {entity_id} is missing",
       "description": "In room **{room}**, `{path}` refers to `{entity_id}`. This entity does not exist in Home Assistant – it was probably renamed or removed. Fix the entry in the AV Scenes configuration."
+    },
+    "activity_aborted": {
+      "title": "AV Scenes: start of \"{activity}\" aborted",
+      "description": "In room **{room}**, the start of activity **{activity}** was aborted:\n\n`{reason}`\n\nCheck that the device has power and its integration loads, or raise `timeout` or set `on_timeout: continue`. This message disappears with the next start or stop of the room."
     }
   }
 }
