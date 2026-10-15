@@ -25,7 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚠️ **`error` state** – an aborted start is never reported as `active`; reason in the sensor attribute `error` and in Settings → Repairs; failed steps in `warnings`
 - 💾 **State survives restarts** – the running activity is restored after a Home Assistant restart
 - 🩺 **Repairs** – entities that do not exist (typo, renamed entity) are reported under Settings → Repairs
-- 🧪 **Tests** with `pytest-homeassistant-custom-component`
+- 🎛️ **Remote control card** `custom:av-scenes-remote-card` – power, activities, volume rocker and slider, d-pad, channels, playback and own buttons per room; shows only what the running activity offers; visual editor; loaded by the integration, no dashboard resource needed
+- 📡 **`send_command` action** – sends a remote button to the device the running activity uses for it (volume, channels, transport, navigation); media players work without configuration
+- 🧩 **`commands`, `remote`, `icon`** – own buttons as Home Assistant actions per device or activity, routing of button groups and extra buttons per activity
+- 🔢 **`order`** – position of an activity in lists; Home Assistant stores the configuration with sorted keys, so the written order is not kept across restarts
+- 🔌 **Websocket API** `av_scenes/control/rooms` and `av_scenes/control/subscribe` for the card
+- 🚀 **Release workflow** – builds the card and attaches `av_scenes.zip`; HACS installs that archive
+- 🧪 **Tests** with `pytest-homeassistant-custom-component`, CI with hassfest and HACS validation
 
 ### Changed
 - 📝 **YAML configuration** – the multi-step click flows are replaced by a YAML editor per room (or for the whole configuration) with validation and the exact error location
@@ -35,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔀 **Smart switching** – outlets that are no longer needed are switched off in the background after the cool-down; the new activity does not wait
 - 🎚️ **Switch** – `turn_on` now starts the last used activity
 - 🏷️ **Select and scenes** show the activity's display name; actions accept ID or name
+- 🔤 **Activity order** – without `order`, activities are listed by name (after a restart they already were, in alphabetical key order)
+- ❗ **Actions raise errors** – an unknown room, activity or command is reported to the caller (translated) instead of only being logged
 - 🌐 **Translated entities** – sensor, select and switch use Home Assistant entity translations (English, German) for their names and state labels. **Breaking:** the select's state values are now stable keys: `idle` (was `—`), `starting` (was `⏳ Startet …`), `stopping` (was `⏹ Stoppt …`) and `error`; the labels shown in the UI are unchanged. Automations comparing these values need an update. The switch is now named "Active" ("Aktiv"); existing entity IDs are kept
 - 💡 **Lights** – brightness as `brightness_pct`, color temperature as `color_temp_kelvin`
 

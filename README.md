@@ -28,6 +28,8 @@ AV Scenes controls the devices of a room (AV receiver, projector, TV, set-top bo
 | Failure handling | A failed readiness check can abort the start; the room shows `error` with the reason |
 | Restart-safe | The running activity survives a Home Assistant restart |
 | Repairs | Entities that do not exist (typo, renamed entity) are reported in **Settings → Repairs** |
+| Remote control card | A dashboard card per room: power, activities, volume, d-pad, channels, playback and your own buttons — only what the running activity offers |
+| Command routing | `av_scenes.send_command` sends a button (e.g. `volume_up`) to whichever device the running activity uses for it — from the card, automations or wall switches |
 | 4 entity platforms | Scene, Switch, Sensor, Select — one virtual device per room |
 
 ---
@@ -42,11 +44,15 @@ AV Scenes controls the devices of a room (AV receiver, projector, TV, set-top bo
 4. Find "AV Scenes" and click **Download**
 5. Restart Home Assistant
 
+HACS installs the release archive `av_scenes.zip`, which contains the built remote control card.
+
 ### Manual
 
-1. Download the latest release from [Releases](https://github.com/mkshb/hass-av-scenes/releases)
-2. Copy `custom_components/av_scenes` into your `config/custom_components/` directory
+1. Download `av_scenes.zip` from the latest [release](https://github.com/mkshb/hass-av-scenes/releases)
+2. Extract it into `config/custom_components/av_scenes/`
 3. Restart Home Assistant
+
+A plain copy of the repository lacks the remote control card, which is built at release time; see [Development](#development) to build it yourself.
 
 ---
 
@@ -124,6 +130,7 @@ activities:
 | `ready` | — | Readiness check before the device is switched on (see below) |
 | `delay_after_on` | `0` | Seconds to wait after switching the device on. Skipped when the device was already on |
 | `delay_after_off` | `0` | Seconds the device needs after switching off before the next device is switched off or its power is cut |
+| `commands` | — | Remote buttons as Home Assistant actions, see [Remote control](#remote-control) |
 
 `ready` takes:
 
@@ -138,10 +145,14 @@ activities:
 | Key | Description |
 |-----|-------------|
 | `name` | Display name (defaults to the key) |
+| `icon` | Icon in the remote control card, e.g. `mdi:television` |
+| `order` | Position in lists; without it, activities are sorted by name. Home Assistant stores the configuration with sorted keys, so the order in which you write activities is not kept |
 | `devices` | Devices the activity uses, in power-on order |
 | `steps` | Settings applied once the devices are up |
 | `on_start` | Home Assistant actions, run alongside the start |
 | `on_stop` | Home Assistant actions, run alongside a stop |
+| `remote` | Which device gets which remote buttons, and extra buttons, see [Remote control](#remote-control) |
+| `commands` | Remote buttons only this activity has, see [Remote control](#remote-control) |
 
 `on_start` and `on_stop` use the same syntax as scripts and automations: `action`, `if`/`then`, `choose`, `delay`, `wait_template`, `parallel` and so on. They run on a full stop only, not when switching to another activity.
 
@@ -189,6 +200,91 @@ For the example above: VU+ off → projector off → 180 s cool-down → Onkyo o
 ### Commands while something runs
 
 A new command cancels whatever runs in the room: a stop during a long start takes effect immediately, and a stop from the `error` state switches off what the failed start had already powered. Sending the command that is already running just waits for it.
+
+---
+
+## Remote control
+
+### The card
+
+Add the card to any dashboard (**Edit dashboard → Add card → AV Scenes Remote**) and pick the room, or in YAML:
+
+```yaml
+type: custom:av-scenes-remote-card
+room: wohnzimmer
+name: Living room   # optional title
+```
+
+The integration loads the card itself; there is no dashboard resource to add. The card shows the room's state with a power button (toggle), the activities as buttons, the start progress and errors, and — while an activity runs — the remote: volume rocker and slider, d-pad, channel rocker, navigation and playback keys and the activity's own buttons. Only what the running activity offers is shown. Volume and arrow keys repeat while held. It works for every user, in the browser and in the Home Assistant app.
+
+### Which device gets which button
+
+Buttons belong to four groups. Each activity sends a group to one of its devices:
+
+| Group | Commands | Default device |
+|-------|----------|----------------|
+| `volume` | `volume_up`, `volume_down`, `mute`, `volume_set` | First media player of the activity |
+| `channels` | `channel_up`, `channel_down` | Last media player, if it is a separate source (e.g. a set-top box behind the receiver) |
+| `transport` | `play_pause`, `play`, `pause`, `stop`, `next`, `previous` | Last media player |
+| `navigation` | `up`, `down`, `left`, `right`, `ok`, `back`, `menu`, `home`, `info`, `guide`, `exit` | Last device with navigation `commands` |
+
+Media players handle volume, channels and playback without any configuration (`media_player.volume_up`, `media_next_track`, …; set-top boxes such as Enigma2 map next/previous track to the channel keys). Override the defaults per activity, or hide a group with `null`:
+
+```yaml
+activities:
+  tv:
+    remote:
+      volume: onkyo
+      channels: vu
+      transport: null
+```
+
+### Own commands and buttons
+
+`commands` maps a command name to Home Assistant actions — on a device for every activity that uses it, or on an activity for that activity only. The variables `command`, `value` and (on devices) `entity_id` are available in templates. Own commands override the built-in ones.
+
+Navigation keys need commands, since most media players have no actions for them. Enigma2 receivers (VU+, Dreambox) accept key codes through OpenWebif; the codes below are Linux input key codes — check them against your box:
+
+```yaml
+# configuration.yaml
+rest_command:
+  vu_key:
+    url: "http://vu-as2b.local/api/remotecontrol?command={{ code }}"
+```
+
+```yaml
+# AV Scenes room
+devices:
+  vu:
+    entity_id: media_player.vu_as2b_de
+    commands:
+      up:    {action: rest_command.vu_key, data: {code: 103}}
+      down:  {action: rest_command.vu_key, data: {code: 108}}
+      left:  {action: rest_command.vu_key, data: {code: 105}}
+      right: {action: rest_command.vu_key, data: {code: 106}}
+      ok:    {action: rest_command.vu_key, data: {code: 352}}
+      exit:  {action: rest_command.vu_key, data: {code: 174}}
+      menu:  {action: rest_command.vu_key, data: {code: 139}}
+      info:  {action: rest_command.vu_key, data: {code: 358}}
+      guide: {action: rest_command.vu_key, data: {code: 365}}
+activities:
+  tv:
+    icon: mdi:television
+    order: 1
+    remote:
+      buttons:
+        - guide
+        - {command: netflix, name: Netflix, icon: mdi:netflix}
+    commands:
+      netflix:
+        - action: media_player.select_source
+          target: {entity_id: media_player.onkyo_receiver}
+          data: {source: STRM BOX}
+```
+
+`buttons` lists extra buttons of the activity; each names a command (standard or own) with optional `name`, `icon` and `device`.
+
+A command is resolved in this order: the activity's own `commands`, then the device of its group (own `commands` or built-in action), then the first device of the activity that defines it — so digit keys `"0"`–`"9"` only need to exist on the set-top box.
 
 ---
 
@@ -252,6 +348,13 @@ data:
   room: wohnzimmer
   activity: tv        # optional
 
+# Send a remote button to the device the running activity uses for it
+action: av_scenes.send_command
+data:
+  room: wohnzimmer
+  command: volume_up  # or volume_set with value: 0.4, ok, channel_up, an own command …
+  device: vu          # optional: this device instead, works while nothing runs
+
 # Reload the configuration
 action: av_scenes.reload
 ```
@@ -277,7 +380,7 @@ actions:
       activity: tv
 ```
 
-With a rocker that sends separate on/off telegrams, use `start_activity` and `stop_activity` instead.
+With a rocker that sends separate on/off telegrams, use `start_activity` and `stop_activity` instead. Volume buttons on the wall work the same way with `send_command`, and always reach the device of the running activity.
 
 ---
 
@@ -312,6 +415,16 @@ Two behaviours change: all devices are switched on before the settings steps run
 pip install -r requirements_test.txt
 pytest
 ```
+
+The remote control card lives in `frontend/` (Lit, TypeScript, esbuild):
+
+```bash
+cd frontend
+npm ci
+npm run build   # writes custom_components/av_scenes/frontend/av-scenes-card.js
+```
+
+The build output is not tracked in git. Publishing a GitHub release runs `.github/workflows/release.yml`, which builds the card and attaches `av_scenes.zip` — the version in the tag, `manifest.json` and `frontend/package.json` must match.
 
 ---
 
