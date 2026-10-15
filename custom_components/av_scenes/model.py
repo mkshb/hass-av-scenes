@@ -10,6 +10,7 @@ Layout of ``entry.data``::
             entity_id: media_player.onkyo_receiver
             power_switch: switch.wz_steckdose_multimedia   # optional
             ready: {timeout: 60, reload_integration: true, on_timeout: abort}
+            delay_after_power: 0           # boot time after its power switch came on
             delay_after_on: 0
             delay_after_off: 0
             commands:                      # remote buttons -> HA actions
@@ -55,6 +56,7 @@ from .const import (
     CONF_DATA,
     CONF_DELAY_AFTER_OFF,
     CONF_DELAY_AFTER_ON,
+    CONF_DELAY_AFTER_POWER,
     CONF_DEVICE,
     CONF_DEVICES,
     CONF_ENTITY_ID,
@@ -123,6 +125,7 @@ DEVICE_SCHEMA = vol.Schema(
         vol.Optional(CONF_NAME): str,
         vol.Optional(CONF_POWER_SWITCH): vol.Any(None, cv.entity_id),
         vol.Optional(CONF_READY): vol.Any(None, READY_SCHEMA),
+        vol.Optional(CONF_DELAY_AFTER_POWER, default=0): _SECONDS,
         vol.Optional(CONF_DELAY_AFTER_ON, default=0): _SECONDS,
         vol.Optional(CONF_DELAY_AFTER_OFF, default=0): _SECONDS,
         vol.Optional(CONF_COMMANDS, default=dict): _COMMANDS,

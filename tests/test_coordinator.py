@@ -259,3 +259,37 @@ async def test_service_call_is_blocking_with_timeout(hass: HomeAssistant) -> Non
         _current_room.reset(token)
     assert finished == ["fast"]
     assert "did not finish within 0.2 s" in coordinator.runtime("r").warnings[0]
+
+
+async def test_delay_after_power(hass: HomeAssistant, devices: Devices) -> None:
+    """Boot time after the power switch, shared by devices on the same switch."""
+    data = living_room()
+    room = data["rooms"]["wz"]
+    for device in room["devices"].values():
+        device.pop("ready", None)
+    room["devices"]["onkyo"]["delay_after_power"] = 15
+    room["devices"]["vu"]["delay_after_power"] = 20  # same switch as the Onkyo
+    room["devices"]["beamer"]["delay_after_power"] = 5  # waited off by then
+    coordinator = await setup(hass, devices, data)
+
+    await coordinator.async_start_activity("wz", "tv")
+
+    # Onkyo waits 15 s; by then the beamer has booted, the VU+ needs 5 s more
+    assert devices.sleeps == [15, 5]
+    assert devices.names().index(("homeassistant.turn_on", (PLUG_MM, PLUG_BEAMER))) < (
+        devices.names().index(("homeassistant.turn_on", (ONKYO,)))
+    )
+
+
+async def test_delay_after_power_skipped_when_powered(
+    hass: HomeAssistant, devices: Devices
+) -> None:
+    """No boot time when the power switch was already on."""
+    data = living_room()
+    data["rooms"]["wz"]["devices"]["onkyo"]["delay_after_power"] = 15
+    coordinator = await setup(hass, devices, data)
+    hass.states.async_set(PLUG_MM, "on")
+
+    await coordinator.async_start_activity("wz", "musik")
+
+    assert devices.sleeps == []

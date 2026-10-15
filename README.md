@@ -128,6 +128,7 @@ activities:
 | `name` | — | Optional display name |
 | `power_switch` | — | Switch that supplies the device with power. Several devices may share one |
 | `ready` | — | Readiness check before the device is switched on (see below) |
+| `delay_after_power` | `0` | Boot time: seconds the device needs after its `power_switch` came on before it accepts commands. Counted from switching the outlet on, so devices on the same outlet boot in parallel. Skipped when the outlet was already on. Use it for devices that report `off` instead of `unavailable` while they have no power — the readiness check cannot tell those states apart |
 | `delay_after_on` | `0` | Seconds to wait after switching the device on. Skipped when the device was already on |
 | `delay_after_off` | `0` | Seconds the device needs after switching off before the next device is switched off or its power is cut |
 | `commands` | — | Remote buttons as Home Assistant actions, see [Remote control](#remote-control) |
@@ -185,7 +186,7 @@ Every service call waits for the device to finish (`blocking`), at most 15 secon
 1. **Smart switching** — if another activity runs in the room, its devices that the new one does not use are switched off. Power outlets that are no longer needed are switched off in the background once those devices had their `delay_after_off`.
 2. **Power** — all outlets of the activity's devices are switched on at once, so the devices boot in parallel.
 3. **`on_start`** starts running alongside.
-4. **Devices**, in order: readiness check, switch on (only if off), `delay_after_on` (only if it was switched on).
+4. **Devices**, in order: boot time `delay_after_power` (only if its outlet was off), readiness check, switch on (only if off), `delay_after_on` (only if it was switched on).
 5. **Steps**, in order.
 6. When `on_start` has finished too, the activity is `active`.
 

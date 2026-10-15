@@ -77,6 +77,8 @@ class Devices:
         self.hass = hass
         self.calls: list[tuple[str, tuple[str, ...], dict[str, Any]]] = []
         self.sleeps: list[float] = []
+        # Fake clock, advanced by the fake sleep
+        self.clock = 0.0
         for service in ("close_cover", "open_cover"):
             hass.services.async_register("cover", service, self._record)
 
@@ -115,7 +117,9 @@ async def setup(hass: HomeAssistant, devices: Devices, data: dict[str, Any]) -> 
 
     async def fake_sleep(seconds: float) -> None:
         devices.sleeps.append(seconds)
+        devices.clock += seconds
 
     coordinator._async_sleep = fake_sleep  # type: ignore[method-assign]
+    coordinator._now = lambda: devices.clock  # type: ignore[method-assign]
     coordinator._async_call = devices.engine_call  # type: ignore[method-assign]
     return coordinator

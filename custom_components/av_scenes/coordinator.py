@@ -7,8 +7,10 @@ Starting an activity
     2. Power: all power switches the new activity needs are switched on at
        once so the devices boot in parallel.
     3. ``on_start`` actions start running alongside.
-    4. Per device, in order: readiness check (``ready``), turn on (only when
-       it is off), ``delay_after_on`` (only when it was switched on).
+    4. Per device, in order: boot time ``delay_after_power`` (only when its
+       power switch was off, counted from switching it on), readiness check
+       (``ready``), turn on (only when it is off), ``delay_after_on`` (only
+       when it was switched on).
     5. Steps.
     6. Wait for ``on_start``; the activity is ``active``.
 
@@ -86,6 +88,7 @@ from .const import (
     CONF_DATA,
     CONF_DELAY_AFTER_OFF,
     CONF_DELAY_AFTER_ON,
+    CONF_DELAY_AFTER_POWER,
     CONF_DEVICE,
     CONF_DEVICES,
     CONF_ENTITY_ID,
@@ -700,6 +703,8 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if previous is not None:
                 await self._async_switch_off_unused(room_id, previous, new_devices, context)
 
+            # Switches that were off: their devices need their boot time
+            powered = {s for s in needed_switches if self._is_off(s)}
             if needed_switches:
                 await self._async_call(
                     "homeassistant",
@@ -708,12 +713,21 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     context,
                     f"power on {', '.join(needed_switches)}",
                 )
+            powered_at = self._now()
 
             hook = self._start_hook(room_id, activity_id, CONF_ON_START, context)
 
             done = 0
             for device_id in new_devices:
                 device = devices[device_id]
+                if device.get(CONF_POWER_SWITCH) in powered and device[CONF_DELAY_AFTER_POWER]:
+                    # Devices on the same switch boot in parallel
+                    remaining = device[CONF_DELAY_AFTER_POWER] - (self._now() - powered_at)
+                    if remaining > 0:
+                        _LOGGER.debug(
+                            "Waiting %.1f s for %s to boot", remaining, device[CONF_ENTITY_ID]
+                        )
+                        await self._async_sleep(remaining)
                 if device.get(CONF_READY):
                     await self._async_wait_ready(
                         device[CONF_ENTITY_ID], device[CONF_READY], f"device '{device_id}'"
@@ -885,6 +899,10 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_sleep(self, seconds: float) -> None:
         """Wait between actions (a seam for tests)."""
         await asyncio.sleep(seconds)
+
+    def _now(self) -> float:
+        """Monotonic clock in seconds (a seam for tests)."""
+        return self.hass.loop.time()
 
     def _remaining_cooldown(self, entity_id: str, delay: float) -> float:
         """Cool-down still left for a device that was already off."""
