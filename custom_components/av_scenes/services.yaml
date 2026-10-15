@@ -32,3 +32,22 @@ stop_activity:
 reload:
   name: Reload
   description: Reload the AV Scenes configuration
+
+toggle_activity:
+  name: Toggle Activity
+  description: Stop the running activity of a room, or start one
+  fields:
+    room:
+      name: Room
+      description: The room identifier
+      required: true
+      example: "living_room"
+      selector:
+        text:
+    activity:
+      name: Activity
+      description: Activity to start when nothing runs (default - the last one)
+      required: false
+      example: "TV"
+      selector:
+        text:

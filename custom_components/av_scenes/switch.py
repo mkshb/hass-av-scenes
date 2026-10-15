@@ -12,7 +12,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     DOMAIN,
-    ACTIVITY_STATE_ACTIVE,
+    ACTIVITY_STATE_IDLE,
     ATTR_CURRENT_ACTIVITY,
     ATTR_AVAILABLE_ACTIVITIES,
     DEVICE_NAME_PREFIX,
@@ -58,8 +58,11 @@ class RoomActivitySwitch(CoordinatorEntity, SwitchEntity):
 
     @property
     def is_on(self) -> bool:
-        """Return true if an activity is running."""
-        return self.room_id in self.coordinator.active_activities
+        """Return true if an activity runs, starts or failed halfway."""
+        return (
+            self.coordinator.activity_states.get(self.room_id, ACTIVITY_STATE_IDLE)
+            != ACTIVITY_STATE_IDLE
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -77,10 +80,12 @@ class RoomActivitySwitch(CoordinatorEntity, SwitchEntity):
         return attrs
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn on is not supported - use scenes to start activities."""
-        _LOGGER.warning(
-            "Cannot turn on activity switch directly. Use a scene to start an activity."
-        )
+        """Start the last activity of the room (or the first one)."""
+        activity = self.coordinator.default_activity(self.room_id)
+        if activity is None:
+            _LOGGER.warning("Room '%s' has no activity to start", self.room_id)
+            return
+        await self.coordinator.async_start_activity(self.room_id, activity)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the current activity."""

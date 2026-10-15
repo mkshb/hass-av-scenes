@@ -23,6 +23,7 @@ from .const import (
     ACTIVITY_STATE_IDLE,
     ACTIVITY_STATE_STARTING,
     ACTIVITY_STATE_STOPPING,
+    ACTIVITY_STATE_ERROR,
 )
 from .coordinator import AVScenesCoordinator
 
@@ -32,9 +33,10 @@ _LOGGER = logging.getLogger(__name__)
 _OPT_IDLE = "—"
 _OPT_STARTING = "⏳ Startet …"
 _OPT_STOPPING = "⏹ Stoppt …"
+_OPT_ERROR = "⚠ Fehler"
 
 # Options the user must not be able to actively choose
-_READONLY_OPTIONS = {_OPT_STARTING, _OPT_STOPPING}
+_READONLY_OPTIONS = {_OPT_STARTING, _OPT_STOPPING, _OPT_ERROR}
 
 
 async def async_setup_entry(
@@ -76,11 +78,12 @@ class RoomActivitySelect(CoordinatorEntity, SelectEntity):
     @property
     def options(self) -> list[str]:
         """Return all selectable options plus any active status label."""
-        activities = list(
-            self.coordinator.rooms.get(self.room_id, {})
-            .get(CONF_ACTIVITIES, {})
-            .keys()
-        )
+        activities = [
+            self.coordinator.activity_name(self.room_id, activity_id)
+            for activity_id in self.coordinator.rooms.get(self.room_id, {}).get(
+                CONF_ACTIVITIES, {}
+            )
+        ]
         base = [_OPT_IDLE] + activities
 
         state = self.coordinator.activity_states.get(self.room_id, ACTIVITY_STATE_IDLE)
@@ -88,6 +91,8 @@ class RoomActivitySelect(CoordinatorEntity, SelectEntity):
             return [_OPT_STARTING] + base
         if state == ACTIVITY_STATE_STOPPING:
             return [_OPT_STOPPING] + base
+        if state == ACTIVITY_STATE_ERROR:
+            return [_OPT_ERROR] + base
         return base
 
     # ------------------------------------------------------------------
@@ -103,9 +108,13 @@ class RoomActivitySelect(CoordinatorEntity, SelectEntity):
             return _OPT_STARTING
         if state == ACTIVITY_STATE_STOPPING:
             return _OPT_STOPPING
+        if state == ACTIVITY_STATE_ERROR:
+            return _OPT_ERROR
 
         activity = self.coordinator.active_activities.get(self.room_id)
-        return activity if activity else _OPT_IDLE
+        if not activity:
+            return _OPT_IDLE
+        return self.coordinator.activity_name(self.room_id, activity)
 
     # ------------------------------------------------------------------
     # Interaction

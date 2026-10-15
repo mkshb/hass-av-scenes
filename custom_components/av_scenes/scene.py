@@ -61,7 +61,8 @@ class AVScene(Scene):
         self.activity_name = activity_name
         
         room_name = coordinator.rooms[room_id].get("name", room_id)
-        self._attr_name = f"{room_name} - {activity_name}"
+        display_name = coordinator.activity_name(room_id, activity_name)
+        self._attr_name = f"{room_name} - {display_name}"
         self._attr_unique_id = f"{DOMAIN}_{room_id}_{activity_name}"
 
     async def async_activate(self, **kwargs: Any) -> None:
