@@ -2,13 +2,13 @@
   "name": "av-scenes-card",
   "version": "0.7.0",
   "private": true,
-  "description": "Remote control card for the AV Scenes integration",
+  "description": "Remote control card and configuration panel for the AV Scenes integration",
   "license": "MIT",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "npm run typecheck && esbuild src/av-scenes-card.ts --bundle --minify --format=esm --target=es2021 --legal-comments=none --outfile=../custom_components/av_scenes/frontend/av-scenes-card.js",
-    "watch": "esbuild src/av-scenes-card.ts --bundle --format=esm --target=es2021 --watch --outfile=../custom_components/av_scenes/frontend/av-scenes-card.js"
+    "build": "npm run typecheck && esbuild src/av-scenes-card.ts src/av-scenes-panel.ts --bundle --minify --format=esm --target=es2021 --legal-comments=none --outdir=../custom_components/av_scenes/frontend",
+    "watch": "esbuild src/av-scenes-card.ts src/av-scenes-panel.ts --bundle --format=esm --target=es2021 --watch --outdir=../custom_components/av_scenes/frontend"
   },
   "dependencies": {
     "lit": "3.3.3"

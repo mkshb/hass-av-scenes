@@ -28,6 +28,7 @@ AV Scenes controls the devices of a room (AV receiver, projector, TV, set-top bo
 | Failure handling | A failed readiness check can abort the start; the room shows `error` with the reason |
 | Restart-safe | The running activity survives a Home Assistant restart |
 | Repairs | Entities that do not exist (typo, renamed entity) are reported in **Settings → Repairs** |
+| Configuration panel | An admin page in the sidebar: rooms, devices, activities, steps and remote buttons as forms with Home Assistant's own pickers, plus a YAML view |
 | Remote control card | A dashboard card per room: power, activities, volume, d-pad, channels, playback and your own buttons — only what the running activity offers |
 | Command routing | `av_scenes.send_command` sends a button (e.g. `volume_up`) to whichever device the running activity uses for it — from the card, automations or wall switches |
 | 4 entity platforms | Scene, Switch, Sensor, Select — one virtual device per room |
@@ -59,11 +60,22 @@ A plain copy of the repository lacks the remote control card, which is built at 
 ## Setup
 
 1. **Settings** → **Devices & Services** → **+ Add Integration** → **AV Scenes**
-2. Click **Configure** on the integration
-3. **Add room** — pick a Home Assistant area or enter a name
-4. Describe devices and activities in the YAML editor that opens (see below) and save
+2. Open **AV Scenes** in the sidebar (administrators only)
+3. **Add room**, then add devices and activities and **Save**
 
-The menu also offers **Edit room**, **Delete room** and **Edit whole configuration**, which shows all rooms as one YAML document — handy for backups and copying activities between rooms.
+### Configuration panel
+
+The panel edits everything the [configuration](#configuration) below describes:
+
+- **Devices** — entity and power outlet with Home Assistant's entity picker; boot time, wait times and readiness check as fields; own `commands` in a YAML field. Renaming a device ID updates every reference; a device that an activity still uses cannot be deleted.
+- **Activities** — name, icon, position, devices in power-on order, steps (source and sound mode lists come from the device), remote button routing, and `on_start` / `on_stop` in Home Assistant's action editor, the same as in automations. The activity ID is part of the entity IDs and cannot be changed.
+- **YAML** — the whole room as YAML, for anything the forms do not cover.
+
+**Save** checks the configuration first: errors are shown with their exact place, unknown entities of the room as a warning you can confirm. If the configuration was changed elsewhere in the meantime (a second browser, the YAML editor below), the panel asks you to reload instead of overwriting it.
+
+### YAML editor in the integration options
+
+**Configure** on the integration opens the same configuration as YAML: **Add room**, **Edit room**, **Delete room** and **Edit whole configuration**, which shows all rooms as one YAML document — handy for backups and copying activities between rooms.
 
 Every save is validated. Errors name the exact place, e.g. `rooms.wohnzimmer.activities.tv.devices.0: unknown device 'vu'`. Entities that do not exist in Home Assistant are listed as warnings that you can confirm or go back and fix. A device without power still counts as existing, because its entity stays in the entity registry.
 
@@ -417,12 +429,12 @@ pip install -r requirements_test.txt
 pytest
 ```
 
-The remote control card lives in `frontend/` (Lit, TypeScript, esbuild):
+The remote control card and the configuration panel live in `frontend/` (Lit, TypeScript, esbuild):
 
 ```bash
 cd frontend
 npm ci
-npm run build   # writes custom_components/av_scenes/frontend/av-scenes-card.js
+npm run build   # writes av-scenes-card.js and av-scenes-panel.js to custom_components/av_scenes/frontend/
 ```
 
 The build output is not tracked in git. Publishing a GitHub release runs `.github/workflows/release.yml`, which builds the card and attaches `av_scenes.zip`. The release tag sets the version in the archive (e.g. `v0.7.0-beta.1` for a pre-release that HACS offers under "Show beta versions").

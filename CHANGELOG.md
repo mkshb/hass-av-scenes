@@ -26,11 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚠️ **`error` state** – an aborted start is never reported as `active`; reason in the sensor attribute `error` and in Settings → Repairs; failed steps in `warnings`
 - 💾 **State survives restarts** – the running activity is restored after a Home Assistant restart
 - 🩺 **Repairs** – entities that do not exist (typo, renamed entity) are reported under Settings → Repairs
+- 🎛️ **Configuration panel** – admin page in the sidebar to edit rooms, devices, activities, steps and remote buttons as forms with Home Assistant's own pickers and action editor, plus a YAML view per room; checks before saving and refuses to overwrite changes made elsewhere
 - 🎛️ **Remote control card** `custom:av-scenes-remote-card` – power, activities, volume rocker and slider, d-pad, channels, playback and own buttons per room; shows only what the running activity offers; visual editor; loaded by the integration, no dashboard resource needed
 - 📡 **`send_command` action** – sends a remote button to the device the running activity uses for it (volume, channels, transport, navigation); media players work without configuration
 - 🧩 **`commands`, `remote`, `icon`** – own buttons as Home Assistant actions per device or activity, routing of button groups and extra buttons per activity
 - 🔢 **`order`** – position of an activity in lists; Home Assistant stores the configuration with sorted keys, so the written order is not kept across restarts
-- 🔌 **Websocket API** `av_scenes/control/rooms` and `av_scenes/control/subscribe` for the card
+- 🔌 **Websocket API** `av_scenes/control/rooms` and `av_scenes/control/subscribe` for the card, `av_scenes/config/get`, `config/validate` and `config/save` (admins only) for the panel
 - 🚀 **Release workflow** – builds the card and attaches `av_scenes.zip`; HACS installs that archive
 - 🧪 **Tests** with `pytest-homeassistant-custom-component`, CI with hassfest and HACS validation
 

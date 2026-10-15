@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "AV Scenes einrichten",
-        "description": "Nach der Einrichtung legst du Räume, Geräte und Aktivitäten über „Konfigurieren“ an."
+        "description": "Räume, Geräte und Aktivitäten legst du nach der Einrichtung im Panel „AV Scenes“ in der Seitenleiste an – oder als YAML über „Konfigurieren“."
       }
     },
     "abort": {

@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Set up AV Scenes",
-        "description": "After setup, add rooms, devices and activities via \"Configure\"."
+        "description": "After setup, add rooms, devices and activities in the AV Scenes panel in the sidebar, or as YAML via \"Configure\"."
       }
     },
     "abort": {
