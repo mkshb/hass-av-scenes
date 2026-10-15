@@ -12,6 +12,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.0] - 2026-10-15
+
+### Added
+- 🔌 **Device profiles per room** – entity, power outlet (`power_switch`), readiness check (`ready`), `delay_after_on` and `delay_after_off` are set once per device instead of in every step
+- ⚡ **Power outlets** – all outlets an activity needs are switched on at once; shared outlets stay on while any device on them is needed and are switched off last when stopping
+- ⏳ **Readiness check and `wait_available` step** – event-based wait until an entity is available; optionally reloads its integration once to skip the `setup_retry` back-off; `continue` or `abort` on timeout
+- 🧊 **Switch-off delay `delay_after_off`** – cool-down per device, e.g. 180 s for a projector before its power is cut
+- 🪝 **`on_start` / `on_stop`** – any Home Assistant actions with conditions, run by Home Assistant's script engine
+- 🔁 **`toggle_activity` action** – stops if something runs, otherwise starts the last used activity; meant for push buttons (e.g. KNX)
+- 🛑 **Cancelling** – a stop during a running start takes effect immediately
+- ⚠️ **`error` state** – an aborted start is never reported as `active`; reason in the sensor attribute `error` plus a persistent notification; failed steps in `warnings`
+- 💾 **State survives restarts** – the running activity is restored after a Home Assistant restart
+- 🩺 **Repairs** – entities that do not exist (typo, renamed entity) are reported under Settings → Repairs
+- 🧪 **Tests** with `pytest-homeassistant-custom-component`
+
+### Changed
+- 📝 **YAML configuration** – the multi-step click flows are replaced by a YAML editor per room (or for the whole configuration) with validation and the exact error location
+- ♻️ **Changes without reload** – content changes are applied without interrupting running activities
+- ⏱️ **Service calls wait for the device** (`blocking`, at most 15 s) instead of only fixed delays
+- 🔛 **Devices that are already on** get no turn-on command and no warm-up delay
+- 🔀 **Smart switching** – outlets that are no longer needed are switched off in the background after the cool-down; the new activity does not wait
+- 🎚️ **Switch** – `turn_on` now starts the last used activity
+- 🏷️ **Select and scenes** show the activity's display name; actions accept ID or name
+- 💡 **Lights** – brightness as `brightness_pct`, color temperature as `color_temp_kelvin`
+
+### Fixed
+- 🐛 Color temperature steps failed because Home Assistant removed `color_temp` (mireds) from `light.turn_on`
+- 🐛 "Detected blocking call to open … inside the event loop" caused by the debug log at startup
+
+### Removed
+- 🗑️ Custom debug log at `/config/av_scenes_debug.log` – use "Enable debug logging" on the integration instead
+- 🗑️ Unused constants, including `CONF_POWER_OFF_DELAY`
+
+### Migration
+- Existing configurations are migrated automatically from version 1 to 2 without data loss. See "Upgrading from 0.6 and earlier" in the README. **Make a backup first** – older versions cannot load a migrated configuration.
+
+---
+
 ## [0.3.1] - 2025-12-17
 
 ### 🇩🇪 Deutsch
