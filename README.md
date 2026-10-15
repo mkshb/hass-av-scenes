@@ -313,8 +313,8 @@ Shows the running activity and starts, switches or stops activities.
 |----------------------|----------|---------|
 | Activity name | Activity name | That activity is active — select another one to switch |
 | `idle` | `—` | Idle; selecting it stops the current activity |
-| `starting` / `stopping` | `⏳ Starting …` / `⏹ Stopping …` | Transition in progress (read-only) |
-| `error` | `⚠ Error` | The last start was aborted (read-only) — see the sensor |
+| `starting` / `stopping` | `Starting …` / `Stopping …` | Transition in progress (read-only) |
+| `error` | `Error` | The last start was aborted (read-only) — see the sensor |
 
 ### Sensor — Activity
 

@@ -90,9 +90,9 @@
         "name": "Szene",
         "state": {
           "idle": "—",
-          "starting": "⏳ Startet …",
-          "stopping": "⏹ Stoppt …",
-          "error": "⚠ Fehler"
+          "starting": "Startet …",
+          "stopping": "Stoppt …",
+          "error": "Fehler"
         }
       }
     },
