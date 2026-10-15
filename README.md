@@ -424,7 +424,7 @@ npm ci
 npm run build   # writes custom_components/av_scenes/frontend/av-scenes-card.js
 ```
 
-The build output is not tracked in git. Publishing a GitHub release runs `.github/workflows/release.yml`, which builds the card and attaches `av_scenes.zip` — the version in the tag, `manifest.json` and `frontend/package.json` must match.
+The build output is not tracked in git. Publishing a GitHub release runs `.github/workflows/release.yml`, which builds the card and attaches `av_scenes.zip`. The release tag sets the version in the archive (e.g. `v0.7.0-beta.1` for a pre-release that HACS offers under "Show beta versions").
 
 ---
 

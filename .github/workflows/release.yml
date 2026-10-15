@@ -15,15 +15,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Check that the version matches the tag
+      # The tag is the version (also for pre-releases such as v0.7.0-beta.1)
+      - name: Set the version from the tag
         run: |
-          tag="${GITHUB_REF_NAME#v}"
-          manifest=$(jq -r .version custom_components/av_scenes/manifest.json)
-          package=$(jq -r .version frontend/package.json)
-          if [ "$tag" != "$manifest" ] || [ "$tag" != "$package" ]; then
-            echo "Tag $tag, manifest.json $manifest, package.json $package differ"
-            exit 1
-          fi
+          version="${GITHUB_REF_NAME#v}"
+          for file in custom_components/av_scenes/manifest.json frontend/package.json; do
+            jq --arg v "$version" '.version = $v' "$file" > "$file.tmp"
+            mv "$file.tmp" "$file"
+          done
+          echo "Version $version"
 
       - uses: actions/setup-node@v5
         with:
