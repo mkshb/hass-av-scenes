@@ -88,6 +88,7 @@ from .const import (
     CONF_TYPE,
     CONF_VOLUME_LEVEL,
     DEFAULT_READY_TIMEOUT,
+    DOMAIN,
     ON_TIMEOUT_ABORT,
     ON_TIMEOUT_OPTIONS,
     STEP_TYPE_CALL_ACTION,
@@ -397,6 +398,40 @@ async def async_validate_config(hass: HomeAssistant, data: dict[str, Any]) -> di
                     hass, actions, [*path, CONF_COMMANDS, name]
                 )
     return validated
+
+
+def scene_unique_id(room_id: str, activity_id: str) -> str:
+    """Unique ID of the scene of an activity."""
+    return f"{DOMAIN}_{room_id}_{activity_id}"
+
+
+def switch_unique_id(room_id: str) -> str:
+    """Unique ID of a room's switch."""
+    return f"{DOMAIN}_activity_{room_id}"
+
+
+def sensor_unique_id(room_id: str) -> str:
+    """Unique ID of a room's activity sensor."""
+    return f"{DOMAIN}_activity_state_{room_id}"
+
+
+def select_unique_id(room_id: str) -> str:
+    """Unique ID of a room's scene select."""
+    return f"{DOMAIN}_select_{room_id}"
+
+
+def expected_unique_ids(rooms: dict[str, Any]) -> set[str]:
+    """Unique IDs of all entities the configuration creates."""
+    ids: set[str] = set()
+    for room_id, room in rooms.items():
+        ids.update(
+            (switch_unique_id(room_id), sensor_unique_id(room_id), select_unique_id(room_id))
+        )
+        ids.update(
+            scene_unique_id(room_id, activity_id)
+            for activity_id in (room.get(CONF_ACTIVITIES) or {})
+        )
+    return ids
 
 
 @dataclass(frozen=True, slots=True)

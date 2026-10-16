@@ -25,6 +25,7 @@ from .const import (
     DEVICE_NAME_PREFIX,
 )
 from .coordinator import AVScenesCoordinator
+from .model import sensor_unique_id
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -80,7 +81,7 @@ class RoomActivitySensor(CoordinatorEntity, SensorEntity):
 
         room_name = coordinator.rooms[room_id].get("name", room_id)
         self._room_name = room_name
-        self._attr_unique_id = f"{DOMAIN}_activity_state_{room_id}"
+        self._attr_unique_id = sensor_unique_id(room_id)
 
     # ------------------------------------------------------------------
     # State

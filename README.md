@@ -370,7 +370,9 @@ An aborted start is also reported in **Settings → Repairs**; the entry disappe
 
 ### Scene — one per activity
 
-One scene per activity; activating it starts the activity.
+One scene per activity; activating it starts the activity. Like the other entities it is named after the room's device and the activity, e.g. "AV: Wohnzimmer TV".
+
+Entities of a deleted activity and the device of a deleted room are removed on the next start of the integration, instead of staying "unavailable".
 
 ---
 

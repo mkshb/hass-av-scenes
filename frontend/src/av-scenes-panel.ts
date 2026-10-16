@@ -284,6 +284,7 @@ export class AvScenesPanel extends LitElement {
                 .room=${this._rooms[selected]}
                 .roomId=${selected}
                 .sources=${this._sources}
+                .saved=${(JSON.parse(this._original || "{}") as Rooms)[selected]}
                 @room-changed=${(ev: CustomEvent<{ room: Room }>) => this._roomChanged(selected, ev.detail.room)}
                 @delete-room=${() => this._deleteRoom(selected)}
               ></av-scenes-room-editor>`

@@ -26,6 +26,7 @@ from .const import (
     ACTIVITY_STATE_ERROR,
 )
 from .coordinator import AVScenesCoordinator
+from .model import select_unique_id
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -71,7 +72,7 @@ class RoomActivitySelect(CoordinatorEntity, SelectEntity):
 
         room_data = coordinator.rooms[room_id]
         self._room_name: str = room_data.get("name", room_id)
-        self._attr_unique_id = f"{DOMAIN}_select_{room_id}"
+        self._attr_unique_id = select_unique_id(room_id)
 
     # ------------------------------------------------------------------
     # Options — activity names + idle; transitional states added live

@@ -47,6 +47,7 @@ export class AvScenesRoomEditor extends LitElement {
     room: { attribute: false },
     roomId: { attribute: false },
     sources: { attribute: false },
+    saved: { attribute: false },
     _tab: { state: true },
     _view: { state: true },
     _notice: { state: true },
@@ -56,6 +57,8 @@ export class AvScenesRoomEditor extends LitElement {
   declare room: Room;
   declare roomId: string;
   declare sources: Sources;
+  /** The room as last saved; IDs of what is not saved yet follow their names. */
+  declare saved?: Room;
   declare _tab: Tab;
   declare _view: View;
   declare _notice?: string;
@@ -368,6 +371,11 @@ export class AvScenesRoomEditor extends LitElement {
     this._emit({ ...this.room, devices: { ...this.room.devices, [id]: { ...device, ready } } });
   }
 
+  /** A device or activity that was added and not saved yet. */
+  private _unsaved(kind: "devices" | "activities", id: string): boolean {
+    return !(id in (this.saved?.[kind] ?? {}));
+  }
+
   private _deviceChanged(id: string, v: Obj): void {
     const device = clean({
       entity_id: v.entity_id as string,
@@ -392,7 +400,18 @@ export class AvScenesRoomEditor extends LitElement {
     if (v.ready_enabled && !device.ready) {
       device.ready = {};
     }
-    this._emit({ ...this.room, devices: { ...this.room.devices, [id]: device } });
+    const room: Room = { ...this.room, devices: { ...this.room.devices, [id]: device } };
+    // A new device takes its ID from its entity, e.g. media_player.apple_tv -> apple_tv
+    const objectId = device.entity_id?.split(".")[1];
+    if (objectId && this._unsaved("devices", id) && device.entity_id !== this.room.devices?.[id]?.entity_id) {
+      const to = uniqueKey(slugify(objectId), Object.keys(room.devices ?? {}).filter((k) => k !== id));
+      if (to !== id) {
+        this._emit(renameDevice(room, id, to));
+        this._view = { kind: "device", id: to };
+        return;
+      }
+    }
+    this._emit(room);
   }
 
   private _addDevice(): void {
@@ -491,7 +510,7 @@ export class AvScenesRoomEditor extends LitElement {
           .computeLabel=${this._label}
           @value-changed=${(ev: CustomEvent) => {
             const v = ev.detail.value as Obj;
-            this._setActivity(id, { ...activity, name: v.name as string, icon: v.icon as string, order: v.order as number });
+            this._activityGeneralChanged(id, activity, v);
           }}
         ></ha-form>`,
       )}
@@ -580,6 +599,32 @@ export class AvScenesRoomEditor extends LitElement {
           ></ha-form>`,
       )}
     `;
+  }
+
+  /** Name, icon, position; a new activity takes its ID from its name. */
+  private _activityGeneralChanged(id: string, activity: Activity, v: Obj): void {
+    const next = clean({ ...activity, name: v.name as string, icon: v.icon as string, order: v.order as number });
+    const name = (v.name as string | undefined)?.trim();
+    if (!name || name === activity.name || !this._unsaved("activities", id)) {
+      this._setActivity(id, next);
+      return;
+    }
+    const to = uniqueKey(slugify(name), Object.keys(this.room.activities ?? {}).filter((k) => k !== id));
+    if (to === id) {
+      this._setActivity(id, next);
+      return;
+    }
+    // Rename the key, keep the order of the others
+    const activities: Record<string, Activity> = {};
+    for (const [key, a] of Object.entries(this.room.activities ?? {})) {
+      activities[key === id ? to : key] = key === id ? next : a;
+    }
+    const room: Room = { ...this.room, activities };
+    if (room.default_activity === id) {
+      room.default_activity = to;
+    }
+    this._emit(room);
+    this._view = { kind: "activity", id: to };
   }
 
   private _renderStep(id: string, activity: Activity, step: Step, index: number): TemplateResult {

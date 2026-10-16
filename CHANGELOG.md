@@ -39,6 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tests** with `pytest-homeassistant-custom-component`, CI with hassfest and HACS validation
 
 ### Changed
+- **Scene names** – scenes are named like the other entities of a room, device name plus activity ("AV: Wohnzimmer TV" instead of "Wohnzimmer - TV"); entity IDs of existing scenes stay, names set in Home Assistant are kept
+- **Stale entities are removed** – entities of deleted activities and devices of deleted rooms no longer stay behind as "unavailable"
+- **IDs of new activities and devices** follow their name or entity in the panel until they are saved, instead of staying "neue_aktivitat" or "device"
 - **YAML configuration** – the multi-step click flows are replaced by a YAML editor per room (or for the whole configuration) with validation and the exact error location
 - **Changes without reload** – content changes are applied without interrupting running activities
 - **Service calls wait for the device** (`blocking`, at most 15 s) instead of only fixed delays

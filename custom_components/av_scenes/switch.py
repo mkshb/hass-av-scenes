@@ -18,6 +18,7 @@ from .const import (
     DEVICE_NAME_PREFIX,
 )
 from .coordinator import AVScenesCoordinator
+from .model import switch_unique_id
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ class RoomActivitySwitch(CoordinatorEntity, SwitchEntity):
         """Initialize the switch."""
         super().__init__(coordinator)
         self.room_id = room_id
-        self._attr_unique_id = f"{DOMAIN}_activity_{room_id}"
+        self._attr_unique_id = switch_unique_id(room_id)
 
     @property
     def is_on(self) -> bool:

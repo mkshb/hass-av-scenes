@@ -9,9 +9,13 @@ import voluptuous as vol
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ServiceValidationError
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import (
+    config_validation as cv,
+    device_registry as dr,
+    entity_registry as er,
+)
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
@@ -41,6 +45,7 @@ from .const import (
 )
 from .coordinator import AVScenesCoordinator
 from .migration import migrate_v1_to_v2
+from .model import expected_unique_ids
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -226,11 +231,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    _async_remove_stale(hass, entry, coordinator.rooms)
     async_dispatcher_send(hass, SIGNAL_ROOMS_UPDATED)
 
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     return True
+
+
+@callback
+def _async_remove_stale(hass: HomeAssistant, entry: ConfigEntry, rooms: dict) -> None:
+    """Remove entities and devices of activities and rooms that are gone.
+
+    Home Assistant keeps registry entries of entities that are no longer
+    created; they would stay as "unavailable" forever.
+    """
+    wanted = expected_unique_ids(rooms)
+    entity_registry = er.async_get(hass)
+    for entity in er.async_entries_for_config_entry(entity_registry, entry.entry_id):
+        if entity.unique_id not in wanted:
+            _LOGGER.info("Removing %s, its activity or room no longer exists", entity.entity_id)
+            entity_registry.async_remove(entity.entity_id)
+    device_registry = dr.async_get(hass)
+    for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id):
+        if not any(domain == DOMAIN and room in rooms for domain, room in device.identifiers):
+            _LOGGER.info("Removing device %s, its room no longer exists", device.name)
+            device_registry.async_update_device(device.id, remove_config_entry_id=entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
