@@ -10,6 +10,7 @@ Layout of ``entry.data``::
           <device_id>:
             entity_id: media_player.onkyo_receiver
             power_switch: switch.wz_steckdose_multimedia   # optional
+            remote_entity: remote.apple_tv   # optional: arrow keys, OK, back, home, menu
             ready: {timeout: 60, reload_integration: true, on_timeout: abort}
             delay_after_power: 0           # boot time after its power switch came on
             delay_after_on: 0
@@ -76,6 +77,7 @@ from .const import (
     CONF_READY,
     CONF_RELOAD_INTEGRATION,
     CONF_REMOTE,
+    CONF_REMOTE_ENTITY,
     CONF_ROOMS,
     CONF_SOUND_MODE,
     CONF_SOURCE,
@@ -138,6 +140,8 @@ DEVICE_SCHEMA = vol.Schema(
         vol.Optional(CONF_NAME): str,
         vol.Optional(CONF_POWER_SWITCH): vol.Any(None, cv.entity_id),
         vol.Optional(CONF_READY): vol.Any(None, READY_SCHEMA),
+        # Navigation keys go to this remote entity (remote.send_command)
+        vol.Optional(CONF_REMOTE_ENTITY): vol.Any(None, cv.entity_domain("remote")),
         vol.Optional(CONF_DELAY_AFTER_POWER, default=0): _SECONDS,
         vol.Optional(CONF_DELAY_AFTER_ON, default=0): _SECONDS,
         vol.Optional(CONF_DELAY_AFTER_OFF, default=0): _SECONDS,
@@ -453,6 +457,10 @@ def iter_entity_references(data: dict[str, Any]):
             if device.get(CONF_POWER_SWITCH):
                 yield EntityReference(
                     room_id, f"{base}.power_switch", device[CONF_POWER_SWITCH]
+                )
+            if device.get(CONF_REMOTE_ENTITY):
+                yield EntityReference(
+                    room_id, f"{base}.remote_entity", device[CONF_REMOTE_ENTITY]
                 )
             if (device.get(CONF_READY) or {}).get(CONF_ENTITY_ID):
                 yield EntityReference(

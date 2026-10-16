@@ -142,6 +142,7 @@ activities:
 | `entity_id` | — | The entity that represents the device (required) |
 | `name` | — | Optional display name |
 | `power_switch` | — | Switch that supplies the device with power. Several devices may share one |
+| `remote_entity` | — | A `remote` entity for the navigation keys of the card (arrows, OK, back, home, menu), e.g. `remote.apple_tv`, see [Own commands and buttons](#own-commands-and-buttons) |
 | `ready` | — | Readiness check before the device is switched on (see below) |
 | `delay_after_power` | `0` | Boot time: seconds the device needs after its `power_switch` came on before it accepts commands. Counted from switching the outlet on, so devices on the same outlet boot in parallel. Skipped when the outlet was already on. Use it for devices that report `off` instead of `unavailable` while they have no power — the readiness check cannot tell those states apart |
 | `delay_after_on` | `0` | Seconds to wait after switching the device on. Skipped when the device was already on |
@@ -254,7 +255,7 @@ Buttons belong to four groups. Each activity sends a group to one of its devices
 | `volume` | `volume_up`, `volume_down`, `mute`, `volume_set` | First media player of the activity |
 | `channels` | `channel_up`, `channel_down` | Last media player, if it is a separate source (e.g. a set-top box behind the receiver) |
 | `transport` | `play_pause`, `play`, `pause`, `stop`, `next`, `previous` | Last media player |
-| `navigation` | `up`, `down`, `left`, `right`, `ok`, `back`, `menu`, `home`, `info`, `guide`, `exit` | Last device with navigation `commands` |
+| `navigation` | `up`, `down`, `left`, `right`, `ok`, `back`, `menu`, `home`, `info`, `guide`, `exit` | Last device with a `remote_entity` or navigation `commands` |
 
 Media players handle volume, channels and playback without any configuration (`media_player.volume_up`, `media_next_track`, …; set-top boxes such as Enigma2 map next/previous track to the channel keys). Override the defaults per activity, or hide a group with `null`:
 
@@ -271,7 +272,16 @@ activities:
 
 `commands` maps a command name to Home Assistant actions — on a device for every activity that uses it, or on an activity for that activity only. The variables `command`, `value` and (on devices) `entity_id` are available in templates. Own commands override the built-in ones.
 
-Navigation keys need commands, since most media players have no actions for them. Enigma2 receivers (VU+, Dreambox) accept key codes through OpenWebif; the codes below are Linux input key codes — check them against your box:
+Navigation keys need a remote or commands, since most media players have no actions for them. A device with a `remote_entity` gets the arrow keys, OK, back, home and menu through `remote.send_command`, with the key names of its integration (Apple TV: `select`, `menu` for back, `top_menu` for menu; Android TV Remote: `DPAD_UP` …; others: the command name). In the panel, a device whose integration also provides a remote shows a button that sets this up together with the connection check:
+
+```yaml
+aptv:
+  entity_id: media_player.apple_tv
+  remote_entity: remote.apple_tv
+  ready: {entity_id: remote.apple_tv, state: "on", timeout: 60, reload_integration: true, on_timeout: continue}
+```
+
+Own `commands` win over the remote, key by key. Enigma2 receivers (VU+, Dreambox) accept key codes through OpenWebif; the codes below are Linux input key codes — check them against your box:
 
 ```yaml
 # configuration.yaml

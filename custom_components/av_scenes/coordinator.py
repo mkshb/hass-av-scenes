@@ -43,6 +43,7 @@ from typing import Any
 
 import voluptuous as vol
 
+from homeassistant.components.media_player import MediaPlayerEntityFeature
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     ATTR_ENTITY_ID,
@@ -108,6 +109,7 @@ from .const import (
     CONF_READY,
     CONF_RELOAD_INTEGRATION,
     CONF_REMOTE,
+    CONF_REMOTE_ENTITY,
     CONF_ROOMS,
     CONF_SOUND_MODE,
     CONF_SOURCE,
@@ -139,6 +141,7 @@ from .const import (
 from .control import (
     COMMAND_SELECT_SOURCE,
     builtin_call,
+    remote_call,
     command_group,
     device_commands,
     routing,
@@ -739,8 +742,11 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
             return
 
+        remote = device.get(CONF_REMOTE_ENTITY)
         try:
-            call = builtin_call(command, entity_id, self.hass.states.get(entity_id), value)
+            call = (
+                remote_call(command, remote, self._platform_of(remote)) if remote else None
+            ) or builtin_call(command, entity_id, self.hass.states.get(entity_id), value)
         except ValueError as err:
             raise ServiceValidationError(str(err)) from err
         if call is None:
@@ -1204,7 +1210,27 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         state = self.hass.states.get(entity_id)
         return state is None or state.state in _OFF_STATES
 
+    def _platform_of(self, entity_id: str) -> str | None:
+        """The integration that provides an entity, e.g. apple_tv."""
+        entry = er.async_get(self.hass).async_get(entity_id)
+        return entry.platform if entry is not None else None
+
+    def _supports(self, entity_id: str, feature: MediaPlayerEntityFeature) -> bool:
+        """False for a media player that cannot be switched, e.g. a Sonos speaker.
+
+        Without a known state (unavailable) the call is tried anyway.
+        """
+        if not entity_id.startswith("media_player."):
+            return True
+        state = self.hass.states.get(entity_id)
+        if state is None or "supported_features" not in state.attributes:
+            return True
+        return bool(state.attributes["supported_features"] & feature)
+
     async def _async_power_on(self, entity_id: str, context: Context) -> None:
+        if not self._supports(entity_id, MediaPlayerEntityFeature.TURN_ON):
+            _LOGGER.debug("%s cannot be switched on, skipping", entity_id)
+            return
         if entity_id.startswith("cover."):
             await self._async_call(
                 "cover", "open_cover", {ATTR_ENTITY_ID: entity_id}, context, "open"
@@ -1215,6 +1241,9 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
 
     async def _async_power_off(self, entity_id: str, context: Context) -> None:
+        if not self._supports(entity_id, MediaPlayerEntityFeature.TURN_OFF):
+            _LOGGER.debug("%s cannot be switched off, skipping", entity_id)
+            return
         if entity_id.startswith("cover."):
             await self._async_call(
                 "cover", "close_cover", {ATTR_ENTITY_ID: entity_id}, context, "close"

@@ -5,7 +5,8 @@ navigation) to one of its devices. A command then runs
 
 1. the activity's own ``commands`` entry, if there is one,
 2. else on the device its group is routed to: the device's ``commands``
-   entry, or the built-in media_player action,
+   entry, its ``remote_entity`` for navigation keys, or the built-in
+   media_player action,
 3. else the ``commands`` entry of the first device of the activity that
    defines it (e.g. digit keys only the receiver box knows).
 
@@ -28,6 +29,7 @@ from .const import (
     CONF_DEVICES,
     CONF_ENTITY_ID,
     CONF_REMOTE,
+    CONF_REMOTE_ENTITY,
     GROUP_CHANNELS,
     GROUP_NAVIGATION,
     GROUP_TRANSPORT,
@@ -55,6 +57,35 @@ _MEDIA_PLAYER_SERVICES: dict[str, str] = {
     COMMAND_SELECT_SOURCE: "select_source",
 }
 
+# Navigation keys a remote entity handles: command -> remote command, per
+# integration of the remote; others get the command name unchanged
+REMOTE_KEYS: tuple[str, ...] = ("up", "down", "left", "right", "ok", "back", "home", "menu")
+_REMOTE_KEY_NAMES: dict[str, dict[str, str]] = {
+    # Apple TV: the menu button goes back; top_menu is the app's main menu
+    "apple_tv": {"ok": "select", "back": "menu", "menu": "top_menu"},
+    "androidtv_remote": {
+        "up": "DPAD_UP",
+        "down": "DPAD_DOWN",
+        "left": "DPAD_LEFT",
+        "right": "DPAD_RIGHT",
+        "ok": "DPAD_CENTER",
+        "back": "BACK",
+        "home": "HOME",
+        "menu": "MENU",
+    },
+}
+
+
+def remote_call(
+    command: str, remote: str, platform: str | None
+) -> tuple[str, str, dict[str, Any]] | None:
+    """remote.send_command for a navigation key, or None for other commands."""
+    if command not in REMOTE_KEYS:
+        return None
+    name = _REMOTE_KEY_NAMES.get(platform or "", {}).get(command, command)
+    return "remote", "send_command", {ATTR_ENTITY_ID: remote, "command": name}
+
+
 _COMMAND_TO_GROUP: dict[str, str] = {
     command: group for group, commands in COMMAND_GROUPS.items() for command in commands
 }
@@ -77,7 +108,8 @@ def routing(room: dict[str, Any], activity: dict[str, Any]) -> dict[str, str | N
     navigators = [
         d
         for d in ids
-        if any(c in devices[d][CONF_COMMANDS] for c in COMMAND_GROUPS[GROUP_NAVIGATION])
+        if devices[d].get(CONF_REMOTE_ENTITY)
+        or any(c in devices[d][CONF_COMMANDS] for c in COMMAND_GROUPS[GROUP_NAVIGATION])
     ]
     defaults: dict[str, str | None] = {
         GROUP_VOLUME: players[0] if players else None,
@@ -92,6 +124,8 @@ def routing(room: dict[str, Any], activity: dict[str, Any]) -> dict[str, str | N
 def device_commands(device: dict[str, Any]) -> list[str]:
     """Commands a device can run: its own plus the built-in ones."""
     commands = list(device[CONF_COMMANDS])
+    if device.get(CONF_REMOTE_ENTITY):
+        commands += [c for c in REMOTE_KEYS if c not in commands]
     if _is_media_player(device):
         commands += [c for c in _MEDIA_PLAYER_SERVICES if c not in commands]
     return commands

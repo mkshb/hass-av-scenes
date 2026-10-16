@@ -339,3 +339,23 @@ async def test_ready_waits_for_state_of_other_entity(
     assert order == ["reloaded"]
     assert ("homeassistant.turn_on", (VU,)) in names
     assert coordinator.activity_states["wz"] == "active"
+
+
+async def test_players_without_power_control_are_not_switched(
+    hass: HomeAssistant, devices: Devices
+) -> None:
+    """A speaker that cannot be turned on or off gets no such call."""
+    from homeassistant.components.media_player import MediaPlayerEntityFeature
+
+    data = living_room()
+    room = data["rooms"]["wz"]
+    room["devices"]["sonos"] = {"entity_id": "media_player.sonos"}
+    room["activities"]["musik"]["devices"].append("sonos")
+    features = int(MediaPlayerEntityFeature.PLAY | MediaPlayerEntityFeature.VOLUME_SET)
+    hass.states.async_set("media_player.sonos", "idle", {"supported_features": features})
+    coordinator = await setup(hass, devices, data)
+
+    await coordinator.async_start_activity("wz", "musik")
+    await coordinator.async_stop_activity("wz")
+
+    assert not [c for c in devices.names() if "media_player.sonos" in c[1]]

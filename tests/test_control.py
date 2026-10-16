@@ -30,6 +30,7 @@ def player_calls(hass: HomeAssistant) -> list[tuple[str, dict[str, Any]]]:
     ):
         hass.services.async_register("media_player", service, record)
     hass.services.async_register("test", "key", record)
+    hass.services.async_register("remote", "send_command", record)
     return calls
 
 
@@ -284,3 +285,53 @@ async def test_quick_select_buttons(
 
     with pytest.raises(ServiceValidationError):
         await send(hass, "select_source", device="vu")
+
+
+async def test_remote_entity_navigation(
+    hass: HomeAssistant, devices: Devices, player_calls
+) -> None:
+    """Navigation keys go to the device's remote entity, named for its integration."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from homeassistant.helpers import entity_registry as er
+
+    apple = MockConfigEntry(domain="apple_tv")
+    apple.add_to_hass(hass)
+    er.async_get(hass).async_get_or_create(
+        "remote", "apple_tv", "atv", suggested_object_id="atv", config_entry=apple
+    )
+    data = living_room()
+    room = data["rooms"]["wz"]
+    room["devices"]["atv"] = {"entity_id": "media_player.atv", "remote_entity": "remote.atv"}
+    room["activities"]["atv"] = {"name": "Apple TV", "devices": ["onkyo", "atv"]}
+    hass.states.async_set("media_player.atv", "off")
+    coordinator = await setup(hass, devices, data)
+
+    validated = coordinator.rooms["wz"]
+    assert routing(validated, validated["activities"]["atv"])["navigation"] == "atv"
+
+    await coordinator.async_start_activity("wz", "atv")
+    for key in ("up", "ok", "back", "menu"):
+        await send(hass, key)
+    # Not a navigation key: still the media player's own action
+    await send(hass, "play_pause")
+
+    assert player_calls == [
+        ("remote.send_command", {"entity_id": "remote.atv", "command": "up"}),
+        ("remote.send_command", {"entity_id": "remote.atv", "command": "select"}),
+        ("remote.send_command", {"entity_id": "remote.atv", "command": "menu"}),
+        ("remote.send_command", {"entity_id": "remote.atv", "command": "top_menu"}),
+        ("media_player.media_play_pause", {"entity_id": "media_player.atv"}),
+    ]
+    view = coordinator.room_view("wz")
+    assert view["remote"]["groups"]["navigation"]["commands"] == [
+        "up", "down", "left", "right", "ok", "back", "menu", "home"
+    ]
+
+
+def test_remote_entity_must_be_a_remote() -> None:
+    """remote_entity accepts remote entities only."""
+    data = living_room()
+    data["rooms"]["wz"]["devices"]["vu"]["remote_entity"] = "media_player.vu"
+    with pytest.raises(vol.Invalid):
+        validate_config(data)

@@ -248,6 +248,7 @@ export class AvScenesRoomEditor extends LitElement {
     return {
       entity_id: device.entity_id,
       name: device.name,
+      remote_entity: device.remote_entity ?? undefined,
       power_switch: device.power_switch ?? undefined,
       delay_after_power: device.delay_after_power,
       delay_after_on: device.delay_after_on,
@@ -289,7 +290,8 @@ export class AvScenesRoomEditor extends LitElement {
     const data = this._deviceData(device);
     const ready = device.ready ?? null;
     const remote = this._remoteOf(device.entity_id);
-    const presetApplied = ready?.entity_id === remote && ready?.reload_integration === true;
+    const presetApplied =
+      ready?.entity_id === remote && ready?.reload_integration === true && device.remote_entity === remote;
     const usage = deviceUsage(this.room, id);
 
     return html`
@@ -302,6 +304,7 @@ export class AvScenesRoomEditor extends LitElement {
         this._deviceForm(id, data, [
           { name: "entity_id", required: true, selector: { entity: {} } },
           { name: "name", selector: { text: {} } },
+          { name: "remote_entity", selector: { entity: { filter: { domain: "remote" } } } },
         ]),
       )}
       ${this._card(
@@ -367,8 +370,9 @@ export class AvScenesRoomEditor extends LitElement {
   }
 
   private _applyReadyPreset(id: string, device: Device, remote: string): void {
-    const ready = { entity_id: remote, state: "on", timeout: 30, reload_integration: true, on_timeout: "continue" };
-    this._emit({ ...this.room, devices: { ...this.room.devices, [id]: { ...device, ready } } });
+    // Proven for an Apple TV: connected only while its remote is on; it can take a minute after power-on
+    const ready = { entity_id: remote, state: "on", timeout: 60, reload_integration: true, on_timeout: "continue" };
+    this._emit({ ...this.room, devices: { ...this.room.devices, [id]: { ...device, ready, remote_entity: remote } } });
   }
 
   /** A device or activity that was added and not saved yet. */
@@ -380,6 +384,7 @@ export class AvScenesRoomEditor extends LitElement {
     const device = clean({
       entity_id: v.entity_id as string,
       name: v.name as string | undefined,
+      remote_entity: v.remote_entity as string | undefined,
       power_switch: v.power_switch as string | undefined,
       ready: v.ready_enabled
         ? clean({

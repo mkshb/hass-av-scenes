@@ -10,6 +10,7 @@ export interface Device extends Obj {
   entity_id: string;
   name?: string;
   power_switch?: string | null;
+  remote_entity?: string | null;
   ready?: {
     entity_id?: string;
     state?: string | string[];

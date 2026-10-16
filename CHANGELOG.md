@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`send_command` action** – sends a remote button to the device the running activity uses for it (volume, channels, transport, navigation); media players work without configuration
 - **`commands`, `remote`, `icon`** – own buttons as Home Assistant actions per device or activity, routing of button groups and extra buttons per activity
 - **Quick select** – remote buttons with `device` and `source` select that source on a media player, e.g. an app on an Apple TV; the panel offers the device's source list, which the integration remembers while the device is off or disconnected
+- **`remote_entity`** per device – the card's arrow keys, OK, back, home and menu go to a remote entity (e.g. an Apple TV's remote) with the key names of its integration; set up together with the connection check by one button in the panel
 - **`order`** – position of an activity in lists; Home Assistant stores the configuration with sorted keys, so the written order is not kept across restarts
 - **Websocket API** `av_scenes/control/rooms` and `av_scenes/control/subscribe` for the card, `av_scenes/config/get`, `config/validate`, `config/save` and `config/sources` (admins only) for the panel
 - **Release workflow** – builds the card and attaches `av_scenes.zip`; HACS installs that archive
@@ -40,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Scene names** – scenes are named like the other entities of a room, device name plus activity ("AV: Wohnzimmer TV" instead of "Wohnzimmer - TV"); entity IDs of existing scenes stay, names set in Home Assistant are kept
+- **Devices that cannot be switched** (e.g. a Sonos speaker) get no turn-on or turn-off call, instead of a warning on every start and stop
 - **Stale entities are removed** – entities of deleted activities and devices of deleted rooms no longer stay behind as "unavailable"
 - **IDs of new activities and devices** follow their name or entity in the panel until they are saved, instead of staying "neue_aktivitat" or "device"
 - **YAML configuration** – the multi-step click flows are replaced by a YAML editor per room (or for the whole configuration) with validation and the exact error location
