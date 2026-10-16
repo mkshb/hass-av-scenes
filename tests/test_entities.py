@@ -100,6 +100,8 @@ async def test_scene_names_follow_the_device(hass: HomeAssistant, devices) -> No
     from .common import setup, living_room
 
     await setup(hass, devices, living_room())
-    state = hass.states.get("scene.av_wohnzimmer_tv")
+    # The entity ID depends on whether Home Assistant put the device in an area
+    entity_id = er.async_get(hass).async_get_entity_id("scene", DOMAIN, "av_scenes_wz_tv")
+    state = hass.states.get(entity_id)
     assert state is not None
     assert state.attributes["friendly_name"] == "AV: Wohnzimmer TV"
