@@ -28,7 +28,7 @@ AV Scenes controls the devices of a room (AV receiver, projector, TV, set-top bo
 | Failure handling | A failed readiness check can abort the start; the room shows `error` with the reason |
 | Restart-safe | The running activity survives a Home Assistant restart |
 | Repairs | Entities that do not exist (typo, renamed entity) are reported in **Settings → Repairs** |
-| Configuration panel | An admin page in the sidebar: rooms, devices, activities, steps and remote buttons as forms with Home Assistant's own pickers, plus a YAML view |
+| Configuration panel | An admin page in the sidebar with a built-in guide: devices and activities as lists, each edited on its own page in short sections with help texts, using Home Assistant's own pickers; plus a YAML view |
 | Remote control card | A dashboard card per room: power, activities, volume, d-pad, channels, playback and your own buttons — only what the running activity offers |
 | Command routing | `av_scenes.send_command` sends a button (e.g. `volume_up`) to whichever device the running activity uses for it — from the card, automations or wall switches |
 | 4 entity platforms | Scene, Switch, Sensor, Select — one virtual device per room |

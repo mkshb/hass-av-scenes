@@ -7,6 +7,7 @@
  */
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 
+import "./panel/guide";
 import "./panel/room-editor";
 import { clean, slugify, uniqueKey, type Room, type Rooms, type Sources } from "./panel/model";
 import { t } from "./panel/strings";
@@ -51,6 +52,7 @@ export class AvScenesPanel extends LitElement {
     _saving: { state: true },
     _ready: { state: true },
     _sources: { state: true },
+    _adding: { state: true },
   };
 
   declare hass: HomeAssistant;
@@ -62,6 +64,7 @@ export class AvScenesPanel extends LitElement {
   declare _saving: boolean;
   declare _ready: boolean;
   declare _sources: Sources;
+  declare _adding: boolean;
 
   private _entryId?: string;
   private _revision?: string;
@@ -73,16 +76,11 @@ export class AvScenesPanel extends LitElement {
     this._saving = false;
     this._ready = false;
     this._sources = {};
+    this._adding = false;
   }
 
   private _t(key: string, params?: Record<string, string>): string {
     return t(this.hass?.language, key, params);
-  }
-
-  protected updated(): void {
-    if (this.hass && !this._rooms && !this._loading && !this._loadError) {
-      void this._load();
-    }
   }
 
   private async _load(): Promise<void> {
@@ -127,14 +125,47 @@ export class AvScenesPanel extends LitElement {
     }
   }
 
-  private _addRoom(): void {
-    const name = window.prompt(this._t("room_name"));
-    if (!name?.trim()) {
+  private _addRoom(name: string): void {
+    this._adding = false;
+    if (!name.trim()) {
       return;
     }
     const id = uniqueKey(slugify(name), Object.keys(this._rooms ?? {}));
     this._rooms = { ...this._rooms, [id]: { name: name.trim(), devices: {}, activities: {} } };
     this._selected = id;
+  }
+
+  private _renderAddRoom(): TemplateResult {
+    if (!this._adding) {
+      return html`<button class="room add" @click=${() => (this._adding = true)}>+ ${this._t("add_room")}</button>`;
+    }
+    const submit = (ev: Event) => {
+      ev.preventDefault();
+      const input = (ev.target as HTMLFormElement).querySelector("input")!;
+      this._addRoom(input.value);
+    };
+    return html`<form class="new-room" @submit=${submit}>
+      <input
+        aria-label=${this._t("add_room_name")}
+        placeholder=${this._t("add_room_name")}
+        @keydown=${(ev: KeyboardEvent) => ev.key === "Escape" && (this._adding = false)}
+      />
+      <div class="new-room-buttons">
+        <button type="button" class="flat" @click=${() => (this._adding = false)}>${this._t("cancel")}</button>
+        <button type="submit" class="primary">${this._t("create")}</button>
+      </div>
+    </form>`;
+  }
+
+  protected updated(): void {
+    if (this.hass && !this._rooms && !this._loading && !this._loadError) {
+      void this._load();
+    }
+    // Focus the name field of a new room
+    const input = this.shadowRoot?.querySelector<HTMLInputElement>("form.new-room input");
+    if (input && this.shadowRoot?.activeElement !== input && !input.value) {
+      input.focus();
+    }
   }
 
   private _deleteRoom(id: string): void {
@@ -242,9 +273,10 @@ export class AvScenesPanel extends LitElement {
             ${room.name ?? id}
           </button>`,
         )}
-        <button class="room add" @click=${this._addRoom}>+ ${this._t("add_room")}</button>
+        ${this._renderAddRoom()}
       </nav>
       <main>
+        <av-scenes-guide .language=${this.hass.language}></av-scenes-guide>
         ${this._renderBanner()}
         ${selected
           ? html`<av-scenes-room-editor
@@ -253,10 +285,8 @@ export class AvScenesPanel extends LitElement {
                 .roomId=${selected}
                 .sources=${this._sources}
                 @room-changed=${(ev: CustomEvent<{ room: Room }>) => this._roomChanged(selected, ev.detail.room)}
-              ></av-scenes-room-editor>
-              <button class="delete-room" @click=${() => this._deleteRoom(selected)}>
-                ${this._t("delete_room")}
-              </button>`
+                @delete-room=${() => this._deleteRoom(selected)}
+              ></av-scenes-room-editor>`
           : html`<div class="empty">${this._t("no_rooms")}</div>`}
       </main>
     </div>`;
@@ -391,6 +421,28 @@ export class AvScenesPanel extends LitElement {
       background: none;
       color: var(--primary-color);
     }
+    form.new-room {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      width: 100%;
+    }
+    form.new-room input {
+      font: inherit;
+      padding: 8px 12px;
+      border: 1px solid var(--divider-color);
+      border-radius: 8px;
+      background: var(--card-background-color);
+      color: var(--primary-text-color);
+    }
+    .new-room-buttons {
+      display: flex;
+      justify-content: flex-end;
+      gap: 4px;
+    }
+    nav button.flat {
+      color: var(--primary-color);
+    }
     main {
       min-width: 0;
     }
@@ -429,12 +481,6 @@ export class AvScenesPanel extends LitElement {
     .empty {
       color: var(--secondary-text-color);
       padding: 24px 0;
-    }
-    button.delete-room {
-      margin-top: 32px;
-      background: none;
-      border: none;
-      color: var(--error-color, #db4437);
     }
   `;
 }

@@ -6,8 +6,16 @@ export interface HassEntity {
   attributes: Record<string, unknown>;
 }
 
+/** Entity registry entry as the frontend has it (hass.entities). */
+export interface EntityRegistryDisplayEntry {
+  entity_id: string;
+  device_id?: string | null;
+  platform?: string;
+}
+
 export interface HomeAssistant {
   states: Record<string, HassEntity | undefined>;
+  entities?: Record<string, EntityRegistryDisplayEntry | undefined>;
   language: string;
   connection: {
     subscribeMessage<T>(
