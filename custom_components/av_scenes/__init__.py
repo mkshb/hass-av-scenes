@@ -17,6 +17,7 @@ from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 
 from . import websocket
+from .card_resource import async_register_card_resource, async_remove_card_resource
 from .const import (
     ATTR_ACTIVITY,
     ATTR_COMMAND,
@@ -137,9 +138,10 @@ def _register_services(hass: HomeAssistant) -> None:
 async def _async_register_frontend(hass: HomeAssistant) -> None:
     """Serve the remote control card and the configuration panel.
 
-    The card is loaded on every dashboard; the panel is shown to admins in
-    the sidebar. Both are built by the release workflow; a plain checkout has
-    none.
+    The card is a dashboard resource (see card_resource.py), or with
+    resources in YAML a module loaded on every page; the panel is shown to
+    admins in the sidebar. Both are built by the release workflow; a plain
+    checkout has none.
     """
     directory = Path(__file__).parent / "frontend"
 
@@ -168,7 +170,9 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     def url(name: str) -> str:
         return f"{FRONTEND_URL_BASE}/{name}?v={version}-{mtimes[name]}"
 
-    add_extra_js_url(hass, url(CARD_FILENAME))
+    card_url = url(CARD_FILENAME)
+    if not await async_register_card_resource(hass, _card_base(), card_url):
+        add_extra_js_url(hass, card_url)
     if PANEL_FILENAME in mtimes:
         await panel_custom.async_register_panel(
             hass,
@@ -180,6 +184,11 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
             require_admin=True,
             config_panel_domain=DOMAIN,
         )
+
+
+def _card_base() -> str:
+    """URL of the card without the version."""
+    return f"{FRONTEND_URL_BASE}/{CARD_FILENAME}"
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -236,6 +245,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         async_dispatcher_send(hass, SIGNAL_ROOMS_UPDATED)
 
     return unload_ok
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove the card's dashboard resource with the last entry."""
+    if not hass.config_entries.async_entries(DOMAIN):
+        await async_remove_card_resource(hass, _card_base())
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:

@@ -1,7 +1,7 @@
 {
   "domain": "av_scenes",
   "name": "AV Scenes",
-  "after_dependencies": ["frontend", "panel_custom"],
+  "after_dependencies": ["frontend", "lovelace", "panel_custom"],
   "codeowners": ["@mkshb"],
   "config_flow": true,
   "dependencies": ["http", "websocket_api"],
