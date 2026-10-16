@@ -11,14 +11,17 @@ import {
   STEP_TYPES,
   clean,
   deviceUsage,
+  isQuickSelect,
   renameDevice,
   slugify,
+  sourceList,
   stepSchema,
   uniqueKey,
   type Activity,
   type Device,
   type Obj,
   type Room,
+  type Sources,
   type Step,
 } from "./model";
 import { t } from "./strings";
@@ -38,6 +41,7 @@ export class AvScenesRoomEditor extends LitElement {
     hass: { attribute: false },
     room: { attribute: false },
     roomId: { attribute: false },
+    sources: { attribute: false },
     _tab: { state: true },
     _open: { state: true },
     _notice: { state: true },
@@ -46,6 +50,7 @@ export class AvScenesRoomEditor extends LitElement {
   declare hass: HomeAssistant;
   declare room: Room;
   declare roomId: string;
+  declare sources: Sources;
   declare _tab: Tab;
   declare _open: Set<string>;
   declare _notice?: string;
@@ -54,6 +59,7 @@ export class AvScenesRoomEditor extends LitElement {
     super();
     this._tab = "devices";
     this._open = new Set();
+    this.sources = {};
   }
 
   private _t(key: string, params?: Record<string, string>): string {
@@ -309,7 +315,8 @@ export class AvScenesRoomEditor extends LitElement {
     ];
     const remote = activity.remote ?? {};
     const remoteData: Obj = {
-      buttons: remote.buttons,
+      // Quick-select buttons have their own list below
+      buttons: ((remote.buttons as unknown[] | undefined) ?? []).filter((b) => !isQuickSelect(b)),
       activity_commands: activity.commands,
     };
     for (const g of GROUPS) {
@@ -375,6 +382,7 @@ export class AvScenesRoomEditor extends LitElement {
           .computeLabel=${this._label}
           @value-changed=${(ev: CustomEvent) => this._remoteChanged(id, activity, ev.detail.value as Obj)}
         ></ha-form>
+        ${this._renderQuickSelect(id, activity)}
       </details>
 
       <details class="section">
@@ -407,7 +415,7 @@ export class AvScenesRoomEditor extends LitElement {
       <ha-form
         .hass=${this.hass}
         .data=${step}
-        .schema=${stepSchema(this.hass, this.room, step, (k) => this._t(k))}
+        .schema=${stepSchema(this.hass, this.room, step, (k) => this._t(k), this.sources)}
         .computeLabel=${this._label}
         @value-changed=${(ev: CustomEvent) => {
           const list = [...steps];
@@ -424,14 +432,70 @@ export class AvScenesRoomEditor extends LitElement {
       if (v[g] === "__none") remote[g] = null;
       else if (v[g] && v[g] !== "__auto") remote[g] = v[g];
     }
-    if (Array.isArray(v.buttons) && v.buttons.length) {
-      remote.buttons = v.buttons;
+    const quick = ((activity.remote?.buttons as unknown[] | undefined) ?? []).filter(isQuickSelect);
+    const buttons = [...(Array.isArray(v.buttons) ? v.buttons : []), ...quick];
+    if (buttons.length) {
+      remote.buttons = buttons;
     }
     this._setActivity(id, {
       ...activity,
       remote: Object.keys(remote).length ? remote : undefined,
       commands: v.activity_commands as Obj | undefined,
     });
+  }
+
+  /** Quick-select buttons: device, source from its (remembered) list, label, icon. */
+  private _renderQuickSelect(id: string, activity: Activity): TemplateResult {
+    const all = (activity.remote?.buttons as unknown[] | undefined) ?? [];
+    const others = all.filter((b) => !isQuickSelect(b));
+    const quick = all.filter(isQuickSelect);
+    const setQuick = (list: Obj[]) => {
+      const remote: Obj = { ...activity.remote, buttons: [...others, ...list] };
+      this._setActivity(id, { ...activity, remote: clean(remote) });
+    };
+    const players = (activity.devices ?? []).filter((d) =>
+      this.room.devices?.[d]?.entity_id?.startsWith("media_player."),
+    );
+    const deviceOptions = players.map((d) => ({ value: d, label: this.room.devices?.[d]?.name ?? d }));
+
+    return html`<h3>${this._t("quick_select")}</h3>
+      <div class="hint">${this._t("quick_select_hint")}</div>
+      ${quick.map((button, i) => {
+        const entity = this.room.devices?.[button.device as string]?.entity_id;
+        return html`<div class="step">
+          <div class="step-head">
+            <span class="title">${(button.name as string) || (button.source as string) || ""}</span>
+            ${this._moveButtons(quick, i, setQuick)}
+          </div>
+          <ha-form
+            .hass=${this.hass}
+            .data=${{ device: button.device, source: button.source, label: button.name, icon: button.icon }}
+            .schema=${[
+              { name: "device", required: true, selector: { select: { options: deviceOptions, mode: "dropdown" } } },
+              {
+                name: "source",
+                required: true,
+                selector: { select: { options: sourceList(this.hass, this.sources, entity), custom_value: true, mode: "dropdown" } },
+              },
+              { name: "label", selector: { text: {} } },
+              { name: "icon", selector: { icon: {} } },
+            ]}
+            .computeLabel=${this._label}
+            @value-changed=${(ev: CustomEvent) => {
+              const v = ev.detail.value as Obj;
+              const list = [...quick];
+              // An empty source stays as "" so the button remains a quick select
+              list[i] = clean({ device: v.device, source: v.source ?? "", name: v.label, icon: v.icon }, ["source"]);
+              setQuick(list);
+            }}
+          ></ha-form>
+        </div>`;
+      })}
+      ${players.length
+        ? html`<button class="add" @click=${() => setQuick([...quick, { device: players[players.length - 1], source: "" }])}>
+            + ${this._t("add_quick_select")}
+          </button>`
+        : html`<div class="hint">${this._t("quick_select_no_player")}</div>`}`;
   }
 
   private _addActivity(): void {

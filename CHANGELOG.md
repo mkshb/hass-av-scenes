@@ -31,8 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Remote control card** `custom:av-scenes-remote-card` – power, activities, volume rocker and slider, d-pad, channels, playback and own buttons per room; shows only what the running activity offers; visual editor; loaded by the integration, no dashboard resource needed
 - **`send_command` action** – sends a remote button to the device the running activity uses for it (volume, channels, transport, navigation); media players work without configuration
 - **`commands`, `remote`, `icon`** – own buttons as Home Assistant actions per device or activity, routing of button groups and extra buttons per activity
+- **Quick select** – remote buttons with `device` and `source` select that source on a media player, e.g. an app on an Apple TV; the panel offers the device's source list, which the integration remembers while the device is off or disconnected
 - **`order`** – position of an activity in lists; Home Assistant stores the configuration with sorted keys, so the written order is not kept across restarts
-- **Websocket API** `av_scenes/control/rooms` and `av_scenes/control/subscribe` for the card, `av_scenes/config/get`, `config/validate` and `config/save` (admins only) for the panel
+- **Websocket API** `av_scenes/control/rooms` and `av_scenes/control/subscribe` for the card, `av_scenes/config/get`, `config/validate`, `config/save` and `config/sources` (admins only) for the panel
 - **Release workflow** – builds the card and attaches `av_scenes.zip`; HACS installs that archive
 - **Tests** with `pytest-homeassistant-custom-component`, CI with hassfest and HACS validation
 

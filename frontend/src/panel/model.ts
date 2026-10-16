@@ -69,12 +69,33 @@ export const GROUPS = ["volume", "channels", "transport", "navigation"] as const
 const SECONDS = { number: { min: 0, max: 3600, step: 1, mode: "box", unit_of_measurement: "s" } };
 const PERCENT = { number: { min: 0, max: 100, step: 1, mode: "slider" } };
 
+/** Remembered source lists per media player (av_scenes/config/sources). */
+export type Sources = Record<string, string[]>;
+
+/** Source list of a media player: live while it is on, else the remembered one. */
+export function sourceList(hass: HomeAssistant, sources: Sources, entity: string | undefined): string[] {
+  if (!entity) {
+    return [];
+  }
+  const live = hass.states[entity]?.attributes.source_list;
+  if (Array.isArray(live) && live.length) {
+    return live.map(String);
+  }
+  return sources[entity] ?? [];
+}
+
+/** A quick-select button: selects a source on its device. */
+export function isQuickSelect(button: unknown): button is Obj {
+  return typeof button === "object" && button !== null && "source" in button;
+}
+
 /** ha-form schema of a step, depending on its type. */
 export function stepSchema(
   hass: HomeAssistant,
   room: Room,
   step: Step,
   label: (key: string) => string,
+  sources: Sources = {},
 ): Obj[] {
   const devices = Object.entries(room.devices ?? {}).map(([id, d]) => ({
     value: id,
@@ -91,7 +112,7 @@ export function stepSchema(
     power_off: [deviceField],
     set_source: [
       deviceField,
-      { name: "source", required: true, selector: { select: { options: attrList("source_list"), custom_value: true, mode: "dropdown" } } },
+      { name: "source", required: true, selector: { select: { options: sourceList(hass, sources, entity), custom_value: true, mode: "dropdown" } } },
     ],
     set_volume: [
       deviceField,

@@ -35,6 +35,7 @@ const COMMAND_ICONS: Record<string, string> = {
   info: "mdi:information-outline",
   guide: "mdi:television-guide",
   exit: "mdi:close",
+  select_source: "mdi:apps",
 };
 
 const NAV_EXTRAS = ["back", "home", "menu", "info", "guide", "exit"];
@@ -211,11 +212,10 @@ export class AvScenesRemoteCard extends LitElement {
     );
   }
 
-  private _startRepeat(ev: PointerEvent, command: string, device?: string | null): void {
+  private _startRepeat(ev: PointerEvent, command: string, extra: Record<string, unknown> = {}): void {
     if (ev.button !== 0) {
       return;
     }
-    const extra = device ? { device } : {};
     this._stopRepeat();
     this._send(command, extra);
     if (!REPEATING.has(command)) {
@@ -234,10 +234,10 @@ export class AvScenesRemoteCard extends LitElement {
     }
   }
 
-  private _keySend(ev: KeyboardEvent, command: string, device?: string | null): void {
+  private _keySend(ev: KeyboardEvent, command: string, extra: Record<string, unknown> = {}): void {
     if (ev.key === "Enter" || ev.key === " ") {
       ev.preventDefault();
-      this._send(command, device ? { device } : {});
+      this._send(command, extra);
     }
   }
 
@@ -444,14 +444,17 @@ export class AvScenesRemoteCard extends LitElement {
 
   private _customButton(button: ButtonView): TemplateResult {
     const label = button.name ?? this._t(`command.${button.command}`);
+    const extra: Record<string, unknown> = {};
+    if (button.device) extra.device = button.device;
+    if (button.value !== null && button.value !== undefined) extra.value = button.value;
     return html`<button
       class="custom"
       title=${label}
-      @pointerdown=${(ev: PointerEvent) => this._startRepeat(ev, button.command, button.device)}
+      @pointerdown=${(ev: PointerEvent) => this._startRepeat(ev, button.command, extra)}
       @pointerup=${this._stopRepeat}
       @pointerleave=${this._stopRepeat}
       @pointercancel=${this._stopRepeat}
-      @keydown=${(ev: KeyboardEvent) => this._keySend(ev, button.command, button.device)}
+      @keydown=${(ev: KeyboardEvent) => this._keySend(ev, button.command, extra)}
     >
       ${button.icon || COMMAND_ICONS[button.command]
         ? html`<ha-icon .icon=${button.icon ?? COMMAND_ICONS[button.command]}></ha-icon>`

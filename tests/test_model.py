@@ -124,3 +124,33 @@ def test_ready_entity_and_state() -> None:
     ready = validate_config({"rooms": {"wz": room}})["rooms"]["wz"]["devices"]["atv"]["ready"]
     assert ready["entity_id"] == "remote.atv"
     assert ready["state"] == ["on"]
+
+
+def test_quick_select_buttons() -> None:
+    """A button has a command or a source; a source needs a media player."""
+    def buttons(*items) -> dict:
+        return _config(remote={"buttons": list(items)})
+
+    room = validate_config(
+        buttons("guide", {"device": "beamer", "source": "HDMI1", "name": "PC"})
+    )["rooms"]["wz"]
+    assert room["activities"]["tv"]["remote"]["buttons"] == [
+        {"command": "guide"},
+        {"device": "beamer", "source": "HDMI1", "name": "PC"},
+    ]
+
+    for button in (
+        {"source": "Netflix"},
+        {"device": "beamer", "source": "Netflix", "command": "netflix"},
+        {"name": "Nothing"},
+    ):
+        with pytest.raises(vol.Invalid):
+            validate_config(buttons(button))
+
+    data = buttons({"device": "plug", "source": "Netflix"})
+    data["rooms"]["wz"]["devices"]["plug"] = {"entity_id": "switch.plug"}
+    with pytest.raises(vol.Invalid) as err:
+        validate_config(data)
+    assert err.value.path == [
+        "rooms", "wz", "activities", "tv", "remote", "buttons", 0, "device"
+    ]

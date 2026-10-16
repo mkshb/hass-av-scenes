@@ -3,7 +3,8 @@
 control/*: what the card shows. Commands go through the regular services
 (``av_scenes.start_activity``, ``send_command`` …).
 
-config/*: read, check and save the configuration (admins only). Saving
+config/*: read, check and save the configuration (admins only), and the
+remembered source lists of the media players for the pickers. Saving
 takes the revision that was read, so changes made elsewhere in the meantime
 (options flow, a second browser) are not overwritten silently.
 """
@@ -51,6 +52,7 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_config_get)
     websocket_api.async_register_command(hass, ws_config_validate)
     websocket_api.async_register_command(hass, ws_config_save)
+    websocket_api.async_register_command(hass, ws_config_sources)
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/control/rooms"})
@@ -238,3 +240,16 @@ async def ws_config_save(
     connection.send_result(
         msg["id"], {"revision": revision(rooms), "missing": check["missing"]}
     )
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/config/sources"})
+@websocket_api.require_admin
+@callback
+def ws_config_sources(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Last known source list per media player, also while it is off."""
+    sources: dict[str, list[str]] = {}
+    for coordinator in _coordinators(hass):
+        sources.update(coordinator.source_lists)
+    connection.send_result(msg["id"], sources)

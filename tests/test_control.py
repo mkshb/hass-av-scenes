@@ -26,7 +26,7 @@ def player_calls(hass: HomeAssistant) -> list[tuple[str, dict[str, Any]]]:
 
     for service in (
         "volume_up", "volume_down", "volume_mute", "volume_set", "media_next_track",
-        "media_previous_track", "media_play_pause",
+        "media_previous_track", "media_play_pause", "select_source",
     ):
         hass.services.async_register("media_player", service, record)
     hass.services.async_register("test", "key", record)
@@ -187,7 +187,7 @@ async def test_websocket_rooms_and_subscribe(
     }
     assert groups["navigation"]["commands"] == ["ok"]
     assert view["remote"]["buttons"][1] == {
-        "command": "netflix", "name": "Netflix", "icon": None, "device": None
+        "command": "netflix", "value": None, "name": "Netflix", "icon": None, "device": None
     }
 
     # A reload replaces the coordinator; the subscription follows the room
@@ -253,3 +253,34 @@ async def test_send_command_reconnects_first(
     with pytest.raises(HomeAssistantError) as err:
         await send(hass, "channel_up")
     assert err.value.translation_key == "device_not_ready"
+
+
+async def test_quick_select_buttons(
+    hass: HomeAssistant, devices: Devices, player_calls, hass_ws_client
+) -> None:
+    """A source button selects its source (an app) on its device."""
+    data = remote_room()
+    data["rooms"]["wz"]["activities"]["tv"]["remote"]["buttons"].append(
+        {"device": "vu", "source": "Netflix", "icon": "mdi:netflix"}
+    )
+    coordinator = await setup(hass, devices, data)
+    await coordinator.async_start_activity("wz", "tv")
+
+    assert coordinator.room_view("wz")["remote"]["buttons"][2] == {
+        "command": "select_source",
+        "value": "Netflix",
+        "name": "Netflix",
+        "icon": "mdi:netflix",
+        "device": "vu",
+    }
+
+    await send(hass, "select_source", value="Netflix", device="vu")
+    # The service reads numbers as float; the source keeps its text
+    await send(hass, "select_source", value="1", device="vu")
+    assert player_calls == [
+        ("media_player.select_source", {"entity_id": VU, "source": "Netflix"}),
+        ("media_player.select_source", {"entity_id": VU, "source": "1"}),
+    ]
+
+    with pytest.raises(ServiceValidationError):
+        await send(hass, "select_source", device="vu")

@@ -26,6 +26,10 @@ start, a different activity while starting).
 
 Remote buttons (``send_command``) are routed to the devices of the running
 activity, see control.py. They do not interfere with starting or stopping.
+
+The source lists of the media players are remembered, so the configuration
+panel can offer them while a device is off (an Apple TV lists its apps only
+while it is connected).
 """
 from __future__ import annotations
 
@@ -131,7 +135,13 @@ from .const import (
     STEP_TYPE_SET_VOLUME,
     STEP_TYPE_WAIT_AVAILABLE,
 )
-from .control import builtin_call, command_group, device_commands, routing
+from .control import (
+    COMMAND_SELECT_SOURCE,
+    builtin_call,
+    command_group,
+    device_commands,
+    routing,
+)
 from .model import CONF_DELAY_AFTER, async_validate_config, find_missing_entities
 
 _LOGGER = logging.getLogger(__name__)
@@ -157,6 +167,26 @@ _current_room: ContextVar["RoomRuntime | None"] = ContextVar("av_scenes_room", d
 
 class ActivityAborted(Exception):
     """Raised when a readiness check aborts an activity start."""
+
+
+def _button_view(button: dict[str, Any]) -> dict[str, Any]:
+    """A remote button as the card shows and sends it."""
+    if CONF_SOURCE in button:
+        # Quick select: select_source with the source as value
+        return {
+            "command": COMMAND_SELECT_SOURCE,
+            "value": button[CONF_SOURCE],
+            "name": button.get(CONF_NAME) or button[CONF_SOURCE],
+            "icon": button.get(CONF_ICON),
+            "device": button[CONF_DEVICE],
+        }
+    return {
+        "command": button[CONF_COMMAND],
+        "value": None,
+        "name": button.get(CONF_NAME),
+        "icon": button.get(CONF_ICON),
+        "device": button.get(CONF_DEVICE),
+    }
 
 
 @dataclass
@@ -202,6 +232,9 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.state"
         )
         self._restored = False
+        # media player -> its last known source list
+        self._sources: dict[str, list[str]] = {}
+        self._unsub_sources: CALLBACK_TYPE | None = None
 
     # ------------------------------------------------------------------
     # Views used by the entity platforms
@@ -282,6 +315,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not self._restored:
             self._restored = True
             await self._async_restore()
+        self._track_sources()
 
         return config
 
@@ -356,6 +390,11 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_restore(self) -> None:
         stored = await self._store.async_load() or {}
+        self._sources = {
+            entity_id: [str(s) for s in sources]
+            for entity_id, sources in (stored.get("sources") or {}).items()
+            if isinstance(sources, list)
+        }
         for room_id, data in stored.get(CONF_ROOMS, {}).items():
             if room_id not in self.rooms:
                 continue
@@ -386,7 +425,8 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     "last_activity": rt.last_activity,
                 }
                 for room_id, rt in self._runtime.items()
-            }
+            },
+            "sources": self._sources,
         }
 
     @callback
@@ -402,12 +442,66 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def async_shutdown(self) -> None:
         """Cancel running work when the entry unloads."""
+        if self._unsub_sources is not None:
+            self._unsub_sources()
+            self._unsub_sources = None
         for rt in self._runtime.values():
             for task in [rt.task, *rt.pending_cuts.values()]:
                 if task and not task.done():
                     task.cancel()
         await self._store.async_save(self._data_to_store())
         await super().async_shutdown()
+
+    # ------------------------------------------------------------------
+    # Remembered source lists
+    # ------------------------------------------------------------------
+
+    @property
+    def source_lists(self) -> dict[str, list[str]]:
+        """Last known source list per media player of the configuration."""
+        return dict(self._sources)
+
+    def _track_sources(self) -> None:
+        """Follow the source lists of the configured media players."""
+        if self._unsub_sources is not None:
+            self._unsub_sources()
+            self._unsub_sources = None
+        players = sorted(
+            {
+                device[CONF_ENTITY_ID]
+                for room in self.rooms.values()
+                for device in room[CONF_DEVICES].values()
+                if device[CONF_ENTITY_ID].startswith("media_player.")
+            }
+        )
+        changed = False
+        for entity_id in [e for e in self._sources if e not in players]:
+            del self._sources[entity_id]
+            changed = True
+        for entity_id in players:
+            changed |= self._remember_sources(entity_id, self.hass.states.get(entity_id))
+        if changed:
+            self._schedule_save()
+        if players:
+            self._unsub_sources = async_track_state_change_event(
+                self.hass, players, self._source_state_changed
+            )
+
+    @callback
+    def _source_state_changed(self, event: Event[EventStateChangedData]) -> None:
+        if self._remember_sources(event.data["entity_id"], event.data["new_state"]):
+            self._schedule_save()
+
+    def _remember_sources(self, entity_id: str, state: State | None) -> bool:
+        """Keep a non-empty source list; True when it changed."""
+        sources = state.attributes.get("source_list") if state is not None else None
+        if not isinstance(sources, list) or not sources:
+            return False
+        sources = [str(s) for s in sources]
+        if self._sources.get(entity_id) == sources:
+            return False
+        self._sources[entity_id] = sources
+        return True
 
     # ------------------------------------------------------------------
     # Commands
@@ -558,13 +652,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return {
             "groups": groups,
             "buttons": [
-                {
-                    "command": button[CONF_COMMAND],
-                    "name": button.get(CONF_NAME),
-                    "icon": button.get(CONF_ICON),
-                    "device": button.get(CONF_DEVICE),
-                }
-                for button in activity[CONF_REMOTE][CONF_BUTTONS]
+                _button_view(button) for button in activity[CONF_REMOTE][CONF_BUTTONS]
             ],
         }
 

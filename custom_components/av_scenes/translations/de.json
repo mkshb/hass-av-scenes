@@ -159,7 +159,7 @@
         },
         "value": {
           "name": "Wert",
-          "description": "Wert für den Befehl, z. B. 0.4 für volume_set"
+          "description": "Wert für den Befehl, z. B. 0.4 für volume_set oder die Quelle für select_source"
         },
         "device": {
           "name": "Gerät",

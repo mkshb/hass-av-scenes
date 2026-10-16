@@ -131,3 +131,46 @@ async def test_get_works_with_broken_config(
     await client.send_json_auto_id({"type": "av_scenes/config/get"})
     got = (await client.receive_json())["result"]
     assert got["rooms"]["wz"]["activities"]["tv"]["devices"][-1] == "sonos"
+
+
+async def test_sources_are_remembered(
+    hass: HomeAssistant, devices, hass_ws_client, hass_storage
+) -> None:
+    """The last source list of a media player survives switching it off and a reload."""
+    hass.states.async_set("media_player.vu_as2b_de", "on", {"source_list": ["Netflix", "ZDF"]})
+    entry = await setup_entry(hass, living_room())
+    client = await hass_ws_client(hass)
+
+    async def sources() -> dict[str, list[str]]:
+        await client.send_json_auto_id({"type": "av_scenes/config/sources"})
+        return (await client.receive_json())["result"]
+
+    assert await sources() == {"media_player.vu_as2b_de": ["Netflix", "ZDF"]}
+
+    # Disconnected: the list disappears from the state but not from memory
+    hass.states.async_set("media_player.vu_as2b_de", "off", {})
+    hass.states.async_set("media_player.onkyo_receiver", "on", {"source_list": ["SAT", "NET"]})
+    await hass.async_block_till_done()
+    assert await sources() == {
+        "media_player.vu_as2b_de": ["Netflix", "ZDF"],
+        "media_player.onkyo_receiver": ["SAT", "NET"],
+    }
+
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass_storage[f"{DOMAIN}.{entry.entry_id}.state"]["data"]["sources"] == {
+        "media_player.vu_as2b_de": ["Netflix", "ZDF"],
+        "media_player.onkyo_receiver": ["SAT", "NET"],
+    }
+    assert await sources() == {
+        "media_player.vu_as2b_de": ["Netflix", "ZDF"],
+        "media_player.onkyo_receiver": ["SAT", "NET"],
+    }
+
+    # Devices that left the configuration are forgotten
+    rooms = living_room()["rooms"]
+    del rooms["wz"]["devices"]["vu"]
+    rooms["wz"]["activities"]["tv"]["devices"].remove("vu")
+    hass.config_entries.async_update_entry(entry, data={"rooms": rooms})
+    await hass.async_block_till_done()
+    assert await sources() == {"media_player.onkyo_receiver": ["SAT", "NET"]}

@@ -50,6 +50,8 @@ export interface GroupView {
 
 export interface ButtonView {
   command: string;
+  /** Quick select: the source (or app) for select_source */
+  value: string | null;
   name: string | null;
   icon: string | null;
   device: string | null;

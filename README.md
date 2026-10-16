@@ -238,7 +238,7 @@ room: wohnzimmer
 name: Living room   # optional title
 ```
 
-The integration loads the card itself; there is no dashboard resource to add. The card shows the room's state with a power button (toggle), the activities as buttons, the start progress and errors, and — while an activity runs — the remote: volume rocker and slider, d-pad, channel rocker, navigation and playback keys and the activity's own buttons. Only what the running activity offers is shown. Volume and arrow keys repeat while held. It works for every user, in the browser and in the Home Assistant app.
+The integration loads the card itself; there is no dashboard resource to add. The card shows the room's state with a power button (toggle), the activities as buttons, the start progress and errors, and — while an activity runs — the remote: volume rocker and slider, d-pad, channel rocker, navigation and playback keys and the activity's own and quick-select buttons. Only what the running activity offers is shown. Volume and arrow keys repeat while held. It works for every user, in the browser and in the Home Assistant app.
 
 ### Which device gets which button
 
@@ -306,6 +306,24 @@ activities:
 ```
 
 `buttons` lists extra buttons of the activity; each names a command (standard or own) with optional `name`, `icon` and `device`.
+
+### Quick select
+
+A button with `device` and `source` instead of `command` switches that media player to a source: an input of a receiver, or an app on an Apple TV, whose source list holds its installed apps. It runs `media_player.select_source`, after the device's readiness check like every other button. Without `name`, the button is labelled with the source.
+
+```yaml
+activities:
+  apple_tv:
+    remote:
+      buttons:
+        - {device: aptv, source: Netflix, icon: mdi:netflix}
+        - {device: aptv, source: YouTube, icon: mdi:youtube}
+        - {device: aptv, source: ARD Mediathek, name: ARD}
+```
+
+In the configuration panel, quick select has its own list under **Remote control**: pick the device, then the source from its list. The integration remembers the last source list of every configured media player, so the list is there even while the device is off; an Apple TV reports its apps only while it is connected, so start it once after adding it. A name that is not in the list can be typed in.
+
+`av_scenes.send_command` does the same with `command: select_source`, `value: <source>` and `device`.
 
 A command is resolved in this order: the activity's own `commands`, then the device of its group (own `commands` or built-in action), then the first device of the activity that defines it — so digit keys `"0"`–`"9"` only need to exist on the set-top box.
 

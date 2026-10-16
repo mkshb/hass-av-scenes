@@ -29,7 +29,9 @@ Layout of ``entry.data``::
               channels: vu
               transport: vu
               navigation: vu
-              buttons: [{command: netflix, name: Netflix, icon: mdi:netflix}]
+              buttons:
+                - {command: netflix, name: Netflix, icon: mdi:netflix}
+                - {device: aptv, source: YouTube}   # quick select: source or app
             commands: {netflix: [...]}     # activity-only commands
 """
 from __future__ import annotations
@@ -228,15 +230,28 @@ def _step(value: Any) -> dict[str, Any]:
 
 
 def _button(value: Any) -> dict[str, Any]:
-    """A remote button: a command name, optionally with label and icon."""
+    """A remote button: a command name, optionally with label and icon.
+
+    A quick-select button has ``source`` instead of ``command``: it selects
+    that source (on an Apple TV: an app) on its device.
+    """
     if isinstance(value, str):
         value = {CONF_COMMAND: value}
-    return BUTTON_SCHEMA(value)
+    button = BUTTON_SCHEMA(value)
+    if CONF_SOURCE in button:
+        if CONF_COMMAND in button:
+            raise vol.Invalid("a button has either a command or a source")
+        if CONF_DEVICE not in button:
+            raise vol.Invalid("a quick-select button needs a device", path=[CONF_DEVICE])
+    elif CONF_COMMAND not in button:
+        raise vol.Invalid("a button needs a command or a source", path=[CONF_COMMAND])
+    return button
 
 
 BUTTON_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_COMMAND): _KEY,
+        vol.Optional(CONF_COMMAND): _KEY,
+        vol.Optional(CONF_SOURCE): _KEY,
         vol.Optional(CONF_NAME): str,
         vol.Optional(CONF_ICON): cv.icon,
         vol.Optional(CONF_DEVICE): _KEY,
@@ -305,10 +320,14 @@ def _check_references(rooms: dict[str, Any]) -> None:
                     )
             for idx, button in enumerate(remote[CONF_BUTTONS]):
                 device = button.get(CONF_DEVICE)
+                path = [*base, CONF_REMOTE, CONF_BUTTONS, idx, CONF_DEVICE]
                 if device is not None and device not in devices:
+                    raise vol.Invalid(f"unknown device '{device}'", path=path)
+                if CONF_SOURCE in button and not devices[device][
+                    CONF_ENTITY_ID
+                ].startswith("media_player."):
                     raise vol.Invalid(
-                        f"unknown device '{device}'",
-                        path=[*base, CONF_REMOTE, CONF_BUTTONS, idx, CONF_DEVICE],
+                        f"quick select needs a media player, '{device}' is none", path=path
                     )
 
 

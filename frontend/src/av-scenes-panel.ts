@@ -8,7 +8,7 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 
 import "./panel/room-editor";
-import { clean, slugify, uniqueKey, type Room, type Rooms } from "./panel/model";
+import { clean, slugify, uniqueKey, type Room, type Rooms, type Sources } from "./panel/model";
 import { t } from "./panel/strings";
 import type { HomeAssistant } from "./types";
 
@@ -50,6 +50,7 @@ export class AvScenesPanel extends LitElement {
     _banner: { state: true },
     _saving: { state: true },
     _ready: { state: true },
+    _sources: { state: true },
   };
 
   declare hass: HomeAssistant;
@@ -60,6 +61,7 @@ export class AvScenesPanel extends LitElement {
   declare _banner?: Banner;
   declare _saving: boolean;
   declare _ready: boolean;
+  declare _sources: Sources;
 
   private _entryId?: string;
   private _revision?: string;
@@ -70,6 +72,7 @@ export class AvScenesPanel extends LitElement {
     super();
     this._saving = false;
     this._ready = false;
+    this._sources = {};
   }
 
   private _t(key: string, params?: Record<string, string>): string {
@@ -98,6 +101,10 @@ export class AvScenesPanel extends LitElement {
       if (!this._selected || !(this._selected in result.rooms)) {
         this._selected = Object.keys(result.rooms)[0];
       }
+      // Remembered source lists for the pickers; the panel works without them
+      this._sources = await this.hass
+        .callWS<Sources>({ type: "av_scenes/config/sources" })
+        .catch(() => ({}));
     } catch (err) {
       this._loadError = (err as { message?: string })?.message ?? String(err);
     } finally {
@@ -244,6 +251,7 @@ export class AvScenesPanel extends LitElement {
                 .hass=${this.hass}
                 .room=${this._rooms[selected]}
                 .roomId=${selected}
+                .sources=${this._sources}
                 @room-changed=${(ev: CustomEvent<{ room: Room }>) => this._roomChanged(selected, ev.detail.room)}
               ></av-scenes-room-editor>
               <button class="delete-room" @click=${() => this._deleteRoom(selected)}>

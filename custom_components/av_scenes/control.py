@@ -34,6 +34,9 @@ from .const import (
     GROUP_VOLUME,
 )
 
+# Quick-select buttons send this with the source (or app) as value
+COMMAND_SELECT_SOURCE = "select_source"
+
 # Built-in actions of a media player: command -> service
 _MEDIA_PLAYER_SERVICES: dict[str, str] = {
     "volume_up": "volume_up",
@@ -49,6 +52,7 @@ _MEDIA_PLAYER_SERVICES: dict[str, str] = {
     "stop": "media_stop",
     "next": "media_next_track",
     "previous": "media_previous_track",
+    COMMAND_SELECT_SOURCE: "select_source",
 }
 
 _COMMAND_TO_GROUP: dict[str, str] = {
@@ -110,4 +114,11 @@ def builtin_call(
         if value is None:
             raise ValueError("volume_set needs a value between 0 and 1")
         data["volume_level"] = max(0.0, min(1.0, float(value)))
+    elif command == COMMAND_SELECT_SOURCE:
+        if value is None or value == "":
+            raise ValueError("select_source needs the source as value")
+        # The service schema reads numbers as float: "1" arrives as 1.0
+        if isinstance(value, float) and value.is_integer():
+            value = int(value)
+        data["source"] = str(value)
     return "media_player", service, data
