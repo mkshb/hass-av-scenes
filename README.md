@@ -146,7 +146,7 @@ activities:
 | `ready` | — | Readiness check before the device is switched on (see below) |
 | `delay_after_power` | `0` | Boot time: seconds the device needs after its `power_switch` came on before it accepts commands. Counted from switching the outlet on, so devices on the same outlet boot in parallel. Skipped when the outlet was already on. Use it for devices that report `off` instead of `unavailable` while they have no power — the readiness check cannot tell those states apart |
 | `delay_after_on` | `0` | Seconds to wait after switching the device on. Skipped when the device was already on |
-| `delay_after_off` | `0` | Seconds the device needs after switching off before the next device is switched off or its power is cut |
+| `delay_after_off` | `0` | Seconds the device needs after switching off before its power is cut (cool-down); the room does not wait for it |
 | `commands` | — | Remote buttons as Home Assistant actions, see [Remote control](#remote-control) |
 
 `ready` takes:
@@ -219,10 +219,10 @@ Every service call waits for the device to finish (`blocking`), at most 15 secon
 ### Stop
 
 1. **`on_stop`** starts running alongside.
-2. **Devices** in reverse order: switch off, then wait `delay_after_off`. A device that was already off only waits for what is left of its cool-down.
-3. **Power outlets** are switched off last.
+2. **Devices** are switched off in reverse order. The room is idle once they are off and `on_stop` is done; a status LED on a wall button goes out right away.
+3. **Power outlets** whose devices need no cool-down are switched off at once. The others follow in the background after the longest `delay_after_off` of their devices; a device that was already off only counts what is left of its cool-down. Starting an activity in the meantime keeps the outlets it needs.
 
-For the example above: VU+ off → projector off → 180 s cool-down → Onkyo off → both outlets off.
+For the example above: VU+, projector and Onkyo off → room idle → multimedia outlet off → 180 s later the projector outlet off.
 
 ### Commands while something runs
 

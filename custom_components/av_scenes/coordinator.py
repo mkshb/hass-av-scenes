@@ -21,7 +21,10 @@ Starting an activity
 
 Stopping an activity
     ``on_stop`` actions run alongside; devices are switched off in reverse
-    order, each followed by its ``delay_after_off``; power switches last.
+    order. The room is idle once they are off. Power switches are cut
+    afterwards: at once when none of their devices needs a cool-down,
+    otherwise in the background after the longest ``delay_after_off`` of
+    their devices. A new start keeps the switches it needs.
 
 A new command for a room cancels whatever runs there (a stop during a long
 start, a different activity while starting).
@@ -990,6 +993,8 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             device_ids: list[str] = activity[CONF_DEVICES]
             hook = self._start_hook(room_id, activity_id, CONF_ON_STOP, context)
             try:
+                # Power switch -> cool-down its devices still need
+                cooldown: dict[str, float] = {}
                 for device_id in reversed(device_ids):
                     device = devices[device_id]
                     entity_id = device[CONF_ENTITY_ID]
@@ -998,21 +1003,28 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         delay = self._remaining_cooldown(entity_id, delay)
                     else:
                         await self._async_power_off(entity_id, context)
-                    if delay > 0:
-                        _LOGGER.debug("Waiting %s s after switching off %s", delay, entity_id)
-                        await self._async_sleep(delay)
+                    if switch := device.get(CONF_POWER_SWITCH):
+                        cooldown[switch] = max(cooldown.get(switch, 0.0), delay)
 
-                switches = self._power_switches(devices, device_ids)
+                switches = list(reversed(self._power_switches(devices, device_ids)))
                 for switch in switches:
                     self._cancel_cut(rt, switch)
-                if switches:
+                now = [s for s in switches if cooldown.get(s, 0) <= 0]
+                if now:
                     with contextlib.suppress(ActivityAborted):
                         await self._async_call(
                             "homeassistant",
                             SERVICE_TURN_OFF,
-                            {ATTR_ENTITY_ID: list(reversed(switches))},
+                            {ATTR_ENTITY_ID: now},
                             context,
-                            f"power off {', '.join(switches)}",
+                            f"power off {', '.join(now)}",
+                        )
+                # The rest after the cool-down, without keeping the room busy
+                for switch in switches:
+                    if switch not in now:
+                        rt.pending_cuts[switch] = self.hass.async_create_background_task(
+                            self._async_cut_later(rt, switch, cooldown[switch]),
+                            f"{DOMAIN} {room_id} cut {switch}",
                         )
                 if hook is not None:
                     await hook

@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Scene names** – scenes are named like the other entities of a room, device name plus activity ("AV: Wohnzimmer TV" instead of "Wohnzimmer - TV"); entity IDs of existing scenes stay, names set in Home Assistant are kept
+- **Stop without waiting for cool-downs** – a stop is done once the devices are off; outlets whose devices need a cool-down (e.g. 180 s for a projector) are switched off in the background afterwards, so the room and a wall button's status LED do not stay in "stopping" for minutes
 - **Reload after power-on** – with `reload_integration`, a device's integration is reloaded once its outlet came on and its boot time passed, even if it still reports a stale state such as `off`; a device its integration reports as unreachable is not switched on, and the activity shows a warning instead of silently missing the command
 - **Devices that cannot be switched** (e.g. a Sonos speaker) get no turn-on or turn-off call, instead of a warning on every start and stop
 - **Stale entities are removed** – entities of deleted activities and devices of deleted rooms no longer stay behind as "unavailable"

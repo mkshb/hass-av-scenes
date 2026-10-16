@@ -106,7 +106,8 @@ async def test_wait_available_timeout_abort(hass: HomeAssistant, devices: Device
     # A stop from the error state cleans up whatever was powered
     await coordinator.async_stop_activity("wz")
     assert coordinator.activity_states["wz"] == "idle"
-    assert devices.names()[-1] == ("homeassistant.turn_off", (PLUG_BEAMER, PLUG_MM))
+    await hass.async_block_till_done()
+    assert _plugs_cut(devices) == {PLUG_BEAMER, PLUG_MM}
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
 
 
@@ -128,22 +129,63 @@ async def test_wait_available_step_timeout_continue(
     assert ("media_player.select_source", (ONKYO,)) in devices.names()
 
 
+def _plugs_cut(devices: Devices) -> set[str]:
+    """Power switches turned off, in one call or several."""
+    return {
+        entity
+        for name, entities in devices.names()
+        if name == "homeassistant.turn_off"
+        for entity in entities
+        if entity in (PLUG_BEAMER, PLUG_MM)
+    }
+
 async def test_stop_with_delay_after_off(hass: HomeAssistant, devices: Devices) -> None:
-    """Reverse order, the beamer cools down, the power switches go last."""
+    """Reverse order; the room is idle once the devices are off. The plug without
+    cool-down goes at once, the beamer's after its cool-down in the background."""
     coordinator = await setup(hass, devices, living_room())
     await coordinator.async_start_activity("wz", "tv")
     devices.calls.clear()
+    devices.sleeps.clear()
 
     await coordinator.async_stop_activity("wz")
 
-    assert devices.names() == [
+    assert coordinator.activity_states["wz"] == "idle"
+    assert devices.names()[:4] == [
         ("homeassistant.turn_off", (VU,)),
         ("homeassistant.turn_off", (BEAMER,)),
         ("homeassistant.turn_off", (ONKYO,)),
-        ("homeassistant.turn_off", (PLUG_BEAMER, PLUG_MM)),
+        ("homeassistant.turn_off", (PLUG_MM,)),
     ]
+
+    await hass.async_block_till_done()
+    assert devices.names()[4:] == [("homeassistant.turn_off", (PLUG_BEAMER,))]
     assert devices.sleeps == [180]
+
+
+async def test_start_during_cool_down_keeps_the_plug(
+    hass: HomeAssistant, devices: Devices
+) -> None:
+    """A start while the beamer cools down cancels the cut of its plug."""
+    coordinator = await setup(hass, devices, living_room())
+    await coordinator.async_start_activity("wz", "tv")
+    cut = asyncio.Event()
+
+    async def slow_sleep(seconds: float) -> None:
+        devices.sleeps.append(seconds)
+        await cut.wait()
+
+    coordinator._async_sleep = slow_sleep  # type: ignore[method-assign]
+    await coordinator.async_stop_activity("wz")
     assert coordinator.activity_states["wz"] == "idle"
+    assert PLUG_BEAMER in coordinator.runtime("wz").pending_cuts
+
+    devices.calls.clear()
+    await coordinator.async_start_activity("wz", "tv")
+    cut.set()
+    await hass.async_block_till_done()
+
+    assert ("homeassistant.turn_off", (PLUG_BEAMER,)) not in devices.names()
+    assert hass.states.get(PLUG_BEAMER).state == "on"
 
 
 async def test_smart_switching(hass: HomeAssistant, devices: Devices) -> None:
@@ -180,7 +222,8 @@ async def test_stop_cancels_running_start(hass: HomeAssistant, devices: Devices)
         await start
 
     assert coordinator.activity_states["wz"] == "idle"
-    assert ("homeassistant.turn_off", (PLUG_BEAMER, PLUG_MM)) in devices.names()
+    await hass.async_block_till_done()
+    assert _plugs_cut(devices) == {PLUG_BEAMER, PLUG_MM}
 
 
 async def test_toggle(hass: HomeAssistant, devices: Devices) -> None:
