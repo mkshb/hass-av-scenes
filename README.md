@@ -230,7 +230,7 @@ A new command cancels whatever runs in the room: a stop during a long start take
 
 ### The card
 
-Add the card to any dashboard (**Edit dashboard → Add card → AV Scenes Remote**) and pick the room, or in YAML:
+Add the card to any dashboard (**Edit dashboard → Add card → AV Scenes Remote**) and pick the room. Since Home Assistant 2026.6 the card picker also suggests it by entity: under **By entity**, open the area and the room's device ("AV: <room>") or pick one of its entities, and the card is offered with that room already set. Or in YAML:
 
 ```yaml
 type: custom:av-scenes-remote-card

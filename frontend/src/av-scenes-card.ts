@@ -716,9 +716,31 @@ if (!customElements.get("av-scenes-remote-card")) {
   customElements.define("av-scenes-remote-card", AvScenesRemoteCard);
 }
 
-const win = window as unknown as {
-  customCards?: { type: string; name: string; description: string; preview?: boolean }[];
-};
+/**
+ * The room an entity belongs to: every entity of AV Scenes sits on the
+ * room's device, whose identifier is ("av_scenes", room id).
+ */
+export function roomOfEntity(hass: HomeAssistant, entityId: string): string | null {
+  const deviceId = hass.entities?.[entityId]?.device_id;
+  const device = deviceId ? hass.devices?.[deviceId] : undefined;
+  const identifier = device?.identifiers?.find(([domain]) => domain === DOMAIN);
+  return identifier ? identifier[1] : null;
+}
+
+interface CustomCardEntry {
+  type: string;
+  name: string;
+  description: string;
+  preview?: boolean;
+  documentationURL?: string;
+  /** Card picker (HA 2026.6+): suggest the card for the entities of a room. */
+  getEntitySuggestion?: (
+    hass: HomeAssistant,
+    entityId: string,
+  ) => { label?: string; config: Record<string, unknown> } | null;
+}
+
+const win = window as unknown as { customCards?: CustomCardEntry[] };
 win.customCards = win.customCards ?? [];
 if (!win.customCards.some((card) => card.type === "av-scenes-remote-card")) {
   win.customCards.push({
@@ -726,5 +748,10 @@ if (!win.customCards.some((card) => card.type === "av-scenes-remote-card")) {
     name: "AV Scenes Remote",
     description: "Remote control for an AV Scenes room",
     preview: true,
+    documentationURL: "https://github.com/mkshb/hass-av-scenes#the-card",
+    getEntitySuggestion: (hass, entityId) => {
+      const room = roomOfEntity(hass, entityId);
+      return room ? { config: { type: "custom:av-scenes-remote-card", room } } : null;
+    },
   });
 }

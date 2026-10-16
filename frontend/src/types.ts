@@ -13,9 +13,16 @@ export interface EntityRegistryDisplayEntry {
   platform?: string;
 }
 
+/** Device registry entry as the frontend has it (hass.devices). */
+export interface DeviceRegistryEntry {
+  id: string;
+  identifiers?: [string, string][];
+}
+
 export interface HomeAssistant {
   states: Record<string, HassEntity | undefined>;
   entities?: Record<string, EntityRegistryDisplayEntry | undefined>;
+  devices?: Record<string, DeviceRegistryEntry | undefined>;
   language: string;
   connection: {
     subscribeMessage<T>(
