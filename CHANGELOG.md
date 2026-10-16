@@ -22,7 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Boot time `delay_after_power`** – per device, waited after its power outlet came on and before the device is switched on; for devices that report `off` without power, where the readiness check cannot help
 - **Switch-off delay `delay_after_off`** – cool-down per device, e.g. 180 s for a projector before its power is cut
 - **`on_start` / `on_stop`** – any Home Assistant actions with conditions, run by Home Assistant's script engine
-- **`toggle_activity` action** – stops if something runs, otherwise starts the last used activity; meant for push buttons (e.g. KNX)
+- **`toggle_activity` action** – stops if something runs, otherwise starts the room's default activity or the last used one; meant for push buttons (e.g. KNX)
+- **`default_activity`** per room – the activity a plain "on" starts (room switch, `toggle_activity`), so a single wall button always does the same; set in the panel
 - **Cancelling** – a stop during a running start takes effect immediately
 - **`error` state** – an aborted start is never reported as `active`; reason in the sensor attribute `error` and in Settings → Repairs; failed steps in `warnings`
 - **State survives restarts** – the running activity is restored after a Home Assistant restart

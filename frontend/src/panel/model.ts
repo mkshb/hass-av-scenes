@@ -43,6 +43,7 @@ export interface Activity extends Obj {
 export interface Room extends Obj {
   name?: string;
   area_id?: string | null;
+  default_activity?: string | null;
   devices?: Record<string, Device>;
   activities?: Record<string, Activity>;
 }

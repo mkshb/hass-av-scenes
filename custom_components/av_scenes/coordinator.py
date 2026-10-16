@@ -90,6 +90,7 @@ from .const import (
     CONF_COLOR_TEMP_KELVIN,
     CONF_COMMAND,
     CONF_COMMANDS,
+    CONF_DEFAULT_ACTIVITY,
     CONF_DATA,
     CONF_DELAY_AFTER_OFF,
     CONF_DELAY_AFTER_ON,
@@ -549,8 +550,15 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         await self.async_start_activity(room_id, target)
 
     def default_activity(self, room_id: str) -> str | None:
-        """Activity a plain "on" starts: the last one, else the first in order."""
-        activities = self.rooms.get(room_id, {}).get(CONF_ACTIVITIES, {})
+        """Activity a plain "on" starts.
+
+        The room's ``default_activity``, else the last one, else the first
+        in order.
+        """
+        room = self.rooms.get(room_id, {})
+        activities = room.get(CONF_ACTIVITIES, {})
+        if room.get(CONF_DEFAULT_ACTIVITY) in activities:
+            return room[CONF_DEFAULT_ACTIVITY]
         last = self.runtime(room_id).last_activity
         if last in activities:
             return last

@@ -89,6 +89,7 @@ A room consists of **devices** and **activities**:
 
 ```yaml
 name: Wohnzimmer
+default_activity: tv   # optional: what a plain "on" starts (switch, toggle_activity)
 devices:
   onkyo:
     entity_id: media_player.onkyo_receiver
@@ -131,6 +132,8 @@ activities:
     steps:
       - {type: set_source, device: onkyo, source: NET}
 ```
+
+`default_activity` is the activity a plain "on" starts: the room's switch, `toggle_activity` without an activity and wall buttons wired to them. Without it, the last used activity is started, which can be surprising on a single button: after watching TV, a press meant for music would switch the projector on.
 
 ### Devices
 
@@ -363,7 +366,7 @@ An aborted start is also reported in **Settings → Repairs**; the entry disappe
 
 ### Switch — Active
 
-`on` while an activity runs, starts or failed. `turn_on` starts the last used activity (or the first one), `turn_off` stops.
+`on` while an activity runs, starts or failed. `turn_on` starts the room's `default_activity`, else the last used activity (or the first one); `turn_off` stops. Exposed to KNX, its state drives the status LED of a wall button.
 
 ### Scene — one per activity
 
@@ -423,7 +426,30 @@ actions:
       activity: tv
 ```
 
-With a rocker that sends separate on/off telegrams, use `start_activity` and `stop_activity` instead. Volume buttons on the wall work the same way with `send_command`, and always reach the device of the running activity.
+With a rocker that sends separate on/off telegrams, switch the room's switch (it starts the `default_activity`) and expose it for the status LED:
+
+```yaml
+alias: Living room rocker
+mode: parallel
+triggers:
+  - trigger: knx.telegram
+    destination: "2/0/35"
+    group_value_read: false
+    group_value_response: false
+actions:
+  - action: "switch.turn_{{ 'on' if trigger.payload == 1 else 'off' }}"
+    target:
+      entity_id: switch.wohnzimmer_activity
+```
+
+```yaml
+# KNX expose (knx.yaml): status for the LED
+- type: binary
+  entity_id: switch.wohnzimmer_activity
+  address: "2/1/35"
+```
+
+A long press on another group address can start a second activity with `start_activity`. Volume buttons on the wall work the same way with `send_command`, and always reach the device of the running activity.
 
 ---
 

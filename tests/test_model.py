@@ -154,3 +154,14 @@ def test_quick_select_buttons() -> None:
     assert err.value.path == [
         "rooms", "wz", "activities", "tv", "remote", "buttons", 0, "device"
     ]
+
+
+def test_default_activity_must_exist() -> None:
+    """The default activity refers to an activity of the room."""
+    data = _config()
+    data["rooms"]["wz"]["default_activity"] = "tv"
+    assert validate_config(data)["rooms"]["wz"]["default_activity"] == "tv"
+    data["rooms"]["wz"]["default_activity"] = "kino"
+    with pytest.raises(vol.Invalid) as err:
+        validate_config(data)
+    assert err.value.path == ["rooms", "wz", "default_activity"]

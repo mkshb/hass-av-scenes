@@ -108,18 +108,35 @@ export class AvScenesRoomEditor extends LitElement {
     if (view.kind === "activity" && this.room.activities?.[view.id]) {
       return this._renderActivity(view.id, this.room.activities[view.id]);
     }
+    const activityOptions = [
+      { value: "__last", label: this._t("default_last") },
+      ...Object.entries(this.room.activities ?? {}).map(([id, a]) => ({ value: id, label: a.name ?? id })),
+    ];
     return html`
       <ha-form
         .hass=${this.hass}
-        .data=${{ name: this.room.name ?? "", area_id: this.room.area_id ?? undefined }}
+        .data=${{
+          name: this.room.name ?? "",
+          area_id: this.room.area_id ?? undefined,
+          default_activity: this.room.default_activity ?? "__last",
+        }}
         .schema=${[
           { name: "name", required: true, selector: { text: {} } },
           { name: "area_id", selector: { area: {} } },
+          { name: "default_activity", selector: { select: { options: activityOptions, mode: "dropdown" } } },
         ]}
-        .computeLabel=${(s: { name: string }) => this._t(s.name === "name" ? "room_name" : "room_area")}
+        .computeLabel=${(s: { name: string }) => this._t(`room_${s.name === "area_id" ? "area" : s.name}`)}
+        .computeHelper=${this._helper}
         @value-changed=${(ev: CustomEvent) => {
           const v = ev.detail.value as Obj;
-          this._emit(clean({ ...this.room, name: v.name as string, area_id: v.area_id as string }));
+          this._emit(
+            clean({
+              ...this.room,
+              name: v.name as string,
+              area_id: v.area_id as string,
+              default_activity: v.default_activity === "__last" ? undefined : (v.default_activity as string),
+            }),
+          );
         }}
       ></ha-form>
 
@@ -676,7 +693,11 @@ export class AvScenesRoomEditor extends LitElement {
     }
     const activities = { ...this.room.activities };
     delete activities[id];
-    this._emit({ ...this.room, activities });
+    const room: Room = { ...this.room, activities };
+    if (room.default_activity === id) {
+      delete room.default_activity;
+    }
+    this._emit(room);
     this._show({ kind: "list" });
   }
 

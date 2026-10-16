@@ -5,6 +5,7 @@ Layout of ``entry.data``::
     rooms:
       <room_id>:
         name: Wohnzimmer
+        default_activity: tv               # optional: what a plain "on" starts
         devices:
           <device_id>:
             entity_id: media_player.onkyo_receiver
@@ -56,6 +57,7 @@ from .const import (
     CONF_COMMAND,
     CONF_COMMANDS,
     CONF_DATA,
+    CONF_DEFAULT_ACTIVITY,
     CONF_DELAY_AFTER_OFF,
     CONF_DELAY_AFTER_ON,
     CONF_DELAY_AFTER_POWER,
@@ -285,6 +287,8 @@ ROOM_SCHEMA = vol.Schema(
     {
         vol.Optional(CONF_NAME): str,
         vol.Optional(CONF_AREA_ID): vol.Any(None, str),
+        # Activity a plain "on" starts; without it, the last used one
+        vol.Optional(CONF_DEFAULT_ACTIVITY): vol.Any(None, _KEY),
         vol.Optional(CONF_DEVICES, default=dict): {_KEY: DEVICE_SCHEMA},
         vol.Optional(CONF_ACTIVITIES, default=dict): {_KEY: ACTIVITY_SCHEMA},
     }
@@ -297,6 +301,12 @@ def _check_references(rooms: dict[str, Any]) -> None:
     """Raise vol.Invalid when an activity or step points to an unknown device."""
     for room_id, room in rooms.items():
         devices = room[CONF_DEVICES]
+        default = room.get(CONF_DEFAULT_ACTIVITY)
+        if default is not None and default not in room[CONF_ACTIVITIES]:
+            raise vol.Invalid(
+                f"unknown activity '{default}'",
+                path=[CONF_ROOMS, room_id, CONF_DEFAULT_ACTIVITY],
+            )
         for activity_id, activity in room[CONF_ACTIVITIES].items():
             base = [CONF_ROOMS, room_id, CONF_ACTIVITIES, activity_id]
             for idx, device in enumerate(activity[CONF_DEVICES]):

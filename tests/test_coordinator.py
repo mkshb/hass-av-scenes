@@ -193,6 +193,17 @@ async def test_toggle(hass: HomeAssistant, devices: Devices) -> None:
     assert coordinator.active_activities["wz"] == "musik"
 
 
+async def test_default_activity(hass: HomeAssistant, devices: Devices) -> None:
+    """A configured default activity wins over the last used one."""
+    coordinator = await setup(hass, devices, living_room(default_activity="musik"))
+    await coordinator.async_start_activity("wz", "tv")
+    await coordinator.async_toggle_activity("wz")
+    assert coordinator.activity_states["wz"] == "idle"
+    assert coordinator.default_activity("wz") == "musik"
+    await coordinator.async_toggle_activity("wz")
+    assert coordinator.active_activities["wz"] == "musik"
+
+
 async def test_state_restored(hass: HomeAssistant, devices: Devices, hass_storage) -> None:
     """The running activity survives a restart; an interrupted start is an error."""
     hass_storage["av_scenes.test_entry.state"] = {
