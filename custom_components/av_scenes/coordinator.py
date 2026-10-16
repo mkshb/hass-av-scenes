@@ -9,8 +9,10 @@ Starting an activity
     3. ``on_start`` actions start running alongside.
     4. Per device, in order: boot time ``delay_after_power`` (only when its
        power switch was off, counted from switching it on), readiness check
-       (``ready``), turn on (only when it is off), ``delay_after_on`` (only
-       when it was switched on).
+       (``ready``; after its power came on, its integration is reloaded
+       first with ``reload_integration``, since it last saw the device
+       without power), turn on (only when it is off), ``delay_after_on``
+       (only when it was switched on).
     5. Steps.
     6. Wait for ``on_start``; the activity is ``active``.
 
@@ -70,6 +72,7 @@ from homeassistant.exceptions import (
 )
 from homeassistant.helpers import entity_registry as er, issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.entity_component import DATA_INSTANCES
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.script import SCRIPT_MODE_PARALLEL, Script
 from homeassistant.helpers.storage import Store
@@ -846,9 +849,21 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             "Waiting %.1f s for %s to boot", remaining, device[CONF_ENTITY_ID]
                         )
                         await self._async_sleep(remaining)
-                if device.get(CONF_READY):
+                ready = device.get(CONF_READY)
+                if ready:
+                    reload = None
+                    if device.get(CONF_POWER_SWITCH) in powered and ready[CONF_RELOAD_INTEGRATION]:
+                        # The integration last saw the device without power and
+                        # may still report a stale state ("off" instead of
+                        # unavailable): reload it once the device has booted
+                        task = self._reload_integration_of(
+                            ready.get(CONF_ENTITY_ID) or device[CONF_ENTITY_ID]
+                        )
+                        if task is not None:
+                            await self._await_task(task)
+                        reload = False
                     await self._async_wait_ready(
-                        device[CONF_ENTITY_ID], device[CONF_READY], f"device '{device_id}'"
+                        device[CONF_ENTITY_ID], ready, f"device '{device_id}'", reload=reload
                     )
                 if self._is_off(device[CONF_ENTITY_ID]):
                     await self._async_power_on(device[CONF_ENTITY_ID], context)
@@ -1047,7 +1062,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return self._state_ok(self.hass.states.get(target), options.get(CONF_STATE))
 
     async def _async_wait_ready(
-        self, entity_id: str, options: dict[str, Any], label: str
+        self, entity_id: str, options: dict[str, Any], label: str, *, reload: bool | None = None
     ) -> bool:
         """Wait until an entity is ready.
 
@@ -1076,7 +1091,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.hass, [entity_id], _state_changed
         )
         try:
-            if options[CONF_RELOAD_INTEGRATION]:
+            if options[CONF_RELOAD_INTEGRATION] if reload is None else reload:
                 self._reload_integration_of(entity_id)
             # The entity may have come up between the first check and subscribing
             if self._state_ok(self.hass.states.get(entity_id), wanted):
@@ -1227,9 +1242,22 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return True
         return bool(state.attributes["supported_features"] & feature)
 
+    def _entity_unavailable(self, entity_id: str) -> bool:
+        """True when the integration reports its entity as not available.
+
+        The state may still show an older value; Home Assistant then drops a
+        service call for the entity with only a log warning.
+        """
+        component = self.hass.data.get(DATA_INSTANCES, {}).get(entity_id.split(".")[0])
+        entity = component.get_entity(entity_id) if component is not None else None
+        return entity is not None and not entity.available
+
     async def _async_power_on(self, entity_id: str, context: Context) -> None:
         if not self._supports(entity_id, MediaPlayerEntityFeature.TURN_ON):
             _LOGGER.debug("%s cannot be switched on, skipping", entity_id)
+            return
+        if self._entity_unavailable(entity_id):
+            self._warn(f"turn on: {entity_id} is not reachable, it was not switched on")
             return
         if entity_id.startswith("cover."):
             await self._async_call(

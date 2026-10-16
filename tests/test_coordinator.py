@@ -359,3 +359,46 @@ async def test_players_without_power_control_are_not_switched(
     await coordinator.async_stop_activity("wz")
 
     assert not [c for c in devices.names() if "media_player.sonos" in c[1]]
+
+
+async def test_reload_after_power_on_and_unreachable_device(
+    hass: HomeAssistant, devices: Devices
+) -> None:
+    """After its outlet came on, a device's integration is reloaded even if it
+    still reports a stale "off"; a device its integration reports unreachable is
+    not switched on, and the activity says so."""
+    from unittest.mock import MagicMock, patch
+
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from homeassistant.helpers import entity_registry as er
+    from homeassistant.helpers.entity_component import DATA_INSTANCES
+
+    epson = MockConfigEntry(domain="epson_projector_link")
+    epson.add_to_hass(hass)
+    hass.states.async_remove(BEAMER)  # free the entity ID for the registry
+    er.async_get(hass).async_get_or_create(
+        "media_player", "epson_projector_link", "beamer",
+        suggested_object_id="epson_ehtw7400", config_entry=epson,
+    )
+    hass.states.async_set(BEAMER, "off")  # stale: the projector has no power
+    data = living_room()
+    data["rooms"]["wz"]["devices"]["beamer"]["ready"]["timeout"] = 1
+    coordinator = await setup(hass, devices, data)
+    reloads: list[str] = []
+
+    async def fake_reload(entry_id: str) -> bool:
+        reloads.append(entry_id)
+        return True
+
+    stale = MagicMock(available=False)
+    component = MagicMock()
+    component.get_entity.side_effect = lambda e: stale if e == BEAMER else None
+    hass.data.setdefault(DATA_INSTANCES, {})["media_player"] = component
+    with patch.object(hass.config_entries, "async_reload", side_effect=fake_reload):
+        await coordinator.async_start_activity("wz", "tv")
+
+    # The stale "off" counted as ready, but the integration was reloaded anyway
+    assert epson.entry_id in reloads
+    assert ("homeassistant.turn_on", (BEAMER,)) not in devices.names()
+    assert any(BEAMER in w for w in coordinator.runtime("wz").warnings)

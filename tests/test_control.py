@@ -228,8 +228,6 @@ async def test_send_command_reconnects_first(
     }
     hass.states.async_set("remote.vu", "on")
     coordinator = await setup(hass, devices, data)
-    await coordinator.async_start_activity("wz", "tv")
-    hass.states.async_set("remote.vu", "off")  # connection lost
     reloads: list[str] = []
 
     async def fake_reload(entry_id: str) -> bool:
@@ -239,6 +237,11 @@ async def test_send_command_reconnects_first(
         return True
 
     with patch.object(hass.config_entries, "async_reload", side_effect=fake_reload):
+        await coordinator.async_start_activity("wz", "tv")
+        # Its outlet came on: the integration was reloaded once after booting
+        assert reloads == [apple.entry_id]
+        reloads.clear()
+        hass.states.async_set("remote.vu", "off")  # connection lost
         # Held button: several presses while reconnecting, one reload
         await asyncio.gather(send(hass, "channel_up"), send(hass, "channel_up"))
 
