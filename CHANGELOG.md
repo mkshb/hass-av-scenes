@@ -61,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Color temperature steps failed because Home Assistant removed `color_temp` (mireds) from `light.turn_on`
 - "Detected blocking call to open … inside the event loop" caused by the debug log at startup
+- Migration from version 1 failed when an action or delay step had an entity; the entity is now only switched off on stop, as before
 
 ### Removed
 - Custom debug log at `/config/av_scenes_debug.log` – use "Enable debug logging" on the integration instead

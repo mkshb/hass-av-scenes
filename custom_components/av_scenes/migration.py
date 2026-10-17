@@ -56,6 +56,9 @@ from .const import (
     STEP_TYPE_SET_VOLUME,
 )
 
+# v1 ran these steps without their entity (if any); v2 does not allow one
+_STEPS_WITHOUT_DEVICE = (STEP_TYPE_CALL_ACTION, STEP_TYPE_DELAY)
+
 # v1-only keys
 _V1_STEP_ID = "step_id"
 _V1_STEP_TYPE = "step_type"
@@ -136,7 +139,11 @@ def _migrate_activity(
         step_type = step.get(_V1_STEP_TYPE)
         entity_id = (step.get(CONF_ENTITY_ID) or "").strip()
         delay = step.get(_V1_DELAY_AFTER) or 0
-        device = device_for(entity_id) if entity_id else None
+        device = (
+            device_for(entity_id)
+            if entity_id and step_type not in _STEPS_WITHOUT_DEVICE
+            else None
+        )
 
         if entity_id:
             # v1 waited max(delay_after) per entity while stopping
@@ -153,9 +160,9 @@ def _migrate_activity(
 
         steps_out.append(_migrate_step(step, device))
 
+    managed_entities = {devices[device][CONF_ENTITY_ID]: device for device in managed}
     for entity_id, delay in stop_delay.items():
-        device = device_for(entity_id)
-        if device in managed:
+        if (device := managed_entities.get(entity_id)) is not None:
             profile = devices[device]
             profile[CONF_DELAY_AFTER_OFF] = max(profile[CONF_DELAY_AFTER_OFF], delay)
 
@@ -164,7 +171,7 @@ def _migrate_activity(
     # that behaviour as explicit (and editable) on_stop actions.
     on_stop: list[dict[str, Any]] = []
     for entity_id in reversed(touched):
-        if device_for(entity_id) in managed:
+        if entity_id in managed_entities:
             continue
         if entity_id.startswith("cover."):
             on_stop.append(

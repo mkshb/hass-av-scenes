@@ -240,6 +240,43 @@ def test_migrate_device_key_collision() -> None:
     assert room["devices"]["beamer_2"]["entity_id"] == "media_player.beamer"
 
 
+def test_migrate_action_and_delay_steps_with_entity() -> None:
+    """v1 ran action and delay steps without their entity and only switched it
+    off on stop; v2 does not allow a device on these steps."""
+    data = {
+        "rooms": {
+            "r": {
+                "activities": {
+                    "a": {
+                        "steps": [
+                            {
+                                "step_type": "call_action",
+                                "entity_id": "script.popcorn",
+                                "delay_after": 2,
+                                "parameters": {"action": "script.turn_on"},
+                            },
+                            {"step_type": "delay", "entity_id": "light.wz", "delay_after": 3},
+                        ]
+                    }
+                }
+            }
+        }
+    }
+    migrated = migrate_v1_to_v2(data)
+    room = migrated["rooms"]["r"]
+    activity = room["activities"]["a"]
+
+    assert [("device" in s) for s in activity["steps"]] == [False, False]
+    assert room["devices"] == {}
+    assert activity["on_stop"] == [
+        {"action": "homeassistant.turn_off", "target": {"entity_id": "light.wz"}},
+        {"delay": {"seconds": 3}},
+        {"action": "homeassistant.turn_off", "target": {"entity_id": "script.popcorn"}},
+        {"delay": {"seconds": 2}},
+    ]
+    validate_config(migrated)
+
+
 def test_migrate_keeps_unknown_keys() -> None:
     """Unknown keys survive so nothing is silently lost."""
     data = {
