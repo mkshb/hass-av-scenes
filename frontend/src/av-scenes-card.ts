@@ -45,6 +45,8 @@ const TRANSPORT = ["previous", "play_pause", "play", "pause", "stop", "next"];
 const REPEATING = new Set(["volume_up", "volume_down", "up", "down", "left", "right"]);
 const REPEAT_DELAY = 400;
 const REPEAT_INTERVAL = 200;
+/** Wait before subscribing again after the integration refused (e.g. not loaded yet). */
+const RETRY_DELAY = 30_000;
 
 const STATE_ICONS: Record<string, string> = {
   idle: "mdi:power",
@@ -74,6 +76,7 @@ export class AvScenesRemoteCard extends LitElement {
 
   private _unsubscribe?: Promise<() => Promise<void>>;
   private _repeatTimer?: number;
+  private _retryTimer?: number;
   // The key held down, until it is released or the press is cancelled
   private _press?: { command: string; extra: Record<string, unknown>; sent: boolean };
 
@@ -136,7 +139,7 @@ export class AvScenesRemoteCard extends LitElement {
   }
 
   protected updated(changed: PropertyValues): void {
-    if (changed.has("hass") && !this._unsubscribe) {
+    if (changed.has("hass") && !this._unsubscribe && this._retryTimer === undefined) {
       this._subscribe();
     }
   }
@@ -159,15 +162,23 @@ export class AvScenesRemoteCard extends LitElement {
     }, message);
     this._unsubscribe = subscription;
     subscription.catch((err: { message?: string }) => {
+      if (this._unsubscribe !== subscription) {
+        return; // a newer subscription replaced this one
+      }
       this._subscribeError = err?.message ?? String(err);
       this._loaded = true;
-      if (this._unsubscribe === subscription) {
-        this._unsubscribe = undefined;
-      }
+      this._unsubscribe = undefined;
+      // Not on every hass update, which would send a subscribe per state change
+      this._retryTimer = window.setTimeout(() => {
+        this._retryTimer = undefined;
+        this._subscribe();
+      }, RETRY_DELAY);
     });
   }
 
   private _unsubscribeNow(): void {
+    window.clearTimeout(this._retryTimer);
+    this._retryTimer = undefined;
     const subscription = this._unsubscribe;
     this._unsubscribe = undefined;
     subscription?.then((unsub) => unsub()).catch(() => undefined);
