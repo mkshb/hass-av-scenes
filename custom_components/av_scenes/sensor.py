@@ -7,6 +7,7 @@ from typing import Any
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -22,7 +23,6 @@ from .const import (
     ACTIVITY_STATE_STARTING,
     ACTIVITY_STATE_ACTIVE,
     ACTIVITY_STATE_STOPPING,
-    DEVICE_NAME_PREFIX,
 )
 from .coordinator import AVScenesCoordinator
 from .model import sensor_unique_id
@@ -79,8 +79,6 @@ class RoomActivitySensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self.room_id = room_id
 
-        room_name = coordinator.rooms[room_id].get("name", room_id)
-        self._room_name = room_name
         self._attr_unique_id = sensor_unique_id(room_id)
 
     # ------------------------------------------------------------------
@@ -157,19 +155,13 @@ class RoomActivitySensor(CoordinatorEntity, SensorEntity):
         return _STATE_ICONS.get(self.native_value, "mdi:television")
 
     # ------------------------------------------------------------------
-    # Device — linked to HA Area via suggested_area
+    # Device
     # ------------------------------------------------------------------
 
     @property
-    def device_info(self) -> dict[str, Any]:
-        """Return device info.  suggested_area links the device to the HA Area."""
-        return {
-            "identifiers": {(DOMAIN, self.room_id)},
-            "name": f"{DEVICE_NAME_PREFIX}: {self._room_name}",
-            "manufacturer": "AV Scenes",
-            "model": "Activity Controller",
-            "suggested_area": self._room_name,   # links to the HA area of the same name
-        }
+    def device_info(self) -> DeviceInfo:
+        """The room's device, in the room's area."""
+        return self.coordinator.device_info(self.room_id)
 
     # ------------------------------------------------------------------
 

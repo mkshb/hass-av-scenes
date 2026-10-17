@@ -105,3 +105,69 @@ async def test_scene_names_follow_the_device(hass: HomeAssistant, devices) -> No
     state = hass.states.get(entity_id)
     assert state is not None
     assert state.attributes["friendly_name"] == "AV: Wohnzimmer TV"
+
+
+def _room_device(hass: HomeAssistant, entry: MockConfigEntry, room_id: str = "wz"):
+    from homeassistant.helpers import device_registry as dr
+
+    [device] = [
+        d
+        for d in dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
+        if (DOMAIN, room_id) in d.identifiers
+    ]
+    return device
+
+
+async def test_room_device_goes_into_the_configured_area(hass: HomeAssistant) -> None:
+    """The area of the configuration wins over an area named like the room."""
+    import copy
+
+    from homeassistant.helpers import area_registry as ar
+
+    areas = ar.async_get(hass)
+    kino = areas.async_create("Kino")
+    areas.async_create("Wohnzimmer")
+    data = copy.deepcopy(DATA)
+    data["rooms"]["wz"]["area_id"] = kino.id
+    hass.states.async_set("media_player.onkyo_receiver", "off")
+    entry = MockConfigEntry(domain=DOMAIN, version=2, minor_version=1, data=data)
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert _room_device(hass, entry).area_id == kino.id
+
+    # A changed area is applied without a reload, also to the existing device
+    office = areas.async_create("Büro")
+    data = copy.deepcopy(data)
+    data["rooms"]["wz"]["area_id"] = office.id
+    hass.config_entries.async_update_entry(entry, data=data)
+    await hass.async_block_till_done()
+    assert _room_device(hass, entry).area_id == office.id
+
+
+async def test_no_area_is_created_for_a_room(hass: HomeAssistant) -> None:
+    """Without an area in the configuration, a room only joins an existing area
+    of the same name."""
+    from homeassistant.helpers import area_registry as ar
+
+    hass.states.async_set("media_player.onkyo_receiver", "off")
+    entry = MockConfigEntry(domain=DOMAIN, version=2, minor_version=1, data=DATA)
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert _room_device(hass, entry).area_id is None
+    assert ar.async_get(hass).async_get_area_by_name("Wohnzimmer") is None
+
+
+async def test_room_joins_an_area_of_the_same_name(hass: HomeAssistant) -> None:
+    from homeassistant.helpers import area_registry as ar
+
+    area = ar.async_get(hass).async_create("Wohnzimmer")
+    hass.states.async_set("media_player.onkyo_receiver", "off")
+    entry = MockConfigEntry(domain=DOMAIN, version=2, minor_version=1, data=DATA)
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert _room_device(hass, entry).area_id == area.id

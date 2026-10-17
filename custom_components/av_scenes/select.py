@@ -8,18 +8,17 @@ Provides one SelectEntity per room that:
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     DOMAIN,
     CONF_ACTIVITIES,
-    DEVICE_NAME_PREFIX,
     ACTIVITY_STATE_IDLE,
     ACTIVITY_STATE_STARTING,
     ACTIVITY_STATE_STOPPING,
@@ -70,8 +69,6 @@ class RoomActivitySelect(CoordinatorEntity, SelectEntity):
         super().__init__(coordinator)
         self.room_id = room_id
 
-        room_data = coordinator.rooms[room_id]
-        self._room_name: str = room_data.get("name", room_id)
         self._attr_unique_id = select_unique_id(room_id)
 
     # ------------------------------------------------------------------
@@ -140,15 +137,9 @@ class RoomActivitySelect(CoordinatorEntity, SelectEntity):
     # ------------------------------------------------------------------
 
     @property
-    def device_info(self) -> dict[str, Any]:
-        """Return device info."""
-        return {
-            "identifiers": {(DOMAIN, self.room_id)},
-            "name": f"{DEVICE_NAME_PREFIX}: {self._room_name}",
-            "manufacturer": "AV Scenes",
-            "model": "Activity Controller",
-            "suggested_area": self._room_name,
-        }
+    def device_info(self) -> DeviceInfo:
+        """The room's device, in the room's area."""
+        return self.coordinator.device_info(self.room_id)
 
     # ------------------------------------------------------------------
 

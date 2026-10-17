@@ -76,7 +76,13 @@ from homeassistant.exceptions import (
     HomeAssistantError,
     ServiceValidationError,
 )
-from homeassistant.helpers import entity_registry as er, issue_registry as ir
+from homeassistant.helpers import (
+    area_registry as ar,
+    device_registry as dr,
+    entity_registry as er,
+    issue_registry as ir,
+)
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity_component import DATA_INSTANCES
 from homeassistant.helpers.event import async_track_state_change_event
@@ -126,6 +132,7 @@ from .const import (
     CONF_TYPE,
     CONF_VOLUME_LEVEL,
     DEFAULT_SERVICE_TIMEOUT,
+    DEVICE_NAME_PREFIX,
     DOMAIN,
     ON_TIMEOUT_ABORT,
     SIGNAL_ROOMS_UPDATED,
@@ -348,6 +355,43 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
             for room_id, room in rooms.items()
         )
+
+    def device_info(self, room_id: str) -> DeviceInfo:
+        """The device of a room, which holds its entities.
+
+        It goes into the room's area. Without one, it goes into an area named
+        like the room if there is one; no area is created for it.
+        """
+        room = self.rooms.get(room_id, {})
+        name = room.get(CONF_NAME, room_id)
+        info = DeviceInfo(
+            identifiers={(DOMAIN, room_id)},
+            name=f"{DEVICE_NAME_PREFIX}: {name}",
+            manufacturer="AV Scenes",
+            model="Activity Controller",
+        )
+        areas = ar.async_get(self.hass)
+        area = areas.async_get_area(room.get(CONF_AREA_ID) or "") or areas.async_get_area_by_name(
+            name
+        )
+        if area is not None:
+            info["suggested_area"] = area.name
+        return info
+
+    @callback
+    def async_apply_areas(self) -> None:
+        """Move the rooms' devices into the areas the configuration names.
+
+        A suggested area only counts when a device is created; this also
+        covers devices that exist already and areas changed later.
+        """
+        areas = ar.async_get(self.hass)
+        devices = dr.async_get(self.hass)
+        for device in dr.async_entries_for_config_entry(devices, self.entry.entry_id):
+            room_id = next((i for d, i in device.identifiers if d == DOMAIN), None)
+            area_id = self.rooms.get(room_id, {}).get(CONF_AREA_ID) if room_id else None
+            if area_id and area_id != device.area_id and areas.async_get_area(area_id):
+                devices.async_update_device(device.id, area_id=area_id)
 
     def resolve_activity(self, room_id: str, activity: str) -> str | None:
         """Map an activity id or display name to its id."""

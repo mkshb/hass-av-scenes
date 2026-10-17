@@ -7,9 +7,10 @@ from typing import Any
 from homeassistant.components.scene import Scene
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, CONF_ACTIVITIES, DEVICE_NAME_PREFIX
+from .const import DOMAIN, CONF_ACTIVITIES
 from .coordinator import AVScenesCoordinator
 from .model import scene_unique_id
 
@@ -76,12 +77,6 @@ class AVScene(Scene):
         await self.coordinator.async_start_activity(self.room_id, self.activity_name)
 
     @property
-    def device_info(self):
-        """Return device information for grouping."""
-        room_name = self.coordinator.rooms[self.room_id].get("name", self.room_id)
-        return {
-            "identifiers": {(DOMAIN, self.room_id)},
-            "name": f"{DEVICE_NAME_PREFIX}: {room_name}",
-            "manufacturer": "AV Scenes",
-            "model": "Activity Controller",
-        }
+    def device_info(self) -> DeviceInfo:
+        """The room's device, in the room's area."""
+        return self.coordinator.device_info(self.room_id)
