@@ -272,6 +272,8 @@ activities:
       transport: null
 ```
 
+When navigation goes to a device with a `remote_entity` (e.g. an Apple TV), the card shows a touch surface instead of the arrow keys: every swipe of about 40 px sends one arrow key in its direction, a long swipe several, a tap sends OK. `touchpad: true` or `false` under `remote` turns it on or off for an activity; in the panel it is "Touch surface" next to the button groups.
+
 ### Own commands and buttons
 
 `commands` maps a command name to Home Assistant actions — on a device for every activity that uses it, or on an activity for that activity only. The variables `command`, `value` and (on devices) `entity_id` are available in templates. Own commands override the built-in ones.

@@ -39,6 +39,7 @@ from .const import (
     CONF_REMOTE,
     CONF_REMOTE_ENTITY,
     CONF_SOURCE,
+    CONF_TOUCHPAD,
     GROUP_CHANNELS,
     GROUP_NAVIGATION,
     GROUP_TRANSPORT,
@@ -217,11 +218,26 @@ def remote_view(room: dict[str, Any], activity: dict[str, Any]) -> dict[str, Any
                 "entity_id": devices[device_id][CONF_ENTITY_ID] if device_id else None,
                 "commands": commands,
             }
+    if GROUP_NAVIGATION in groups:
+        groups[GROUP_NAVIGATION]["touchpad"] = touchpad(room, activity)
     return {
         "groups": groups,
         "buttons": [button_view(button) for button in activity[CONF_REMOTE][CONF_BUTTONS]],
         "media": media_entity(room, activity),
     }
+
+
+def touchpad(room: dict[str, Any], activity: dict[str, Any]) -> bool:
+    """Whether the card shows a swipe area instead of the arrow keys.
+
+    As the activity says; else for navigation going to a remote entity
+    (an Apple TV), whose apps are made for swiping.
+    """
+    chosen = (activity.get(CONF_REMOTE) or {}).get(CONF_TOUCHPAD)
+    if chosen is not None:
+        return bool(chosen)
+    device_id = routing(room, activity)[GROUP_NAVIGATION]
+    return device_id is not None and bool(room[CONF_DEVICES][device_id].get(CONF_REMOTE_ENTITY))
 
 
 def media_entity(room: dict[str, Any], activity: dict[str, Any]) -> str | None:

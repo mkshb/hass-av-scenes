@@ -11,6 +11,7 @@ import "./editor";
 import { localize } from "./localize";
 import { clock, nowPlaying, type NowPlaying } from "./now-playing";
 import { coolingText, progressText } from "./progress";
+import { Swipe } from "./touchpad";
 import type { ButtonView, CardConfig, GroupView, HomeAssistant, RoomInfo, RoomView } from "./types";
 
 const DOMAIN = "av_scenes";
@@ -87,6 +88,8 @@ export class AvScenesRemoteCard extends LitElement {
   private _retryTimer?: number;
   /** Moves the playback position on while something plays. */
   private _tickTimer?: number;
+  // The touch on the swipe area, from pointerdown until it is lifted
+  private _swipe?: Swipe;
   // The key held down, until it is released or the press is cancelled
   private _press?: { command: string; extra: Record<string, unknown>; sent: boolean };
 
@@ -461,7 +464,7 @@ export class AvScenesRemoteCard extends LitElement {
       ${groups.volume || nav || groups.channels
         ? html`<div class="main ${nav ? "" : "no-nav"}">
             ${groups.volume ? this._renderVolumeRocker(groups.volume) : nav ? html`<div></div>` : nothing}
-            ${nav ? this._renderDpad(nav) : nothing}
+            ${nav ? (nav.touchpad ? this._renderTouchpad(nav) : this._renderDpad(nav)) : nothing}
             ${groups.channels ? this._renderChannelRocker(groups.channels) : nav ? html`<div></div>` : nothing}
           </div>`
         : nothing}
@@ -521,6 +524,55 @@ export class AvScenesRemoteCard extends LitElement {
       <span></span>${cell("up", "up")}<span></span>
       ${cell("left", "left")}${cell("ok", "ok")}${cell("right", "right")}
       <span></span>${cell("down", "down")}<span></span>
+    </div>`;
+  }
+
+  /** Swipe area instead of the arrow keys, for an Apple TV and the like. */
+  private _renderTouchpad(group: GroupView): TemplateResult {
+    const has = (command: string) => group.commands.includes(command);
+    const keys: Record<string, string> = {
+      ArrowUp: "up",
+      ArrowDown: "down",
+      ArrowLeft: "left",
+      ArrowRight: "right",
+      Enter: "ok",
+      " ": "ok",
+    };
+    return html`<div
+      class="touchpad"
+      role="group"
+      tabindex="0"
+      aria-label=${this._t("touchpad")}
+      title=${this._t("touchpad")}
+      @pointerdown=${(ev: PointerEvent) => {
+        if (ev.button !== 0) {
+          return;
+        }
+        (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId);
+        this._swipe = new Swipe();
+        this._swipe.start(ev.clientX, ev.clientY, ev.timeStamp);
+      }}
+      @pointermove=${(ev: PointerEvent) => {
+        for (const key of this._swipe?.move(ev.clientX, ev.clientY) ?? []) {
+          if (has(key)) this._send(key);
+        }
+      }}
+      @pointerup=${(ev: PointerEvent) => {
+        const tap = this._swipe?.end(ev.clientX, ev.clientY, ev.timeStamp);
+        this._swipe = undefined;
+        if (tap && has("ok")) this._send("ok");
+      }}
+      @pointercancel=${() => (this._swipe = undefined)}
+      @keydown=${(ev: KeyboardEvent) => {
+        const key = keys[ev.key];
+        if (key && has(key)) {
+          ev.preventDefault();
+          this._send(key);
+        }
+      }}
+      @contextmenu=${(ev: Event) => ev.preventDefault()}
+    >
+      <span class="touchpad-hint">${this._t("touchpad.hint")}</span>
     </div>`;
   }
 
@@ -837,6 +889,33 @@ export class AvScenesRemoteCard extends LitElement {
     .chip:active,
     .power:active {
       filter: brightness(0.85);
+    }
+    .touchpad {
+      display: grid;
+      place-items: end center;
+      width: 100%;
+      max-width: 220px;
+      height: 164px;
+      justify-self: center;
+      border-radius: 20px;
+      background: var(--avs-key-bg);
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      cursor: pointer;
+    }
+    .touchpad:active {
+      filter: brightness(0.94);
+    }
+    .touchpad:focus-visible {
+      outline: 2px solid var(--avs-accent);
+      outline-offset: 2px;
+    }
+    .touchpad-hint {
+      padding-bottom: 10px;
+      font-size: 0.75em;
+      color: var(--secondary-text-color);
+      pointer-events: none;
     }
     .dpad {
       display: grid;

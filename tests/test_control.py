@@ -99,6 +99,27 @@ def test_media_entity() -> None:
     assert remote_view(room, room["activities"]["tv"])["media"] == VU
 
 
+def test_touchpad() -> None:
+    """A swipe area for navigation to a remote entity, unless the activity says otherwise."""
+    data = remote_room()
+    room_cfg = data["rooms"]["wz"]
+    room_cfg["devices"]["atv"] = {"entity_id": "media_player.atv", "remote_entity": "remote.atv"}
+    room_cfg["activities"]["atv"] = {"devices": ["onkyo", "atv"]}
+    room = validate_config(data)["rooms"]["wz"]
+    # The VU+ navigates with own commands: arrow keys
+    assert remote_view(room, room["activities"]["tv"])["groups"]["navigation"]["touchpad"] is False
+    assert remote_view(room, room["activities"]["atv"])["groups"]["navigation"]["touchpad"] is True
+
+    room_cfg["activities"]["atv"]["remote"] = {"touchpad": False}
+    room_cfg["activities"]["tv"]["remote"]["touchpad"] = True
+    room = validate_config(data)["rooms"]["wz"]
+    assert remote_view(room, room["activities"]["atv"])["groups"]["navigation"]["touchpad"] is False
+    assert remote_view(room, room["activities"]["tv"])["groups"]["navigation"]["touchpad"] is True
+
+    # Without navigation there is nothing to swipe
+    assert "navigation" not in remote_view(room, room["activities"]["musik"])["groups"]
+
+
 def test_explicit_routing() -> None:
     """Explicit routing wins; null hides a group."""
     data = remote_room()

@@ -63,6 +63,8 @@ export interface GroupView {
   device: string | null;
   entity_id: string | null;
   commands: string[];
+  /** Navigation only: a swipe area instead of the arrow keys */
+  touchpad?: boolean;
 }
 
 export interface ButtonView {

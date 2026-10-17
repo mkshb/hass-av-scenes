@@ -500,6 +500,7 @@ export class AvScenesRoomEditor extends LitElement {
     for (const g of GROUPS) {
       routes[g] = !(g in remote) ? "__auto" : remote[g] === null ? "__none" : remote[g];
     }
+    routes.touchpad = remote.touchpad === true ? "on" : remote.touchpad === false ? "off" : "auto";
 
     return html`
       ${this._detailHeader(this._t("tab_activities"), activity.name ?? id, () => this._deleteActivity(id, activity))}
@@ -578,8 +579,20 @@ export class AvScenesRoomEditor extends LitElement {
         html`<ha-form
           .hass=${this.hass}
           .data=${routes}
-          .schema=${GROUPS.map((g) => ({ name: g, selector: { select: { options: routeOptions, mode: "dropdown" } } }))}
+          .schema=${[
+            ...GROUPS.map((g) => ({ name: g, selector: { select: { options: routeOptions, mode: "dropdown" } } })),
+            {
+              name: "touchpad",
+              selector: {
+                select: {
+                  options: ["auto", "on", "off"].map((value) => ({ value, label: this._t(`touchpad_${value}`) })),
+                  mode: "dropdown",
+                },
+              },
+            },
+          ]}
           .computeLabel=${this._label}
+          .computeHelper=${this._helper}
           @value-changed=${(ev: CustomEvent) => this._routesChanged(id, activity, ev.detail.value as Obj)}
         ></ha-form>`,
       )}
@@ -684,6 +697,9 @@ export class AvScenesRoomEditor extends LitElement {
     for (const g of GROUPS) {
       if (v[g] === "__none") remote[g] = null;
       else if (v[g] && v[g] !== "__auto") remote[g] = v[g];
+    }
+    if (v.touchpad === "on" || v.touchpad === "off") {
+      remote.touchpad = v.touchpad === "on";
     }
     if (activity.remote?.buttons) {
       remote.buttons = activity.remote.buttons;

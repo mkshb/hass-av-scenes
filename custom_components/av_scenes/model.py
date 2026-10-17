@@ -31,6 +31,7 @@ Layout of ``entry.data``::
               channels: vu
               transport: vu
               navigation: vu
+              touchpad: false              # swipe area; default: for a remote entity
               buttons:
                 - {command: netflix, name: Netflix, icon: mdi:netflix}
                 - {device: aptv, source: YouTube}   # quick select: source or app
@@ -86,6 +87,7 @@ from .const import (
     CONF_TARGET,
     CONF_TILT_POSITION,
     CONF_TIMEOUT,
+    CONF_TOUCHPAD,
     CONF_TRANSITION,
     CONF_TYPE,
     CONF_VOLUME_LEVEL,
@@ -269,6 +271,8 @@ REMOTE_SCHEMA = vol.Schema(
     {
         # A device id, or null to hide the group
         **{vol.Optional(group): vol.Any(None, _KEY) for group in COMMAND_GROUPS},
+        # Swipe area instead of arrow keys; without it, for a remote entity
+        vol.Optional(CONF_TOUCHPAD): vol.Any(None, cv.boolean),
         vol.Optional(CONF_BUTTONS, default=list): [_button],
     }
 )

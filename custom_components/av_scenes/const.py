@@ -39,6 +39,7 @@ CONF_ORDER: Final = "order"
 CONF_COMMANDS: Final = "commands"
 CONF_REMOTE: Final = "remote"
 CONF_BUTTONS: Final = "buttons"
+CONF_TOUCHPAD: Final = "touchpad"
 CONF_COMMAND: Final = "command"
 
 # Step parameters
