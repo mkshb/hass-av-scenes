@@ -68,6 +68,37 @@ async def test_select_starts_by_display_name(hass: HomeAssistant) -> None:
     assert coordinator.active_activities["wz"] == "musik"
 
 
+async def test_select_options_are_unique(hass: HomeAssistant) -> None:
+    """Shared names and names like a fixed option get the activity ID, and an
+    option starts exactly its activity, even if its name is another one's ID."""
+    import copy
+
+    data = copy.deepcopy(DATA)
+    data["rooms"]["wz"]["activities"] = {
+        "tv": {"name": "Kino", "order": 1, "devices": ["onkyo"]},
+        "kino": {"name": "Kino", "order": 2, "devices": ["onkyo"]},
+        "film": {"name": "tv", "order": 3, "devices": ["onkyo"]},
+        "aus": {"name": "idle", "order": 4, "devices": ["onkyo"]},
+    }
+    hass.states.async_set("media_player.onkyo_receiver", "on")
+    entry = MockConfigEntry(domain=DOMAIN, version=2, minor_version=1, data=data)
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    select_id = _entity_id(hass, "select", "av_scenes_select_wz")
+    coordinator = hass.data[DOMAIN][entry.entry_id]
+
+    assert hass.states.get(select_id).attributes["options"] == [
+        "idle", "Kino (tv)", "Kino (kino)", "tv", "idle (aus)"
+    ]
+    for option, activity_id in (("tv", "film"), ("Kino (kino)", "kino"), ("idle (aus)", "aus")):
+        await hass.services.async_call(
+            "select", "select_option", {"entity_id": select_id, "option": option}, blocking=True
+        )
+        assert coordinator.active_activities["wz"] == activity_id
+        assert hass.states.get(select_id).state == option
+
+
 async def test_stale_entities_and_devices_are_removed(hass: HomeAssistant, devices) -> None:
     """Entities of a deleted activity and the device of a deleted room go away."""
     from homeassistant.helpers import device_registry as dr, entity_registry as er

@@ -7,6 +7,7 @@ Provides one SelectEntity per room that:
 """
 from __future__ import annotations
 
+from collections import Counter
 import logging
 
 from homeassistant.components.select import SelectEntity
@@ -75,16 +76,27 @@ class RoomActivitySelect(CoordinatorEntity, SelectEntity):
     # Options — activity names + idle; transitional states added live
     # ------------------------------------------------------------------
 
+    def _activity_options(self) -> dict[str, str]:
+        """Option -> activity ID, in display order.
+
+        An option is the activity's display name. A name that several
+        activities share, or that is one of the fixed options (idle,
+        starting, ...), gets the activity ID added, so every option starts
+        exactly one activity.
+        """
+        activities = self.coordinator.rooms.get(self.room_id, {}).get(CONF_ACTIVITIES, {})
+        names = {a: self.coordinator.activity_name(self.room_id, a) for a in activities}
+        taken = Counter(names.values())
+        fixed = {_OPT_IDLE, *_READONLY_OPTIONS}
+        return {
+            (name if taken[name] == 1 and name not in fixed else f"{name} ({activity_id})"): activity_id
+            for activity_id, name in names.items()
+        }
+
     @property
     def options(self) -> list[str]:
         """Return all selectable options plus any active status label."""
-        activities = [
-            self.coordinator.activity_name(self.room_id, activity_id)
-            for activity_id in self.coordinator.rooms.get(self.room_id, {}).get(
-                CONF_ACTIVITIES, {}
-            )
-        ]
-        base = [_OPT_IDLE] + activities
+        base = [_OPT_IDLE, *self._activity_options()]
 
         state = self.coordinator.activity_states.get(self.room_id, ACTIVITY_STATE_IDLE)
         if state == ACTIVITY_STATE_STARTING:
@@ -114,7 +126,10 @@ class RoomActivitySelect(CoordinatorEntity, SelectEntity):
         activity = self.coordinator.active_activities.get(self.room_id)
         if not activity:
             return _OPT_IDLE
-        return self.coordinator.activity_name(self.room_id, activity)
+        return next(
+            (option for option, a in self._activity_options().items() if a == activity),
+            _OPT_IDLE,
+        )
 
     # ------------------------------------------------------------------
     # Interaction
@@ -129,8 +144,8 @@ class RoomActivitySelect(CoordinatorEntity, SelectEntity):
 
         if option == _OPT_IDLE:
             await self.coordinator.async_stop_activity(self.room_id)
-        else:
-            await self.coordinator.async_start_activity(self.room_id, option)
+        elif (activity_id := self._activity_options().get(option)) is not None:
+            await self.coordinator.async_start_activity(self.room_id, activity_id)
 
     # ------------------------------------------------------------------
     # Device
