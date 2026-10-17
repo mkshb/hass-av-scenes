@@ -824,13 +824,13 @@ export class AvScenesRoomEditor extends LitElement {
       set(next);
     };
     return html`<span class="move">
-      <button title=${this._t("move_up")} ?disabled=${index === 0} @click=${() => move(index - 1)}>
+      <button title=${this._t("move_up")} aria-label=${this._t("move_up")} ?disabled=${index === 0} @click=${() => move(index - 1)}>
         <ha-icon icon="mdi:arrow-up"></ha-icon>
       </button>
-      <button title=${this._t("move_down")} ?disabled=${index === list.length - 1} @click=${() => move(index + 1)}>
+      <button title=${this._t("move_down")} aria-label=${this._t("move_down")} ?disabled=${index === list.length - 1} @click=${() => move(index + 1)}>
         <ha-icon icon="mdi:arrow-down"></ha-icon>
       </button>
-      <button title=${this._t("delete")} @click=${() => set(list.filter((_, i) => i !== index))}>
+      <button title=${this._t("delete")} aria-label=${this._t("delete")} @click=${() => set(list.filter((_, i) => i !== index))}>
         <ha-icon icon="mdi:close"></ha-icon>
       </button>
     </span>`;

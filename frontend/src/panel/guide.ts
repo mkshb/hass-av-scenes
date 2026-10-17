@@ -47,7 +47,7 @@ const GUIDES: Record<string, Guide> = {
       html`Device <i>TV</i>: entity <code>media_player.tv</code>, outlet <code>switch.tv_outlet</code>, boot time
         15 s, wait after switching on 10 s.`,
       html`Device <i>Apple TV</i>: entity <code>media_player.apple_tv</code>, under <i>Connection check</i> the
-        button <i>Check the connection with remote.apple_tv</i>.`,
+        button <i>Use remote.apple_tv for the connection check and the arrow keys</i>.`,
       html`Activity <i>Apple TV</i>: devices TV, then Apple TV; start sequence <i>Set source</i> on the TV to its
         HDMI input; quick select Apple TV with Netflix.`,
       html`Save, add the card, start the activity.`,
@@ -81,8 +81,8 @@ const GUIDES: Record<string, Guide> = {
       html`Gerät <i>TV</i>: Entität <code>media_player.tv</code>, Steckdose <code>switch.steckdose_tv</code>,
         Startzeit 15 s, Warten nach Einschalten 10 s.`,
       html`Gerät <i>Apple TV</i>: Entität <code>media_player.apple_tv</code>, unter <i>Verbindung prüfen</i> der
-        Knopf <i>Verbindung über remote.apple_tv prüfen</i>.`,
-      html`Aktivität <i>Apple TV</i>: Geräte TV, dann Apple TV; Ablauf beim Start <i>Quelle setzen</i> am TV auf
+        Knopf <i>remote.apple_tv für Verbindungsprüfung und Pfeiltasten nutzen</i>.`,
+      html`Aktivität <i>Apple TV</i>: Geräte TV, dann Apple TV; Ablauf beim Start <i>Quelle wählen</i> am TV auf
         den HDMI-Eingang; Schnellwahl Apple TV mit Netflix.`,
       html`Speichern, Card einfügen, Aktivität starten.`,
     ],

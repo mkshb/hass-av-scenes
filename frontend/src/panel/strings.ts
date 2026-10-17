@@ -421,7 +421,7 @@ const STRINGS: Record<string, Record<string, string>> = {
     "flow.on_stop_wait": "Warten, bis die Aktionen beim Stopp fertig sind",
     "flow.parallel": "läuft parallel",
     "flow.already_on": "Läuft schon in {activity}: kein Einschalten, keine Wartezeit",
-    "flow.boot": "Bootzeit: bis {seconds} nach dem Einschalten der Steckdosen",
+    "flow.boot": "Startzeit: bis {seconds} nach dem Einschalten der Steckdosen",
     "flow.reload": "Integration von {entity} neu laden",
     "flow.ready": "Warten, bis {entity} verfügbar ist, höchstens {timeout}",
     "flow.ready_state": "Warten, bis {entity} {states} ist, höchstens {timeout}",
