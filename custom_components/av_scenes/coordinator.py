@@ -935,7 +935,15 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         )
                         if task is not None:
                             self._doing(rt, "reload", name=self._device_name(device))
-                            await self._await_task(task)
+                            try:
+                                # A reload that hangs must not hold up the start
+                                async with asyncio.timeout(ready[CONF_TIMEOUT]):
+                                    await self._await_task(task)
+                            except TimeoutError:
+                                self._warn(
+                                    f"device '{device_id}': reloading its integration did not"
+                                    f" finish within {ready[CONF_TIMEOUT]:g} s"
+                                )
                         reload = False
                     await self._async_wait_ready(
                         device[CONF_ENTITY_ID],

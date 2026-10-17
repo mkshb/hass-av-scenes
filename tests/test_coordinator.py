@@ -87,6 +87,38 @@ async def test_wait_available_after_reload(hass: HomeAssistant, devices: Devices
     assert coordinator.activity_states["wz"] == "active"
 
 
+async def test_hanging_reload_does_not_hold_up_the_start(
+    hass: HomeAssistant, devices: Devices
+) -> None:
+    """A reload that never finishes counts against the readiness timeout."""
+    other = MockConfigEntry(domain="onkyo")
+    other.add_to_hass(hass)
+    hass.states.async_remove(ONKYO)
+    er.async_get(hass).async_get_or_create(
+        "media_player", "onkyo", "x", suggested_object_id="onkyo_receiver",
+        config_entry=other,
+    )
+    data = living_room()
+    data["rooms"]["wz"]["devices"]["onkyo"]["ready"]["timeout"] = 1
+    coordinator = await setup(hass, devices, data)
+    hass.states.async_set(ONKYO, "off")
+    never = asyncio.Event()
+
+    async def hanging_reload(entry_id: str) -> bool:
+        await never.wait()
+        return True
+
+    with patch.object(hass.config_entries, "async_reload", side_effect=hanging_reload):
+        async with asyncio.timeout(5):
+            await coordinator.async_start_activity("wz", "musik")
+
+    assert coordinator.activity_states["wz"] == "active"
+    assert ("homeassistant.turn_on", (ONKYO,)) in devices.names()
+    assert any("did not finish within 1 s" in w for w in coordinator.runtime("wz").warnings)
+    never.set()
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
 async def test_wait_available_immediate(hass: HomeAssistant, devices: Devices) -> None:
     """An available device is not reloaded."""
     coordinator = await setup(hass, devices, living_room())

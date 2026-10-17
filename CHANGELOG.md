@@ -69,6 +69,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Color temperature steps failed because Home Assistant removed `color_temp` (mireds) from `light.turn_on`
 - "Detected blocking call to open … inside the event loop" caused by the debug log at startup
 - Migration from version 1 failed when an action or delay step had an entity; the entity is now only switched off on stop, as before
+- A start could hang for good when reloading a device's integration never finished; the reload now counts against the readiness timeout and the start goes on with a warning
 - The room's select could start the wrong activity when two activities had the same name, or when a name was another activity's ID or a fixed option such as "idle"; such options now carry the activity ID, e.g. "Kino (tv)"
 - The room's device ignored the area set for the room and created a new area named like the room; it now goes into the configured area, also when the area is changed later, or into an existing area of the same name
 

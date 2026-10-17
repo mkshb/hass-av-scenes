@@ -158,7 +158,7 @@ activities:
 | `entity_id` | the device | Check another entity, e.g. `remote.apple_tv`: the Apple TV integration reports its media player as `off` while it is not connected, while its remote is `on` only when connected |
 | `state` | — | Wait for this state (or a list of states) instead of "not `unavailable`" |
 | `timeout` | `60` | Seconds to wait for the entity |
-| `reload_integration` | `false` | Reload the integration that provides the entity once, before waiting. This skips the back-off of an integration in `setup_retry`, which can otherwise take more than a minute after the device got power. When the device's `power_switch` was just switched on, the integration is reloaded after the boot time even if the device looks ready: some integrations keep reporting the last state (e.g. `off`) while the device has no power |
+| `reload_integration` | `false` | Reload the integration that provides the entity once, before waiting. This skips the back-off of an integration in `setup_retry`, which can otherwise take more than a minute after the device got power. When the device's `power_switch` was just switched on, the integration is reloaded after the boot time even if the device looks ready: some integrations keep reporting the last state (e.g. `off`) while the device has no power. A reload that does not finish within `timeout` does not hold up the start; it goes on with a warning |
 | `on_timeout` | `abort` | `abort` stops the start and puts the room into `error`; `continue` logs a warning and goes on |
 
 The check also runs before a remote button (`send_command`) reaches the device: if the connection was lost while the activity runs, it is brought back first, then the command is sent. Example for an Apple TV:
