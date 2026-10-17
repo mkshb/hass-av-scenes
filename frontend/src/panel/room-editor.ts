@@ -12,6 +12,7 @@ import {
   GROUPS,
   STEP_TYPES,
   clean,
+  cleanRemote,
   deviceUsage,
   isQuickSelect,
   renameDevice,
@@ -672,7 +673,7 @@ export class AvScenesRoomEditor extends LitElement {
     const remote: Obj = { ...activity.remote, buttons };
     this._setActivity(id, {
       ...activity,
-      remote: clean(remote),
+      remote: cleanRemote(remote),
       commands: v.activity_commands as Obj | undefined,
     });
   }
@@ -684,7 +685,7 @@ export class AvScenesRoomEditor extends LitElement {
     const quick = all.filter(isQuickSelect);
     const setQuick = (list: Obj[]) => {
       const remote: Obj = { ...activity.remote, buttons: [...others, ...list] };
-      this._setActivity(id, { ...activity, remote: clean(remote) });
+      this._setActivity(id, { ...activity, remote: cleanRemote(remote) });
     };
     const players = (activity.devices ?? []).filter((d) =>
       this.room.devices?.[d]?.entity_id?.startsWith("media_player."),

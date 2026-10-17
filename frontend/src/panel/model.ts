@@ -183,6 +183,11 @@ export function clean<T extends Obj>(value: T, keep: string[] = []): T {
   return out as T;
 }
 
+/** Like clean, but a group set to null (hidden) stays hidden. */
+export function cleanRemote(remote: Obj): Obj {
+  return clean(remote, GROUPS.filter((g) => remote[g] === null));
+}
+
 /** Home Assistant's slugify: lower case, no accents, underscores. */
 export function slugify(text: string): string {
   return text
