@@ -18,6 +18,7 @@ Starting an activity
 
     A readiness check or ``wait_available`` step with ``on_timeout: abort``
     stops the start; the room goes to ``error`` and never to ``active``.
+    So does an unexpected failure while starting or stopping.
 
 Stopping an activity
     ``on_stop`` actions run alongside; devices are switched off in reverse
@@ -898,12 +899,19 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             if hook is not None:
                 await hook
-        except ActivityAborted as err:
+        except asyncio.CancelledError:
+            if hook is not None:
+                hook.cancel()
+            raise
+        except Exception as err:  # noqa: BLE001 - the room must not stay "starting"
             if hook is not None:
                 hook.cancel()
             rt.state = ACTIVITY_STATE_ERROR
-            rt.error = str(err)
-            _LOGGER.error("Room '%s': start of '%s' aborted: %s", room_id, activity_id, err)
+            rt.error = str(err) or type(err).__name__
+            if isinstance(err, ActivityAborted):
+                _LOGGER.error("Room '%s': start of '%s' aborted: %s", room_id, activity_id, err)
+            else:
+                _LOGGER.exception("Room '%s': start of '%s' failed", room_id, activity_id)
             ir.async_create_issue(
                 self.hass,
                 DOMAIN,
@@ -914,15 +922,11 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 translation_placeholders={
                     "room": room.get(CONF_NAME, room_id),
                     "activity": self.activity_name(room_id, activity_id),
-                    "reason": str(err),
+                    "reason": rt.error,
                 },
             )
             self._changed()
             return
-        except asyncio.CancelledError:
-            if hook is not None:
-                hook.cancel()
-            raise
 
         rt.state = ACTIVITY_STATE_ACTIVE
         rt.last_activity = activity_id
@@ -1076,6 +1080,14 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if hook is not None:
                     hook.cancel()
                 raise
+            except Exception as err:  # noqa: BLE001 - the room must not stay "stopping"
+                if hook is not None:
+                    hook.cancel()
+                _LOGGER.exception("Room '%s': stop of '%s' failed", room_id, activity_id)
+                rt.state = ACTIVITY_STATE_ERROR
+                rt.error = str(err) or type(err).__name__
+                self._changed()
+                return
 
         rt.activity = None
         rt.state = ACTIVITY_STATE_IDLE

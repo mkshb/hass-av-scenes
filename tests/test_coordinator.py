@@ -121,6 +121,37 @@ async def test_wait_available_timeout_abort(hass: HomeAssistant, devices: Device
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_unexpected_failure_puts_the_room_in_error(
+    hass: HomeAssistant, devices: Devices
+) -> None:
+    """A bug while starting or stopping does not leave the room starting or stopping."""
+    coordinator = await setup(hass, devices, living_room())
+
+    async def broken_step(*args) -> None:
+        raise RuntimeError("step exploded")
+
+    with patch.object(coordinator, "_async_execute_step", broken_step):
+        await coordinator.async_start_activity("wz", "tv")
+
+    assert coordinator.activity_states["wz"] == "error"
+    assert coordinator.runtime("wz").error == "step exploded"
+    issue_id = f"activity_aborted_{coordinator.entry.entry_id}_wz"
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
+
+    async def broken_power_off(*args) -> None:
+        raise RuntimeError("switch exploded")
+
+    with patch.object(coordinator, "_async_power_off", broken_power_off):
+        await coordinator.async_stop_activity("wz")
+
+    assert coordinator.activity_states["wz"] == "error"
+    assert coordinator.runtime("wz").error == "switch exploded"
+
+    # Stopping again works once the cause is gone
+    await coordinator.async_stop_activity("wz")
+    assert coordinator.activity_states["wz"] == "idle"
+
+
 async def test_wait_available_step_timeout_continue(
     hass: HomeAssistant, devices: Devices
 ) -> None:
