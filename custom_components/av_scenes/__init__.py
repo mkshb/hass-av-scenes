@@ -59,7 +59,8 @@ _START_SCHEMA = _ROOM_SCHEMA.extend({vol.Required(ATTR_ACTIVITY): cv.string})
 _SEND_COMMAND_SCHEMA = _ROOM_SCHEMA.extend(
     {
         vol.Required(ATTR_COMMAND): cv.string,
-        vol.Optional(ATTR_VALUE): vol.Any(vol.Coerce(float), cv.string),
+        # Passed on as given: a source named "007" must stay text
+        vol.Optional(ATTR_VALUE): vol.Any(int, float, cv.string),
         vol.Optional(ATTR_DEVICE): cv.string,
     }
 )

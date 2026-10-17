@@ -151,7 +151,7 @@ def builtin_call(
     elif command == COMMAND_SELECT_SOURCE:
         if value is None or value == "":
             raise ValueError("select_source needs the source as value")
-        # The service schema reads numbers as float: "1" arrives as 1.0
+        # A number written in YAML: 1.0 selects source "1"
         if isinstance(value, float) and value.is_integer():
             value = int(value)
         data["source"] = str(value)

@@ -104,12 +104,14 @@ async def test_send_command_routes_to_activity_devices(
     await send(hass, "volume_up")
     await send(hass, "mute")
     await send(hass, "volume_set", value=0.4)
+    await send(hass, "volume_set", value="0.25")  # text from the action editor
     await send(hass, "channel_up")
 
     assert player_calls == [
         ("media_player.volume_up", {"entity_id": ONKYO}),
         ("media_player.volume_mute", {"entity_id": ONKYO, "is_volume_muted": True}),
         ("media_player.volume_set", {"entity_id": ONKYO, "volume_level": 0.4}),
+        ("media_player.volume_set", {"entity_id": ONKYO, "volume_level": 0.25}),
         ("media_player.media_next_track", {"entity_id": VU}),
     ]
 
@@ -279,11 +281,18 @@ async def test_quick_select_buttons(
     }
 
     await send(hass, "select_source", value="Netflix", device="vu")
-    # The service reads numbers as float; the source keeps its text
+    # Sources that look like numbers keep their exact text
     await send(hass, "select_source", value="1", device="vu")
+    await send(hass, "select_source", value="007", device="vu")
+    await send(hass, "select_source", value="1.10", device="vu")
+    # A number from YAML is passed on as its text
+    await send(hass, "select_source", value=2, device="vu")
     assert player_calls == [
         ("media_player.select_source", {"entity_id": VU, "source": "Netflix"}),
         ("media_player.select_source", {"entity_id": VU, "source": "1"}),
+        ("media_player.select_source", {"entity_id": VU, "source": "007"}),
+        ("media_player.select_source", {"entity_id": VU, "source": "1.10"}),
+        ("media_player.select_source", {"entity_id": VU, "source": "2"}),
     ]
 
     with pytest.raises(ServiceValidationError):
