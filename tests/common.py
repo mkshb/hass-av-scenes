@@ -15,6 +15,7 @@ BEAMER = "media_player.epson_ehtw7400"
 VU = "media_player.vu_as2b_de"
 PLUG_BEAMER = "switch.wz_steckdose_beamer_5_3_schwarz"
 PLUG_MM = "switch.wz_steckdose_multimedia_5_4_grau"
+KITCHEN = "media_player.kueche"
 
 
 def living_room(**overrides: Any) -> dict[str, Any]:
@@ -104,6 +105,11 @@ class Devices:
             for entity_id in entities:
                 self.hass.states.async_set(entity_id, "on" if service == "turn_on" else "off")
 
+    async def fake_sleep(self, seconds: float) -> None:
+        """Advance the fake clock instead of waiting."""
+        self.sleeps.append(seconds)
+        self.clock += seconds
+
     def names(self) -> list[tuple[str, tuple[str, ...]]]:
         return [(name, entities) for name, entities, _ in self.calls]
 
@@ -115,11 +121,7 @@ async def setup(hass: HomeAssistant, devices: Devices, data: dict[str, Any]) -> 
     await hass.async_block_till_done()
     coordinator: AVScenesCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    async def fake_sleep(seconds: float) -> None:
-        devices.sleeps.append(seconds)
-        devices.clock += seconds
-
-    coordinator._async_sleep = fake_sleep  # type: ignore[method-assign]
+    coordinator._async_sleep = devices.fake_sleep  # type: ignore[method-assign]
     coordinator._now = lambda: devices.clock  # type: ignore[method-assign]
     coordinator._async_call = devices.engine_call  # type: ignore[method-assign]
     return coordinator

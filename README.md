@@ -19,7 +19,7 @@ AV Scenes controls the devices of a room (AV receiver, projector, TV, set-top bo
 | Feature | Description |
 |---------|-------------|
 | Device profiles | Each device is described once per room: entity, power outlet, readiness check, warm-up and cool-down time |
-| Power outlets | Devices without standby power are supplied via a switch; shared outlets stay on as long as any device on them is needed |
+| Power outlets | Devices without standby power are supplied via a switch; shared outlets stay on as long as any device on them is needed, also by another room |
 | Readiness check | Waits until a device's entity is available instead of guessing delays; reloads its integration once to skip the `setup_retry` back-off |
 | Cool-down | `delay_after_off` per device, e.g. 180 s for a projector before its outlet may be switched off |
 | Smart switching | Devices the new activity does not use are switched off; shared devices stay on and are reconfigured |

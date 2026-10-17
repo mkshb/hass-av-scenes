@@ -24,7 +24,8 @@ Stopping an activity
     order. The room is idle once they are off. Power switches are cut
     afterwards: at once when none of their devices needs a cool-down,
     otherwise in the background after the longest ``delay_after_off`` of
-    their devices. A new start keeps the switches it needs.
+    their devices. A new start keeps the switches it needs, and a switch
+    stays on while a running activity of another room needs it.
 
 A new command for a room cancels whatever runs there (a stop during a long
 start, a different activity while starting).
@@ -941,6 +942,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 cooldown[switch] = max(cooldown.get(switch, 0), device[CONF_DELAY_AFTER_OFF])
 
         still_needed = set(self._power_switches(devices, new_devices))
+        still_needed |= self._switches_used_elsewhere(rt)
         for switch, delay in cooldown.items():
             if switch not in still_needed:
                 self._cancel_cut(rt, switch)
@@ -954,6 +956,9 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.debug("Cutting power of %s in %s s", switch, delay)
             await self._async_sleep(delay)
         rt.pending_cuts.pop(switch, None)
+        if switch in self._switches_used_elsewhere(rt):
+            _LOGGER.debug("Keeping %s on, another room uses it", switch)
+            return
         with contextlib.suppress(ActivityAborted):
             await self._async_call(
                 "homeassistant",
@@ -962,6 +967,30 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 Context(),
                 f"power off {switch}",
             )
+
+    def _switches_used_elsewhere(self, rt: RoomRuntime) -> set[str]:
+        """Power switches the activities of all other rooms need.
+
+        Rooms that are stopping do not count: they cut their switches
+        themselves once they are done.
+        """
+        coordinators = [
+            c for c in self.hass.data.get(DOMAIN, {}).values() if isinstance(c, AVScenesCoordinator)
+        ]
+        if self not in coordinators:
+            coordinators.append(self)
+        switches: set[str] = set()
+        for coordinator in coordinators:
+            for room_id, other in coordinator._runtime.items():
+                if other is rt or other.activity is None or other.state == ACTIVITY_STATE_STOPPING:
+                    continue
+                room = coordinator.rooms.get(room_id)
+                activity = room[CONF_ACTIVITIES].get(other.activity) if room else None
+                if activity is not None:
+                    switches.update(
+                        self._power_switches(room[CONF_DEVICES], activity[CONF_DEVICES])
+                    )
+        return switches
 
     @staticmethod
     def _cancel_cut(rt: RoomRuntime, switch: str) -> None:
@@ -1006,7 +1035,12 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     if switch := device.get(CONF_POWER_SWITCH):
                         cooldown[switch] = max(cooldown.get(switch, 0.0), delay)
 
-                switches = list(reversed(self._power_switches(devices, device_ids)))
+                used_elsewhere = self._switches_used_elsewhere(rt)
+                switches = [
+                    s
+                    for s in reversed(self._power_switches(devices, device_ids))
+                    if s not in used_elsewhere
+                ]
                 for switch in switches:
                     self._cancel_cut(rt, switch)
                 now = [s for s in switches if cooldown.get(s, 0) <= 0]

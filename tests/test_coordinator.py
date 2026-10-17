@@ -9,7 +9,17 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from homeassistant.core import Context, HomeAssistant, ServiceCall
 from homeassistant.helpers import entity_registry as er, issue_registry as ir
 
-from .common import BEAMER, ONKYO, PLUG_BEAMER, PLUG_MM, VU, Devices, living_room, setup
+from .common import (
+    BEAMER,
+    KITCHEN,
+    ONKYO,
+    PLUG_BEAMER,
+    PLUG_MM,
+    VU,
+    Devices,
+    living_room,
+    setup,
+)
 from custom_components.av_scenes.const import DOMAIN
 from custom_components.av_scenes.coordinator import AVScenesCoordinator, _current_room
 
@@ -206,6 +216,71 @@ async def test_smart_switching(hass: HomeAssistant, devices: Devices) -> None:
     assert ("homeassistant.turn_off", (PLUG_BEAMER,)) in names
     assert 180 in devices.sleeps
     assert coordinator.active_activities["wz"] == "musik"
+
+
+def _with_kitchen(delay_after_off: float = 0) -> dict:
+    """Living room plus a kitchen whose speaker hangs on the multimedia plug."""
+    data = living_room()
+    data["rooms"]["kueche"] = {
+        "name": "Küche",
+        "devices": {
+            "radio": {
+                "entity_id": KITCHEN,
+                "power_switch": PLUG_MM,
+                "delay_after_off": delay_after_off,
+            }
+        },
+        "activities": {"radio": {"name": "Radio", "devices": ["radio"]}},
+    }
+    return data
+
+
+async def test_stop_keeps_a_plug_another_room_uses(
+    hass: HomeAssistant, devices: Devices
+) -> None:
+    """The multimedia plug stays on while the kitchen radio runs."""
+    hass.states.async_set(KITCHEN, "off")
+    coordinator = await setup(hass, devices, _with_kitchen())
+    await coordinator.async_start_activity("kueche", "radio")
+    await coordinator.async_start_activity("wz", "tv")
+    devices.calls.clear()
+
+    await coordinator.async_stop_activity("wz")
+    await hass.async_block_till_done()
+
+    assert _plugs_cut(devices) == {PLUG_BEAMER}
+    assert coordinator.activity_states["kueche"] == "active"
+
+    await coordinator.async_stop_activity("kueche")
+    await hass.async_block_till_done()
+    assert _plugs_cut(devices) == {PLUG_BEAMER, PLUG_MM}
+
+
+async def test_cool_down_keeps_a_plug_another_room_started(
+    hass: HomeAssistant, devices: Devices
+) -> None:
+    """A room started during another room's cool-down keeps the shared plug."""
+    hass.states.async_set(KITCHEN, "off")
+    coordinator = await setup(hass, devices, _with_kitchen(delay_after_off=30))
+    await coordinator.async_start_activity("kueche", "radio")
+    cut = asyncio.Event()
+
+    async def slow_sleep(seconds: float) -> None:
+        devices.sleeps.append(seconds)
+        await cut.wait()
+
+    coordinator._async_sleep = slow_sleep  # type: ignore[method-assign]
+    await coordinator.async_stop_activity("kueche")
+    assert PLUG_MM in coordinator.runtime("kueche").pending_cuts
+
+    coordinator._async_sleep = devices.fake_sleep  # type: ignore[method-assign]
+    await coordinator.async_start_activity("wz", "musik")
+    devices.calls.clear()
+    cut.set()
+    await hass.async_block_till_done()
+
+    assert PLUG_MM not in _plugs_cut(devices)
+    assert hass.states.get(PLUG_MM).state == "on"
 
 
 async def test_stop_cancels_running_start(hass: HomeAssistant, devices: Devices) -> None:

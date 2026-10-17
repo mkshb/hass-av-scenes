@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Device profiles per room** – entity, power outlet (`power_switch`), readiness check (`ready`), `delay_after_on` and `delay_after_off` are set once per device instead of in every step
-- **Power outlets** – all outlets an activity needs are switched on at once; shared outlets stay on while any device on them is needed and are switched off last when stopping
+- **Power outlets** – all outlets an activity needs are switched on at once; shared outlets stay on while any device on them is needed, also by a running activity of another room, and are switched off last when stopping
 - **Readiness check and `wait_available` step** – event-based wait until an entity is available; optionally reloads its integration once to skip the `setup_retry` back-off; `continue` or `abort` on timeout
 - **Readiness of another entity or state** – `ready` and `wait_available` take `entity_id` and `state`, e.g. wait for an Apple TV's remote to be `on` (connected); remote buttons run the check too and reconnect a device that lost its connection before sending
 - **Boot time `delay_after_power`** – per device, waited after its power outlet came on and before the device is switched on; for devices that report `off` without power, where the readiness check cannot help
