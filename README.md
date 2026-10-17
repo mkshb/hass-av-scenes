@@ -208,6 +208,8 @@ Every service call waits for the device to finish (`blocking`), at most 15 secon
 
 ## What happens when
 
+The short version is below; [ACTIVITY_FLOW.md](ACTIVITY_FLOW.md) shows the whole flow as diagrams: commands, room states, start, readiness check, stop, which action switches which device, and the example step by step.
+
 ### Start
 
 1. **Smart switching** — if another activity runs in the room, its devices that the new one does not use are switched off. Power outlets that are no longer needed are switched off in the background once those devices had their `delay_after_off`.

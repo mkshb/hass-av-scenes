@@ -10,7 +10,7 @@ When an activity starts while another one runs in the same room, AV Scenes does 
 
 Power outlets follow the devices:
 
-- An outlet stays on as long as any device of the new activity hangs on it.
+- An outlet stays on as long as any device of the new activity, or of a running activity in another room, hangs on it.
 - An outlet that is no longer needed is switched off **in the background** once every device on it had its `delay_after_off`. The new activity does not wait for that.
 - If the outlet is needed again before that (e.g. switching back), the pending switch-off is cancelled.
 
@@ -40,4 +40,4 @@ Musik is `active` right after step 2.
 
 ## Stopping
 
-A full stop is different: it waits. Devices are switched off in reverse order, each followed by its `delay_after_off`, and the outlets go last — so the projector gets its cool-down before its power is cut. See [README](README.md#stop).
+A full stop switches off all devices of the activity in reverse order and runs `on_stop`. The room is idle once the devices are off; outlets without cool-down are switched off at once, the projector's outlet in the background after its `delay_after_off`. See [README](README.md#stop) and the diagrams in [ACTIVITY_FLOW.md](ACTIVITY_FLOW.md#stop).
