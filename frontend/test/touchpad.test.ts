@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { STEP, Swipe } from "../src/touchpad";
+import { STEP, Swipe, touchpadKey, useTouchpad } from "../src/touchpad";
 
 test("a tap is OK", () => {
   const swipe = new Swipe();
@@ -41,4 +41,13 @@ test("a diagonal turning sideways follows the new direction", () => {
   swipe.start(0, 0, 0);
   assert.deepEqual(swipe.move(10, STEP), ["down"]);
   assert.deepEqual(swipe.move(10 + STEP, STEP + 5), ["right"]);
+});
+
+test("the viewer's choice wins over the activity's setting", () => {
+  assert.equal(useTouchpad(null, true), true);
+  assert.equal(useTouchpad(undefined, false), false);
+  assert.equal(useTouchpad("off", true), false);
+  assert.equal(useTouchpad("on", false), true);
+  assert.equal(useTouchpad("garbage", true), true);
+  assert.equal(touchpadKey("szb", "atv"), "av-scenes-touchpad:szb:atv");
 });

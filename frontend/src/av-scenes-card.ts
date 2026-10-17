@@ -11,7 +11,7 @@ import "./editor";
 import { localize } from "./localize";
 import { clock, nowPlaying, type NowPlaying } from "./now-playing";
 import { coolingText, progressText } from "./progress";
-import { Swipe } from "./touchpad";
+import { Swipe, touchpadKey, useTouchpad } from "./touchpad";
 import type { ButtonView, CardConfig, GroupView, HomeAssistant, RoomInfo, RoomView } from "./types";
 
 const DOMAIN = "av_scenes";
@@ -90,6 +90,8 @@ export class AvScenesRemoteCard extends LitElement {
   private _tickTimer?: number;
   // The touch on the swipe area, from pointerdown until it is lifted
   private _swipe?: Swipe;
+  // Arrow keys or touch surface as chosen on this device, also when storage is blocked
+  private _padChoices = new Map<string, string>();
   // The key held down, until it is released or the press is cancelled
   private _press?: { command: string; extra: Record<string, unknown>; sent: boolean };
 
@@ -454,6 +456,7 @@ export class AvScenesRemoteCard extends LitElement {
     const { groups, buttons } = view.remote!;
     const nav = groups.navigation;
     const navExtras = nav ? NAV_EXTRAS.filter((c) => nav.commands.includes(c)) : [];
+    const touchpad = nav ? useTouchpad(this._padChoice(view), nav.touchpad === true) : false;
     let transport = groups.transport
       ? TRANSPORT.filter((c) => groups.transport!.commands.includes(c))
       : [];
@@ -464,12 +467,16 @@ export class AvScenesRemoteCard extends LitElement {
       ${groups.volume || nav || groups.channels
         ? html`<div class="main ${nav ? "" : "no-nav"}">
             ${groups.volume ? this._renderVolumeRocker(groups.volume) : nav ? html`<div></div>` : nothing}
-            ${nav ? (nav.touchpad ? this._renderTouchpad(nav) : this._renderDpad(nav)) : nothing}
+            ${nav ? (touchpad ? this._renderTouchpad(nav) : this._renderDpad(nav)) : nothing}
             ${groups.channels ? this._renderChannelRocker(groups.channels) : nav ? html`<div></div>` : nothing}
           </div>`
         : nothing}
       ${groups.volume?.commands.includes("volume_set") ? this._renderSlider(groups.volume) : nothing}
-      ${navExtras.length ? html`<div class="row">${navExtras.map((c) => this._key(c))}</div>` : nothing}
+      ${nav
+        ? html`<div class="row">
+            ${navExtras.map((c) => this._key(c))}${this._renderPadSwitch(view, touchpad)}
+          </div>`
+        : nothing}
       ${transport.length ? html`<div class="row">${transport.map((c) => this._key(c))}</div>` : nothing}
       ${buttons.length
         ? html`<div class="buttons">${buttons.map((b) => this._customButton(b))}</div>`
@@ -525,6 +532,48 @@ export class AvScenesRemoteCard extends LitElement {
       ${cell("left", "left")}${cell("ok", "ok")}${cell("right", "right")}
       <span></span>${cell("down", "down")}<span></span>
     </div>`;
+  }
+
+  /** The viewer's choice between arrow keys and touch surface for this activity. */
+  private _padChoice(view: RoomView): string | null {
+    if (!view.activity) {
+      return null;
+    }
+    const key = touchpadKey(view.room, view.activity);
+    if (this._padChoices.has(key)) {
+      return this._padChoices.get(key)!;
+    }
+    try {
+      return window.localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
+
+  /** Switches between arrow keys and touch surface, remembered on this device. */
+  private _renderPadSwitch(view: RoomView, touchpad: boolean): TemplateResult {
+    const label = this._t(touchpad ? "pad.show_arrows" : "pad.show_touchpad");
+    return html`<button
+      class="key pad-switch"
+      title=${label}
+      aria-label=${label}
+      @click=${() => {
+        if (!view.activity) {
+          return;
+        }
+        const key = touchpadKey(view.room, view.activity);
+        const choice = touchpad ? "off" : "on";
+        this._padChoices.set(key, choice);
+        try {
+          window.localStorage.setItem(key, choice);
+        } catch {
+          // Storage blocked: the choice lasts until the page is reloaded
+        }
+        this.requestUpdate();
+      }}
+    >
+      <ha-icon .icon=${touchpad ? "mdi:arrow-all" : "mdi:gesture-tap"}></ha-icon>
+    </button>`;
   }
 
   /** Swipe area instead of the arrow keys, for an Apple TV and the like. */
@@ -894,8 +943,8 @@ export class AvScenesRemoteCard extends LitElement {
       display: grid;
       place-items: end center;
       width: 100%;
-      max-width: 220px;
-      height: 164px;
+      max-width: 320px;
+      aspect-ratio: 1;
       justify-self: center;
       border-radius: 20px;
       background: var(--avs-key-bg);
@@ -940,6 +989,9 @@ export class AvScenesRemoteCard extends LitElement {
       justify-content: center;
       flex-wrap: wrap;
       gap: 8px;
+    }
+    .row .key.pad-switch {
+      color: var(--secondary-text-color);
     }
     .row .key {
       flex: 1 1 0;

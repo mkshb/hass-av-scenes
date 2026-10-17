@@ -62,3 +62,13 @@ export class Swipe {
     return !this.moved && time - this.startTime <= TAP_TIME;
   }
 }
+
+/** Storage key of a viewer's choice between arrow keys and touch surface. */
+export function touchpadKey(room: string, activity: string): string {
+  return `av-scenes-touchpad:${room}:${activity}`;
+}
+
+/** The viewer's own choice ("on" / "off") wins over the activity's setting. */
+export function useTouchpad(chosen: string | null | undefined, configured: boolean): boolean {
+  return chosen === "on" ? true : chosen === "off" ? false : configured;
+}
