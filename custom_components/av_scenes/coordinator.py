@@ -45,6 +45,7 @@ from collections.abc import Callable, Coroutine
 import contextlib
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from datetime import timedelta
 import logging
 from typing import Any
 
@@ -262,6 +263,8 @@ class RoomRuntime:
     generation: int = 0
     # power switch -> background task that cuts it after the cool-down
     pending_cuts: dict[str, asyncio.Task] = field(default_factory=dict)
+    # What a start or stop is busy with, for the card (see _doing)
+    current: dict[str, Any] | None = None
 
 
 class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -693,6 +696,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "error": rt.error,
             "warnings": list(rt.warnings),
             "progress": list(rt.progress),
+            "current": dict(rt.current) if rt.current else None,
             "default_activity": self.default_activity(room_id),
             "activities": activity_list(room),
             "remote": remote_view(room, activity) if activity is not None else None,
@@ -848,6 +852,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Switches that were off: their devices need their boot time
             powered = {s for s in needed_switches if self._is_off(s)}
             if needed_switches:
+                self._doing(rt, "power_on")
                 await self._async_call(
                     "homeassistant",
                     SERVICE_TURN_ON,
@@ -869,6 +874,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         _LOGGER.debug(
                             "Waiting %.1f s for %s to boot", remaining, device[CONF_ENTITY_ID]
                         )
+                        self._doing(rt, "boot", name=self._device_name(device), seconds=remaining)
                         await self._async_sleep(remaining)
                 ready = device.get(CONF_READY)
                 if ready:
@@ -881,14 +887,26 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             ready.get(CONF_ENTITY_ID) or device[CONF_ENTITY_ID]
                         )
                         if task is not None:
+                            self._doing(rt, "reload", name=self._device_name(device))
                             await self._await_task(task)
                         reload = False
                     await self._async_wait_ready(
-                        device[CONF_ENTITY_ID], ready, f"device '{device_id}'", reload=reload
+                        device[CONF_ENTITY_ID],
+                        ready,
+                        f"device '{device_id}'",
+                        reload=reload,
+                        name=self._device_name(device),
                     )
                 if self._is_off(device[CONF_ENTITY_ID]):
+                    self._doing(rt, "turn_on", name=self._device_name(device))
                     await self._async_power_on(device[CONF_ENTITY_ID], context)
                     if device[CONF_DELAY_AFTER_ON]:
+                        self._doing(
+                            rt,
+                            "warm_up",
+                            name=self._device_name(device),
+                            seconds=device[CONF_DELAY_AFTER_ON],
+                        )
                         await self._async_sleep(device[CONF_DELAY_AFTER_ON])
                 done += 1
                 rt.progress = (done, total)
@@ -896,22 +914,31 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             for idx, step in enumerate(steps, 1):
                 _LOGGER.debug("Room '%s': step %d/%d %s", room_id, idx, len(steps), step)
-                await self._async_execute_step(room, step, context)
+                position = {"step": idx, "steps": len(steps), "step_type": step[CONF_TYPE]}
+                device_id = step.get(CONF_DEVICE)
+                name = self._device_name(devices[device_id]) if device_id else None
+                self._doing(rt, "step", name=name, **position)
+                await self._async_execute_step(room, step, context, name=name)
                 if step[CONF_DELAY_AFTER]:
+                    self._doing(rt, "wait", seconds=step[CONF_DELAY_AFTER], **position)
                     await self._async_sleep(step[CONF_DELAY_AFTER])
                 done += 1
                 rt.progress = (done, total)
                 self.async_update_listeners()
 
             if hook is not None:
+                if not hook.done():
+                    self._doing(rt, "hooks", hook=CONF_ON_START)
                 await hook
         except asyncio.CancelledError:
             if hook is not None:
                 hook.cancel()
+            rt.current = None
             raise
         except Exception as err:  # noqa: BLE001 - the room must not stay "starting"
             if hook is not None:
                 hook.cancel()
+            rt.current = None
             rt.state = ACTIVITY_STATE_ERROR
             rt.error = str(err) or type(err).__name__
             if isinstance(err, ActivityAborted):
@@ -937,6 +964,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         rt.state = ACTIVITY_STATE_ACTIVE
         rt.last_activity = activity_id
         rt.progress = (total, total)
+        rt.current = None
         self._changed()
         _LOGGER.info("Room '%s': '%s' is active", room_id, activity_id)
 
@@ -956,6 +984,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         cooldown: dict[str, float] = {}
         for device_id in unused:
             device = devices[device_id]
+            self._doing(rt, "turn_off", name=self._device_name(device))
             await self._async_power_off(device[CONF_ENTITY_ID], context)
             switch = device.get(CONF_POWER_SWITCH)
             if switch:
@@ -1051,6 +1080,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     if self._is_off(entity_id):
                         delay = self._remaining_cooldown(entity_id, delay)
                     else:
+                        self._doing(rt, "turn_off", name=self._device_name(device))
                         await self._async_power_off(entity_id, context)
                     if switch := device.get(CONF_POWER_SWITCH):
                         cooldown[switch] = max(cooldown.get(switch, 0.0), delay)
@@ -1065,6 +1095,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     self._cancel_cut(rt, switch)
                 now = [s for s in switches if cooldown.get(s, 0) <= 0]
                 if now:
+                    self._doing(rt, "power_off")
                     with contextlib.suppress(ActivityAborted):
                         await self._async_call(
                             "homeassistant",
@@ -1081,14 +1112,18 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             f"{DOMAIN} {room_id} cut {switch}",
                         )
                 if hook is not None:
+                    if not hook.done():
+                        self._doing(rt, "hooks", hook=CONF_ON_STOP)
                     await hook
             except asyncio.CancelledError:
                 if hook is not None:
                     hook.cancel()
+                rt.current = None
                 raise
             except Exception as err:  # noqa: BLE001 - the room must not stay "stopping"
                 if hook is not None:
                     hook.cancel()
+                rt.current = None
                 _LOGGER.exception("Room '%s': stop of '%s' failed", room_id, activity_id)
                 rt.state = ACTIVITY_STATE_ERROR
                 rt.error = str(err) or type(err).__name__
@@ -1099,6 +1134,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         rt.state = ACTIVITY_STATE_IDLE
         rt.error = None
         rt.progress = (0, 0)
+        rt.current = None
         ir.async_delete_issue(self.hass, DOMAIN, self._aborted_issue_id(room_id))
         self._changed()
         _LOGGER.info("Room '%s': '%s' stopped", room_id, activity_id)
@@ -1136,7 +1172,13 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return self._state_ok(self.hass.states.get(target), options.get(CONF_STATE))
 
     async def _async_wait_ready(
-        self, entity_id: str, options: dict[str, Any], label: str, *, reload: bool | None = None
+        self,
+        entity_id: str,
+        options: dict[str, Any],
+        label: str,
+        *,
+        reload: bool | None = None,
+        name: str | None = None,
     ) -> bool:
         """Wait until an entity is ready.
 
@@ -1145,7 +1187,8 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entity than the given one.
 
         Returns False on a timeout with ``on_timeout: continue`` and raises
-        ActivityAborted on a timeout with ``on_timeout: abort``.
+        ActivityAborted on a timeout with ``on_timeout: abort``. ``name`` is
+        what the card shows while it waits during a start.
         """
         entity_id = options.get(CONF_ENTITY_ID) or entity_id
         wanted: list[str] | None = options.get(CONF_STATE)
@@ -1176,6 +1219,10 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 entity_id,
                 " or ".join(wanted) if wanted else "available",
             )
+            if (rt := _current_room.get()) is not None:
+                self._doing(
+                    rt, "ready", name=name or self._entity_name(entity_id), seconds=timeout
+                )
             try:
                 async with asyncio.timeout(timeout):
                     await ready
@@ -1225,7 +1272,12 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # ------------------------------------------------------------------
 
     async def _async_execute_step(
-        self, room: dict[str, Any], step: dict[str, Any], context: Context
+        self,
+        room: dict[str, Any],
+        step: dict[str, Any],
+        context: Context,
+        *,
+        name: str | None = None,
     ) -> None:
         step_type = step[CONF_TYPE]
         entity_id = None
@@ -1236,7 +1288,10 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
         if step_type == STEP_TYPE_WAIT_AVAILABLE:
             await self._async_wait_ready(
-                entity_id or step[CONF_ENTITY_ID], step, f"step {step.get('id', '')}".strip()
+                entity_id or step[CONF_ENTITY_ID],
+                step,
+                f"step {step.get('id', '')}".strip(),
+                name=name,
             )
             return
         if step_type == STEP_TYPE_POWER_ON:
@@ -1315,6 +1370,35 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._warn(f"{label}: {domain}.{service} did not finish within {self.service_timeout:g} s")
         except Exception as err:  # noqa: BLE001 - any failing device must not stop the rest
             self._warn(f"{label}: {domain}.{service} failed: {err}")
+
+    def _doing(
+        self,
+        rt: RoomRuntime,
+        kind: str,
+        *,
+        name: str | None = None,
+        seconds: float | None = None,
+        **extra: Any,
+    ) -> None:
+        """Record what a start or stop is busy with and tell the card.
+
+        ``kind`` is power_on, boot, reload, ready, turn_on, warm_up, step,
+        wait, hooks, turn_off or power_off; ``name`` the device or entity;
+        ``seconds`` a wait, sent as the time it ends (``until``).
+        """
+        current: dict[str, Any] = {"kind": kind, "name": name, **extra}
+        if seconds is not None:
+            current["until"] = (dt_util.utcnow() + timedelta(seconds=seconds)).isoformat()
+        rt.current = current
+        self.async_update_listeners()
+
+    def _entity_name(self, entity_id: str) -> str:
+        state = self.hass.states.get(entity_id)
+        return (state.name if state is not None else None) or entity_id
+
+    def _device_name(self, device: dict[str, Any]) -> str:
+        """The name of a device as the card shows it."""
+        return device.get(CONF_NAME) or self._entity_name(device[CONF_ENTITY_ID])
 
     @staticmethod
     def _warn(message: str) -> None:

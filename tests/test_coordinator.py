@@ -8,6 +8,8 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from homeassistant.core import Context, HomeAssistant, ServiceCall
 from homeassistant.helpers import entity_registry as er, issue_registry as ir
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.util import dt as dt_util
 
 from .common import (
     BEAMER,
@@ -20,7 +22,7 @@ from .common import (
     living_room,
     setup,
 )
-from custom_components.av_scenes.const import DOMAIN
+from custom_components.av_scenes.const import DOMAIN, SIGNAL_ROOMS_UPDATED
 from custom_components.av_scenes.coordinator import AVScenesCoordinator, _current_room
 
 
@@ -127,7 +129,7 @@ async def test_unexpected_failure_puts_the_room_in_error(
     """A bug while starting or stopping does not leave the room starting or stopping."""
     coordinator = await setup(hass, devices, living_room())
 
-    async def broken_step(*args) -> None:
+    async def broken_step(*args, **kwargs) -> None:
         raise RuntimeError("step exploded")
 
     with patch.object(coordinator, "_async_execute_step", broken_step):
@@ -577,3 +579,91 @@ async def test_reload_after_power_on_and_unreachable_device(
     assert epson.entry_id in reloads
     assert ("homeassistant.turn_on", (BEAMER,)) not in devices.names()
     assert any(BEAMER in w for w in coordinator.runtime("wz").warnings)
+
+
+def _record_current(hass: HomeAssistant, coordinator: AVScenesCoordinator) -> list[dict]:
+    """What the card is told the room is busy with, each time it changes."""
+    seen: list[dict] = []
+
+    def changed() -> None:
+        current = coordinator.room_view("wz")["current"]
+        if current and (not seen or seen[-1] != current):
+            seen.append(current)
+
+    async_dispatcher_connect(hass, SIGNAL_ROOMS_UPDATED, changed)
+    return seen
+
+
+async def test_start_tells_what_it_waits_for(hass: HomeAssistant, devices: Devices) -> None:
+    """Boot time, warm-up, steps and waits, with the device and when a wait ends."""
+    data = living_room()
+    room = data["rooms"]["wz"]
+    room["devices"]["beamer"]["delay_after_power"] = 20
+    room["devices"]["beamer"]["name"] = "Beamer"
+    room["devices"]["onkyo"]["delay_after_on"] = 5
+    room["activities"]["tv"]["steps"][2]["delay_after"] = 2
+    coordinator = await setup(hass, devices, data)
+    seen = _record_current(hass, coordinator)
+    before = dt_util.utcnow()
+
+    await coordinator.async_start_activity("wz", "tv")
+
+    assert [(c["kind"], c["name"]) for c in seen] == [
+        ("power_on", None),
+        ("turn_on", "onkyo receiver"),
+        ("warm_up", "onkyo receiver"),
+        ("boot", "Beamer"),
+        ("turn_on", "Beamer"),
+        ("turn_on", "vu as2b de"),
+        ("step", "onkyo receiver"),
+        ("step", "onkyo receiver"),
+        ("step", "onkyo receiver"),
+        ("wait", None),
+    ]
+    boot = seen[3]
+    # 20 s from switching the outlets on, 5 s of them already gone for the Onkyo
+    until = dt_util.parse_datetime(boot["until"])
+    assert 14 <= (until - before).total_seconds() <= 16
+    assert seen[6] == {"kind": "step", "name": "onkyo receiver", "step": 1, "steps": 3, "step_type": "set_source"}
+    assert seen[9]["step"] == 3 and "until" in seen[9]
+    # Done: nothing to show any more
+    assert coordinator.room_view("wz")["current"] is None
+
+
+async def test_start_tells_which_device_it_waits_for(
+    hass: HomeAssistant, devices: Devices
+) -> None:
+    """While the readiness check waits, the card knows for whom and how long at most."""
+    data = living_room()
+    data["rooms"]["wz"]["devices"]["vu"]["ready"]["reload_integration"] = False
+    coordinator = await setup(hass, devices, data)
+    hass.states.async_set(VU, "unavailable")
+
+    start = hass.async_create_task(coordinator.async_start_activity("wz", "tv"))
+    await asyncio.sleep(0.05)
+    current = coordinator.room_view("wz")["current"]
+    assert current["kind"] == "ready" and current["name"] == "vu as2b de"
+    remaining = (dt_util.parse_datetime(current["until"]) - dt_util.utcnow()).total_seconds()
+    assert 55 < remaining <= 60
+
+    hass.states.async_set(VU, "off")
+    async with asyncio.timeout(2):
+        await start
+    assert coordinator.activity_states["wz"] == "active"
+    assert coordinator.room_view("wz")["current"] is None
+
+
+async def test_stop_tells_what_it_switches_off(hass: HomeAssistant, devices: Devices) -> None:
+    coordinator = await setup(hass, devices, living_room())
+    await coordinator.async_start_activity("wz", "tv")
+    seen = _record_current(hass, coordinator)
+
+    await coordinator.async_stop_activity("wz")
+
+    assert [(c["kind"], c["name"]) for c in seen] == [
+        ("turn_off", "vu as2b de"),
+        ("turn_off", "epson ehtw7400"),
+        ("turn_off", "onkyo receiver"),
+        ("power_off", None),
+    ]
+    assert coordinator.room_view("wz")["current"] is None

@@ -10,6 +10,7 @@ import { LitElement, css, html, nothing, type PropertyValues, type TemplateResul
 import "./editor";
 import { localize } from "./localize";
 import { clock, nowPlaying, type NowPlaying } from "./now-playing";
+import { progressText } from "./progress";
 import type { ButtonView, CardConfig, GroupView, HomeAssistant, RoomInfo, RoomView } from "./types";
 
 const DOMAIN = "av_scenes";
@@ -159,7 +160,8 @@ export class AvScenesRemoteCard extends LitElement {
 
   protected updated(changed: PropertyValues): void {
     const now = this._nowPlaying();
-    const ticking = now?.playing === true && now.duration !== undefined;
+    const ticking =
+      (now?.playing === true && now.duration !== undefined) || Boolean(this._view?.current?.until);
     if (ticking && this._tickTimer === undefined) {
       this._tickTimer = window.setInterval(() => this.requestUpdate(), 1000);
     } else if (!ticking && this._tickTimer !== undefined) {
@@ -354,10 +356,17 @@ export class AvScenesRemoteCard extends LitElement {
     const busy = view.state === "starting" || view.state === "stopping";
     const [done, total] = view.progress;
     const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    const doing = busy ? progressText(view.current, Date.now(), (key, params) => this._t(key, params)) : undefined;
     return html`
       ${busy
         ? html`<div class="progress" role="progressbar" aria-valuenow=${pct}>
             <div style="width: ${view.state === "starting" ? pct : 100}%"></div>
+          </div>`
+        : nothing}
+      ${doing
+        ? html`<div class="doing" aria-live="polite">
+            <span class="doing-text">${doing.text}</span>
+            ${doing.time ? html`<span class="doing-time">${doing.time}</span>` : nothing}
           </div>`
         : nothing}
       ${view.state === "error" && view.error
@@ -628,6 +637,24 @@ export class AvScenesRemoteCard extends LitElement {
     }
     .power.state-error {
       background: var(--error-color, #db4437);
+    }
+    .doing {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: -6px;
+      color: var(--secondary-text-color);
+      font-size: 0.9em;
+    }
+    .doing-text {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .doing-time {
+      flex: none;
+      font-variant-numeric: tabular-nums;
     }
     .now {
       display: flex;

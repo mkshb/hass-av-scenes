@@ -1,5 +1,7 @@
 /** The parts of the Home Assistant frontend objects the card uses. */
 
+import type { Current } from "./progress";
+
 export interface HassEntity {
   entity_id: string;
   state: string;
@@ -83,6 +85,8 @@ export interface RoomView {
   error: string | null;
   warnings: string[];
   progress: [number, number];
+  /** What a start or stop is busy with, see progress.ts */
+  current: Current | null;
   default_activity: string | null;
   activities: { id: string; name: string; icon: string | null }[];
   remote: {
