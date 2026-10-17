@@ -188,8 +188,10 @@ export class AvScenesPanel extends LitElement {
     if (!this._rooms || !this._revision) {
       return;
     }
+    // Edits replace this._rooms; ones made while saving must survive
+    const edited = this._rooms;
     const rooms: Rooms = {};
-    for (const [id, room] of Object.entries(this._rooms)) {
+    for (const [id, room] of Object.entries(edited)) {
       rooms[id] = clean(room);
     }
     this._saving = true;
@@ -219,7 +221,9 @@ export class AvScenesPanel extends LitElement {
       });
       this._revision = result.revision;
       this._original = JSON.stringify(rooms);
-      this._rooms = rooms;
+      if (this._rooms === edited) {
+        this._rooms = rooms;
+      }
       this._banner = { kind: "saved" };
     } catch (err) {
       const error = err as { code?: string; message?: string };
