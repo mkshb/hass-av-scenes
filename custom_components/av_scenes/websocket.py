@@ -386,6 +386,7 @@ async def ws_config_remote(
         "warnings": [],
         "progress": [0, 0],
         "current": None,
+        "cooling": [],
         "default_activity": room.get(CONF_DEFAULT_ACTIVITY),
         "activities": activity_list(room),
         "remote": remote,

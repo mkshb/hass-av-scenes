@@ -667,3 +667,74 @@ async def test_stop_tells_what_it_switches_off(hass: HomeAssistant, devices: Dev
         ("power_off", None),
     ]
     assert coordinator.room_view("wz")["current"] is None
+
+
+async def test_card_shows_the_cool_down(hass: HomeAssistant, devices: Devices) -> None:
+    """After a stop the card shows who cools down and when the power goes off."""
+    coordinator = await setup(hass, devices, living_room())
+    await coordinator.async_start_activity("wz", "tv")
+    cut = asyncio.Event()
+
+    async def slow_sleep(seconds: float) -> None:
+        await cut.wait()
+
+    coordinator._async_sleep = slow_sleep  # type: ignore[method-assign]
+    before = dt_util.utcnow()
+    await coordinator.async_stop_activity("wz")
+
+    view = coordinator.room_view("wz")
+    assert view["state"] == "idle"
+    [cooling] = view["cooling"]
+    assert cooling["outlet"] == "wz steckdose beamer 5 3 schwarz"
+    assert cooling["names"] == ["epson ehtw7400"]
+    left = (dt_util.parse_datetime(cooling["until"]) - before).total_seconds()
+    assert 179 <= left <= 181
+
+    updates: list[list] = []
+    async_dispatcher_connect(
+        hass, SIGNAL_ROOMS_UPDATED, lambda: updates.append(coordinator.room_view("wz")["cooling"])
+    )
+    cut.set()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert coordinator.room_view("wz")["cooling"] == []
+    assert updates and updates[-1] == []
+
+
+async def test_start_during_cool_down_ends_it(hass: HomeAssistant, devices: Devices) -> None:
+    coordinator = await setup(hass, devices, living_room())
+    await coordinator.async_start_activity("wz", "tv")
+    cut = asyncio.Event()
+
+    async def slow_sleep(seconds: float) -> None:
+        await cut.wait()
+
+    coordinator._async_sleep = slow_sleep  # type: ignore[method-assign]
+    await coordinator.async_stop_activity("wz")
+    assert coordinator.room_view("wz")["cooling"]
+
+    coordinator._async_sleep = devices.fake_sleep  # type: ignore[method-assign]
+    await coordinator.async_start_activity("wz", "tv")
+    assert coordinator.room_view("wz")["cooling"] == []
+    cut.set()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert coordinator.room_view("wz")["cooling"] == []
+
+
+async def test_switching_shows_the_cool_down(hass: HomeAssistant, devices: Devices) -> None:
+    """TV -> Musik: the projector cools down while Musik already runs."""
+    coordinator = await setup(hass, devices, living_room())
+    await coordinator.async_start_activity("wz", "tv")
+    cut = asyncio.Event()
+
+    async def slow_sleep(seconds: float) -> None:
+        await cut.wait()
+
+    coordinator._async_sleep = slow_sleep  # type: ignore[method-assign]
+    await coordinator.async_start_activity("wz", "musik")
+
+    view = coordinator.room_view("wz")
+    assert view["state"] == "active"
+    assert [c["names"] for c in view["cooling"]] == [["epson ehtw7400"]]
+    cut.set()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert coordinator.room_view("wz")["cooling"] == []

@@ -14,7 +14,30 @@ export interface Current {
   hook?: string;
 }
 
+/** av_scenes/control/subscribe: a power switch cut after its devices cooled down. */
+export interface Cooling {
+  outlet: string;
+  /** The devices that cool down */
+  names: string[];
+  /** When the power goes off (ISO time) */
+  until: string;
+}
+
 type Translate = (key: string, params?: Record<string, string>) => string;
+
+function timeLeft(until: string, now: number): string {
+  const left = Math.max(0, Math.ceil((Date.parse(until) - now) / 1000));
+  return left >= 60 ? clock(left) : `${left} s`;
+}
+
+/** "Cooling down: Epson Beamer" and "power off in 2:30". */
+export function coolingText(cooling: Cooling, now: number, t: Translate): { text: string; time: string } {
+  const names = cooling.names.length ? cooling.names.join(", ") : cooling.outlet;
+  return {
+    text: t("cooling.text", { names }),
+    time: t("cooling.time", { time: timeLeft(cooling.until, now) }),
+  };
+}
 
 /** "Waiting for Epson Beamer" and "at most 0:42", or undefined for nothing to show. */
 export function progressText(
@@ -46,7 +69,6 @@ export function progressText(
   if (!current.until) {
     return { text };
   }
-  const left = Math.max(0, Math.ceil((Date.parse(current.until) - now) / 1000));
-  const time = left >= 60 ? clock(left) : `${left} s`;
+  const time = timeLeft(current.until, now);
   return { text, time: t(current.kind === "ready" ? "doing.at_most" : "doing.left", { time }) };
 }

@@ -10,7 +10,7 @@ import { LitElement, css, html, nothing, type PropertyValues, type TemplateResul
 import "./editor";
 import { localize } from "./localize";
 import { clock, nowPlaying, type NowPlaying } from "./now-playing";
-import { progressText } from "./progress";
+import { coolingText, progressText } from "./progress";
 import type { ButtonView, CardConfig, GroupView, HomeAssistant, RoomInfo, RoomView } from "./types";
 
 const DOMAIN = "av_scenes";
@@ -161,7 +161,9 @@ export class AvScenesRemoteCard extends LitElement {
   protected updated(changed: PropertyValues): void {
     const now = this._nowPlaying();
     const ticking =
-      (now?.playing === true && now.duration !== undefined) || Boolean(this._view?.current?.until);
+      (now?.playing === true && now.duration !== undefined) ||
+      Boolean(this._view?.current?.until) ||
+      Boolean(this._view?.cooling?.length);
     if (ticking && this._tickTimer === undefined) {
       this._tickTimer = window.setInterval(() => this.requestUpdate(), 1000);
     } else if (!ticking && this._tickTimer !== undefined) {
@@ -369,6 +371,12 @@ export class AvScenesRemoteCard extends LitElement {
             ${doing.time ? html`<span class="doing-time">${doing.time}</span>` : nothing}
           </div>`
         : nothing}
+      ${(view.cooling ?? []).map((cooling) => {
+        const { text, time } = coolingText(cooling, Date.now(), (key, params) => this._t(key, params));
+        return html`<div class="doing cooling">
+          <span class="doing-text">${text}</span><span class="doing-time">${time}</span>
+        </div>`;
+      })}
       ${view.state === "error" && view.error
         ? html`<div class="message error">
             <ha-icon icon="mdi:alert-circle-outline"></ha-icon>${view.error}
@@ -645,6 +653,9 @@ export class AvScenesRemoteCard extends LitElement {
       margin-top: -6px;
       color: var(--secondary-text-color);
       font-size: 0.9em;
+    }
+    .doing.cooling {
+      margin-top: 0;
     }
     .doing-text {
       min-width: 0;

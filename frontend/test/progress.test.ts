@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { localize } from "../src/localize";
-import { progressText } from "../src/progress";
+import { coolingText, progressText } from "../src/progress";
 
 const NOW = Date.parse("2026-10-17T20:00:00Z");
 const de = (key: string, params?: Record<string, string>) => localize("de", key, params);
@@ -53,4 +53,15 @@ test("steps and the wait after a step", () => {
 test("waiting for the actions on start and stop", () => {
   assert.equal(progressText({ kind: "hooks", name: null, hook: "on_start" }, NOW, de)?.text, "Warte auf die Aktionen beim Start");
   assert.equal(progressText({ kind: "hooks", name: null, hook: "on_stop" }, NOW, en)?.text, "Waiting for the actions on stop");
+});
+
+test("cool-down: who cools down and when the power goes off", () => {
+  const cooling = { outlet: "Steckdose Beamer", names: ["Epson Beamer"], until: inSeconds(150) };
+  assert.deepEqual(coolingText(cooling, NOW, de), { text: "Abkühlen: Epson Beamer", time: "Strom aus in 2:30" });
+  assert.deepEqual(coolingText({ ...cooling, until: inSeconds(9.5) }, NOW, en), {
+    text: "Cooling down: Epson Beamer",
+    time: "power off in 10 s",
+  });
+  // Without a device name the outlet stands in
+  assert.equal(coolingText({ ...cooling, names: [] }, NOW, en).text, "Cooling down: Steckdose Beamer");
 });

@@ -1,6 +1,6 @@
 /** The parts of the Home Assistant frontend objects the card uses. */
 
-import type { Current } from "./progress";
+import type { Cooling, Current } from "./progress";
 
 export interface HassEntity {
   entity_id: string;
@@ -87,6 +87,8 @@ export interface RoomView {
   progress: [number, number];
   /** What a start or stop is busy with, see progress.ts */
   current: Current | null;
+  /** Power switches cut after their devices cooled down, also while the room is off */
+  cooling: Cooling[];
   default_activity: string | null;
   activities: { id: string; name: string; icon: string | null }[];
   remote: {

@@ -263,6 +263,8 @@ class RoomRuntime:
     generation: int = 0
     # power switch -> background task that cuts it after the cool-down
     pending_cuts: dict[str, asyncio.Task] = field(default_factory=dict)
+    # power switch -> devices cooling down on it and when it goes off, for the card
+    cooling: dict[str, dict[str, Any]] = field(default_factory=dict)
     # What a start or stop is busy with, for the card (see _doing)
     current: dict[str, Any] | None = None
 
@@ -697,6 +699,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "warnings": list(rt.warnings),
             "progress": list(rt.progress),
             "current": dict(rt.current) if rt.current else None,
+            "cooling": list(rt.cooling.values()),
             "default_activity": self.default_activity(room_id),
             "activities": activity_list(room),
             "remote": remote_view(room, activity) if activity is not None else None,
@@ -982,6 +985,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         _LOGGER.info("Room '%s': switching off devices no longer needed: %s", room_id, unused)
 
         cooldown: dict[str, float] = {}
+        cooling: dict[str, list[str]] = {}
         for device_id in unused:
             device = devices[device_id]
             self._doing(rt, "turn_off", name=self._device_name(device))
@@ -989,16 +993,43 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             switch = device.get(CONF_POWER_SWITCH)
             if switch:
                 cooldown[switch] = max(cooldown.get(switch, 0), device[CONF_DELAY_AFTER_OFF])
+                if device[CONF_DELAY_AFTER_OFF]:
+                    cooling.setdefault(switch, []).append(self._device_name(device))
 
         still_needed = set(power_switches(devices, new_devices))
         still_needed |= self._switches_used_elsewhere(rt)
         for switch, delay in cooldown.items():
             if switch not in still_needed:
-                self._cancel_cut(rt, switch)
-                rt.pending_cuts[switch] = self.hass.async_create_background_task(
-                    self._async_cut_later(rt, switch, delay),
-                    f"{DOMAIN} {room_id} cut {switch}",
-                )
+                self._schedule_cut(rt, room_id, switch, delay, cooling.get(switch, []))
+
+    def _schedule_cut(
+        self, rt: RoomRuntime, room_id: str, switch: str, delay: float, names: list[str]
+    ) -> None:
+        """Cut a power switch in the background after the cool-down.
+
+        ``names`` are the devices that cool down meanwhile; the card shows
+        them with the time the power goes off.
+        """
+        self._cancel_cut(rt, switch)
+        if delay > 0:
+            until = dt_util.utcnow() + timedelta(seconds=delay)
+            rt.cooling[switch] = {
+                "outlet": self._entity_name(switch),
+                "names": names,
+                "until": until.isoformat(),
+            }
+        rt.pending_cuts[switch] = task = self.hass.async_create_background_task(
+            self._async_cut_later(rt, switch, delay),
+            f"{DOMAIN} {room_id} cut {switch}",
+        )
+
+        @callback
+        def _done(_: asyncio.Task) -> None:
+            # Cut, kept for another room, or cancelled by a new start
+            if rt.pending_cuts.get(switch) in (task, None) and rt.cooling.pop(switch, None):
+                self.async_update_listeners()
+
+        task.add_done_callback(_done)
 
     async def _async_cut_later(self, rt: RoomRuntime, switch: str, delay: float) -> None:
         if delay:
@@ -1044,6 +1075,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     @staticmethod
     def _cancel_cut(rt: RoomRuntime, switch: str) -> None:
         task = rt.pending_cuts.pop(switch, None)
+        rt.cooling.pop(switch, None)
         if task is not None and not task.done():
             task.cancel()
 
@@ -1071,8 +1103,9 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             device_ids: list[str] = activity[CONF_DEVICES]
             hook = self._start_hook(room_id, activity_id, CONF_ON_STOP, context)
             try:
-                # Power switch -> cool-down its devices still need
+                # Power switch -> cool-down its devices still need, and who cools
                 cooldown: dict[str, float] = {}
+                cooling: dict[str, list[str]] = {}
                 for device_id in reversed(device_ids):
                     device = devices[device_id]
                     entity_id = device[CONF_ENTITY_ID]
@@ -1084,6 +1117,8 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         await self._async_power_off(entity_id, context)
                     if switch := device.get(CONF_POWER_SWITCH):
                         cooldown[switch] = max(cooldown.get(switch, 0.0), delay)
+                        if delay > 0:
+                            cooling.setdefault(switch, []).append(self._device_name(device))
 
                 used_elsewhere = self._switches_used_elsewhere(rt)
                 switches = [
@@ -1107,9 +1142,8 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # The rest after the cool-down, without keeping the room busy
                 for switch in switches:
                     if switch not in now:
-                        rt.pending_cuts[switch] = self.hass.async_create_background_task(
-                            self._async_cut_later(rt, switch, cooldown[switch]),
-                            f"{DOMAIN} {room_id} cut {switch}",
+                        self._schedule_cut(
+                            rt, room_id, switch, cooldown[switch], cooling.get(switch, [])
                         )
                 if hook is not None:
                     if not hook.done():
