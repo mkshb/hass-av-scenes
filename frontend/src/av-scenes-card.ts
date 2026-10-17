@@ -9,6 +9,7 @@ import { LitElement, css, html, nothing, type PropertyValues, type TemplateResul
 
 import "./editor";
 import { localize } from "./localize";
+import { clock, nowPlaying, type NowPlaying } from "./now-playing";
 import type { ButtonView, CardConfig, GroupView, HomeAssistant, RoomInfo, RoomView } from "./types";
 
 const DOMAIN = "av_scenes";
@@ -83,6 +84,8 @@ export class AvScenesRemoteCard extends LitElement {
   private _unsubscribe?: Promise<() => Promise<void>>;
   private _repeatTimer?: number;
   private _retryTimer?: number;
+  /** Moves the playback position on while something plays. */
+  private _tickTimer?: number;
   // The key held down, until it is released or the press is cancelled
   private _press?: { command: string; extra: Record<string, unknown>; sent: boolean };
 
@@ -141,6 +144,8 @@ export class AvScenesRemoteCard extends LitElement {
   disconnectedCallback(): void {
     super.disconnectedCallback();
     this._pressEnd(false);
+    window.clearInterval(this._tickTimer);
+    this._tickTimer = undefined;
     this._unsubscribeNow();
   }
 
@@ -153,6 +158,14 @@ export class AvScenesRemoteCard extends LitElement {
   }
 
   protected updated(changed: PropertyValues): void {
+    const now = this._nowPlaying();
+    const ticking = now?.playing === true && now.duration !== undefined;
+    if (ticking && this._tickTimer === undefined) {
+      this._tickTimer = window.setInterval(() => this.requestUpdate(), 1000);
+    } else if (!ticking && this._tickTimer !== undefined) {
+      window.clearInterval(this._tickTimer);
+      this._tickTimer = undefined;
+    }
     if (changed.has("hass") && !this._unsubscribe && this._retryTimer === undefined) {
       this._subscribe();
     }
@@ -309,7 +322,8 @@ export class AvScenesRemoteCard extends LitElement {
       </ha-card>`;
     }
     return html`<ha-card>
-      ${this._renderHeader(view)} ${this._renderStatus(view)} ${this._renderActivities(view)}
+      ${this._renderHeader(view)} ${this._renderStatus(view)} ${this._renderNowPlaying()}
+      ${this._renderActivities(view)}
       ${view.remote ? this._renderRemote(view) : nothing}
     </ha-card>`;
   }
@@ -360,6 +374,44 @@ export class AvScenesRemoteCard extends LitElement {
           </details>`
         : nothing}
     `;
+  }
+
+  /** What the media player of the running activity plays, if anything. */
+  private _nowPlaying(): NowPlaying | undefined {
+    const entityId = this._view?.remote?.media;
+    return nowPlaying(entityId ? this.hass?.states[entityId] : undefined, Date.now());
+  }
+
+  private _renderNowPlaying(): TemplateResult | typeof nothing {
+    const now = this._nowPlaying();
+    if (!now) {
+      return nothing;
+    }
+    const top = [now.app, now.playing ? undefined : this._t("now.paused")].filter(Boolean).join(" · ");
+    return html`<div class="now">
+      ${now.picture
+        ? html`<img
+            class="art"
+            src=${now.picture}
+            alt=""
+            @error=${(ev: Event) => ((ev.target as HTMLElement).style.display = "none")}
+          />`
+        : nothing}
+      <div class="meta">
+        ${top ? html`<div class="now-top">${top}</div>` : nothing}
+        <div class="now-title">${now.title}</div>
+        ${now.subtitle ? html`<div class="now-sub">${now.subtitle}</div>` : nothing}
+        ${now.duration !== undefined && now.position !== undefined
+          ? html`<div class="now-progress" role="progressbar" aria-valuemin="0"
+                aria-valuemax=${Math.round(now.duration)} aria-valuenow=${Math.round(now.position)}>
+                <div style="width: ${(now.position / now.duration) * 100}%"></div>
+              </div>
+              <div class="now-time">
+                <span>${clock(now.position)}</span><span>${clock(now.duration)}</span>
+              </div>`
+          : nothing}
+      </div>
+    </div>`;
   }
 
   private _renderActivities(view: RoomView): TemplateResult {
@@ -576,6 +628,57 @@ export class AvScenesRemoteCard extends LitElement {
     }
     .power.state-error {
       background: var(--error-color, #db4437);
+    }
+    .now {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+    .now .art {
+      width: 64px;
+      height: 64px;
+      flex: none;
+      border-radius: 8px;
+      object-fit: cover;
+      background: var(--avs-key-bg);
+    }
+    .now .meta {
+      flex: 1;
+      min-width: 0;
+    }
+    .now-top,
+    .now-sub,
+    .now-time {
+      color: var(--secondary-text-color);
+      font-size: 0.85em;
+    }
+    .now-top,
+    .now-title,
+    .now-sub {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .now-title {
+      font-weight: 500;
+    }
+    .now-progress {
+      height: 3px;
+      margin-top: 6px;
+      border-radius: 2px;
+      background: var(--divider-color, rgba(0, 0, 0, 0.12));
+      overflow: hidden;
+    }
+    .now-progress div {
+      height: 100%;
+      background: var(--avs-accent);
+    }
+    .now-time {
+      display: flex;
+      justify-content: space-between;
+      font-variant-numeric: tabular-nums;
+      margin-top: 2px;
     }
     .progress {
       height: 4px;

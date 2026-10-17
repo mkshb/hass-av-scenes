@@ -246,7 +246,7 @@ room: wohnzimmer
 name: Living room   # optional title
 ```
 
-The card shows the room's state with a power button (toggle), the activities as buttons, the start progress and errors, and — while an activity runs — the remote: volume rocker and slider, d-pad, channel rocker, navigation and playback keys and the activity's own and quick-select buttons. Only what the running activity offers is shown. Keys send when released, so scrolling the dashboard across the remote sends nothing; volume and arrow keys repeat while held. It works for every user, in the browser and in the Home Assistant app.
+The card shows the room's state with a power button (toggle), the activities as buttons, the start progress and errors, and — while an activity runs — what is playing (app, title, series or artist, artwork and the position of a film or episode, from the activity's playback device or else its last media player) and the remote: volume rocker and slider, d-pad, channel rocker, navigation and playback keys and the activity's own and quick-select buttons. Only what the running activity offers is shown. Keys send when released, so scrolling the dashboard across the remote sends nothing; volume and arrow keys repeat while held. It works for every user, in the browser and in the Home Assistant app.
 
 The integration registers the card as a dashboard resource itself (**Settings → Dashboards → Resources**, `/av_scenes_static/av-scenes-card.js?v=…`) and updates its version after every update, so browsers and the app load the current card instead of a cached one. Removing the integration removes the resource. With resources in YAML (`lovelace: resource_mode: yaml`), the card is loaded on every page instead; there is nothing to add in either case. A dashboard loaded in the few seconds of a restart before the integration is set up shows "Custom element doesn't exist"; reloading it once fixes that.
 
@@ -506,6 +506,7 @@ The remote control card and the configuration panel live in `frontend/` (Lit, Ty
 ```bash
 cd frontend
 npm ci
+npm test        # tests of the card logic (Node test runner)
 npm run build   # writes av-scenes-card.js and av-scenes-panel.js to custom_components/av_scenes/frontend/
 ```
 

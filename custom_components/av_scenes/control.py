@@ -220,7 +220,22 @@ def remote_view(room: dict[str, Any], activity: dict[str, Any]) -> dict[str, Any
     return {
         "groups": groups,
         "buttons": [button_view(button) for button in activity[CONF_REMOTE][CONF_BUTTONS]],
+        "media": media_entity(room, activity),
     }
+
+
+def media_entity(room: dict[str, Any], activity: dict[str, Any]) -> str | None:
+    """The media player whose title and artwork the card shows.
+
+    The device playback goes to, if it is a media player; else the last
+    media player of the activity (the source behind the receiver).
+    """
+    devices: dict[str, Any] = room[CONF_DEVICES]
+    transport = routing(room, activity)[GROUP_TRANSPORT]
+    if transport is not None and _is_media_player(devices[transport]):
+        return devices[transport][CONF_ENTITY_ID]
+    players = [d for d in activity[CONF_DEVICES] if _is_media_player(devices[d])]
+    return devices[players[-1]][CONF_ENTITY_ID] if players else None
 
 
 def route_summary(room: dict[str, Any], activity: dict[str, Any]) -> list[dict[str, Any]]:

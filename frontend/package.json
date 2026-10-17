@@ -7,6 +7,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "esbuild test/*.test.ts --bundle --platform=node --format=esm --outdir=.test-build --out-extension:.js=.mjs --log-level=warning && node --test .test-build/*.test.mjs",
     "build": "npm run typecheck && esbuild src/av-scenes-card.ts src/av-scenes-panel.ts --bundle --minify --format=esm --target=es2021 --legal-comments=none --outdir=../custom_components/av_scenes/frontend",
     "watch": "esbuild src/av-scenes-card.ts src/av-scenes-panel.ts --bundle --format=esm --target=es2021 --watch --outdir=../custom_components/av_scenes/frontend"
   },

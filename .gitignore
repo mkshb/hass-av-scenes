@@ -19,3 +19,4 @@ venv/
 # Frontend: dependencies and the build output (built by the release workflow)
 frontend/node_modules
 custom_components/av_scenes/frontend/
+frontend/.test-build

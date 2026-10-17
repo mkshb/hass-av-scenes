@@ -12,7 +12,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from .common import BEAMER, ONKYO, VU, Devices, living_room, setup
 from custom_components.av_scenes.const import DOMAIN
-from custom_components.av_scenes.control import routing
+from custom_components.av_scenes.control import media_entity, remote_view, routing
 from custom_components.av_scenes.model import validate_config
 
 
@@ -74,6 +74,29 @@ def test_default_routing() -> None:
         "transport": "onkyo",
         "navigation": None,
     }
+
+
+def test_media_entity() -> None:
+    """Title and artwork come from the device playback goes to, else the last player."""
+    data = remote_room()
+    room_cfg = data["rooms"]["wz"]
+    room_cfg["devices"]["light"] = {"entity_id": "light.wz"}
+    room_cfg["activities"]["licht"] = {"devices": ["light"]}
+    room = validate_config(data)["rooms"]["wz"]
+    assert media_entity(room, room["activities"]["tv"]) == VU
+    assert media_entity(room, room["activities"]["musik"]) == ONKYO
+    assert media_entity(room, room["activities"]["licht"]) is None
+
+    # Playback routed to the receiver, but the receiver is the one playing
+    room_cfg["activities"]["tv"]["remote"]["transport"] = "onkyo"
+    room = validate_config(data)["rooms"]["wz"]
+    assert media_entity(room, room["activities"]["tv"]) == ONKYO
+
+    # Playback hidden: still the source behind the receiver
+    room_cfg["activities"]["tv"]["remote"]["transport"] = None
+    room = validate_config(data)["rooms"]["wz"]
+    assert media_entity(room, room["activities"]["tv"]) == VU
+    assert remote_view(room, room["activities"]["tv"])["media"] == VU
 
 
 def test_explicit_routing() -> None:

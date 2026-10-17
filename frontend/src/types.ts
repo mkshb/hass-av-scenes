@@ -88,5 +88,7 @@ export interface RoomView {
   remote: {
     groups: Partial<Record<Group, GroupView>>;
     buttons: ButtonView[];
+    /** The media player whose title and artwork the card shows */
+    media: string | null;
   } | null;
 }
