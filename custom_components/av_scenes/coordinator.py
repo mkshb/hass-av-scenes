@@ -213,6 +213,9 @@ class RoomRuntime:
     task: asyncio.Task | None = None
     command: tuple[str, str | None] | None = None
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    # Counts the commands; one still waiting for the lock is dropped once a
+    # newer one arrived
+    generation: int = 0
     # power switch -> background task that cuts it after the cool-down
     pending_cuts: dict[str, asyncio.Task] = field(default_factory=dict)
 
@@ -582,19 +585,26 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     ) -> None:
         """Cancel the running command of the room and run a new one.
 
-        Repeating the command that is already running just waits for it.
+        Repeating the command that is already running just waits for it. The
+        last command wins: one that is still waiting for the previous one to
+        end is dropped when another command arrives.
         """
         rt = self.runtime(room_id)
         running = rt.task if rt.task and not rt.task.done() else None
 
-        if running is not None and rt.command == command:
+        if running is not None and rt.command == command and not running.cancelling():
             await self._await_task(running)
             return
-        if running is not None:
+        if running is not None and not running.cancelling():
             _LOGGER.info("Room '%s': cancelling running %s", room_id, rt.command[0])
             running.cancel()
+        rt.generation += 1
+        generation = rt.generation
 
         async with rt.lock:
+            if rt.generation != generation:
+                _LOGGER.debug("Room '%s': %s dropped, a newer command follows", room_id, command[0])
+                return
             token = _current_room.set(rt)
             try:
                 task = self.hass.async_create_background_task(

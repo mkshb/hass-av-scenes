@@ -283,6 +283,32 @@ async def test_cool_down_keeps_a_plug_another_room_started(
     assert hass.states.get(PLUG_MM).state == "on"
 
 
+async def test_last_command_wins(hass: HomeAssistant, devices: Devices) -> None:
+    """Start, stop, start in quick succession: the room ends up running."""
+    data = living_room()
+    data["rooms"]["wz"]["devices"]["onkyo"]["delay_after_on"] = 5
+    coordinator = await setup(hass, devices, data)
+    warm_up = asyncio.Event()
+
+    async def slow_sleep(seconds: float) -> None:
+        await warm_up.wait()
+
+    coordinator._async_sleep = slow_sleep  # type: ignore[method-assign]
+    first = hass.async_create_task(coordinator.async_start_activity("wz", "tv"))
+    await asyncio.sleep(0.01)
+    assert coordinator.activity_states["wz"] == "starting"
+
+    # The stop is still waiting for the cancelled start when the next start comes
+    stop = hass.async_create_task(coordinator.async_stop_activity("wz"))
+    again = hass.async_create_task(coordinator.async_start_activity("wz", "tv"))
+    warm_up.set()
+    async with asyncio.timeout(2):
+        await asyncio.gather(first, stop, again)
+
+    assert coordinator.activity_states["wz"] == "active"
+    assert coordinator.active_activities["wz"] == "tv"
+
+
 async def test_stop_cancels_running_start(hass: HomeAssistant, devices: Devices) -> None:
     """A stop during a long readiness wait does not wait for the start."""
     coordinator = await setup(hass, devices, living_room())
