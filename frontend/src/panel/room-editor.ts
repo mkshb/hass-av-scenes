@@ -28,6 +28,7 @@ import {
   type Step,
 } from "./model";
 import "./flow-view";
+import "./remote-preview";
 import { t } from "./strings";
 
 type Tab = "devices" | "activities" | "yaml";
@@ -584,6 +585,17 @@ export class AvScenesRoomEditor extends LitElement {
       )}
 
       ${this._card(this._t("quick_select"), this._t("quick_select_hint"), this._renderQuickSelect(id, activity))}
+
+      ${this._card(
+        this._t("section_remote_preview"),
+        this._t("hint_remote_preview"),
+        html`<av-scenes-remote-preview
+          .hass=${this.hass}
+          .room=${this.room}
+          .roomId=${this.roomId}
+          .activityId=${id}
+        ></av-scenes-remote-preview>`,
+      )}
 
       ${this._advanced(
         this._t("hint_activity_advanced"),

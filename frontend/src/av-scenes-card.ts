@@ -59,6 +59,7 @@ const STATE_ICONS: Record<string, string> = {
 export class AvScenesRemoteCard extends LitElement {
   static properties = {
     hass: { attribute: false },
+    preview: { attribute: false },
     _config: { state: true },
     _view: { state: true },
     _loaded: { state: true },
@@ -67,6 +68,11 @@ export class AvScenesRemoteCard extends LitElement {
   };
 
   declare hass?: HomeAssistant;
+  /**
+   * Show this view instead of subscribing (the configuration panel). Buttons
+   * send nothing then; they fire "preview-call" with the action they would call.
+   */
+  declare preview?: RoomView;
   declare _config?: CardConfig;
   declare _view: RoomView | null;
   declare _loaded: boolean;
@@ -138,6 +144,14 @@ export class AvScenesRemoteCard extends LitElement {
     this._unsubscribeNow();
   }
 
+  protected willUpdate(changed: PropertyValues): void {
+    if (changed.has("preview") && this.preview) {
+      this._config = { type: "custom:av-scenes-remote-card", room: this.preview.room };
+      this._view = this.preview;
+      this._loaded = true;
+    }
+  }
+
   protected updated(changed: PropertyValues): void {
     if (changed.has("hass") && !this._unsubscribe && this._retryTimer === undefined) {
       this._subscribe();
@@ -145,7 +159,7 @@ export class AvScenesRemoteCard extends LitElement {
   }
 
   private _subscribe(): void {
-    if (!this.hass || !this._config?.room || this._unsubscribe || !this.isConnected) {
+    if (this.preview || !this.hass || !this._config?.room || this._unsubscribe || !this.isConnected) {
       return;
     }
     const message: Record<string, unknown> = {
@@ -204,6 +218,10 @@ export class AvScenesRemoteCard extends LitElement {
       return;
     }
     this._haptic();
+    if (this.preview) {
+      this.dispatchEvent(new CustomEvent("preview-call", { detail: { service, data } }));
+      return;
+    }
     this.hass
       .callService(DOMAIN, service, { room: this._view.room, ...data })
       .catch((err: { message?: string }) => this._toast(err?.message ?? String(err)));
