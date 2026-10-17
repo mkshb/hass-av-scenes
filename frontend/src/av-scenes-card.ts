@@ -74,6 +74,8 @@ export class AvScenesRemoteCard extends LitElement {
 
   private _unsubscribe?: Promise<() => Promise<void>>;
   private _repeatTimer?: number;
+  // The key held down, until it is released or the press is cancelled
+  private _press?: { command: string; extra: Record<string, unknown>; sent: boolean };
 
   constructor() {
     super();
@@ -129,7 +131,7 @@ export class AvScenesRemoteCard extends LitElement {
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
-    this._stopRepeat();
+    this._pressEnd(false);
     this._unsubscribeNow();
   }
 
@@ -212,18 +214,35 @@ export class AvScenesRemoteCard extends LitElement {
     );
   }
 
-  private _startRepeat(ev: PointerEvent, command: string, extra: Record<string, unknown> = {}): void {
+  /**
+   * A key sends on release, so a swipe that starts on it (scrolling the
+   * dashboard) sends nothing: the browser cancels the pointer instead.
+   * Held down, volume and arrow keys repeat.
+   */
+  private _pressStart(ev: PointerEvent, command: string, extra: Record<string, unknown> = {}): void {
     if (ev.button !== 0) {
       return;
     }
-    this._stopRepeat();
-    this._send(command, extra);
+    this._pressEnd(false);
+    const press = { command, extra, sent: false };
+    this._press = press;
     if (!REPEATING.has(command)) {
       return;
     }
     this._repeatTimer = window.setTimeout(() => {
+      press.sent = true;
+      this._send(command, extra);
       this._repeatTimer = window.setInterval(() => this._send(command, extra), REPEAT_INTERVAL);
     }, REPEAT_DELAY);
+  }
+
+  private _pressEnd(send: boolean): void {
+    const press = this._press;
+    this._press = undefined;
+    this._stopRepeat();
+    if (send && press && !press.sent) {
+      this._send(press.command, press.extra);
+    }
   }
 
   private _stopRepeat(): void {
@@ -362,10 +381,10 @@ export class AvScenesRemoteCard extends LitElement {
       class=${cls}
       title=${this._t(`command.${command}`)}
       aria-label=${this._t(`command.${command}`)}
-      @pointerdown=${(ev: PointerEvent) => this._startRepeat(ev, command)}
-      @pointerup=${this._stopRepeat}
-      @pointerleave=${this._stopRepeat}
-      @pointercancel=${this._stopRepeat}
+      @pointerdown=${(ev: PointerEvent) => this._pressStart(ev, command)}
+      @pointerup=${() => this._pressEnd(true)}
+      @pointerleave=${() => this._pressEnd(false)}
+      @pointercancel=${() => this._pressEnd(false)}
       @keydown=${(ev: KeyboardEvent) => this._keySend(ev, command)}
       @contextmenu=${(ev: Event) => ev.preventDefault()}
     >
@@ -450,10 +469,10 @@ export class AvScenesRemoteCard extends LitElement {
     return html`<button
       class="custom"
       title=${label}
-      @pointerdown=${(ev: PointerEvent) => this._startRepeat(ev, button.command, extra)}
-      @pointerup=${this._stopRepeat}
-      @pointerleave=${this._stopRepeat}
-      @pointercancel=${this._stopRepeat}
+      @pointerdown=${(ev: PointerEvent) => this._pressStart(ev, button.command, extra)}
+      @pointerup=${() => this._pressEnd(true)}
+      @pointerleave=${() => this._pressEnd(false)}
+      @pointercancel=${() => this._pressEnd(false)}
       @keydown=${(ev: KeyboardEvent) => this._keySend(ev, button.command, extra)}
     >
       ${button.icon || COMMAND_ICONS[button.command]
