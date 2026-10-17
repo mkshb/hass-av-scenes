@@ -63,6 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Actions raise errors** – an unknown room, activity or command is reported to the caller (translated) instead of only being logged
 - **Translated entities** – sensor, select and switch use Home Assistant entity translations (English, German) for their names and state labels. **Breaking:** the select's state values are now stable keys: `idle` (was `—`), `starting` and `stopping` (were the German labels "Startet …" and "Stoppt …" with an hourglass or stop symbol in front) and `error`; the labels shown in the UI no longer carry symbols. Automations comparing these values need an update. The switch is now named "Active" ("Aktiv"); existing entity IDs are kept
 - **Lights** – brightness as `brightness_pct`, color temperature as `color_temp_kelvin`
+- **One entry** – AV Scenes is set up once and holds all rooms; a second entry is refused (the panel and the actions work on rooms by their ID, which would be ambiguous across entries)
 
 ### Fixed
 - Color temperature steps failed because Home Assistant removed `color_temp` (mireds) from `light.turn_on`

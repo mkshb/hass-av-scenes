@@ -56,6 +56,17 @@ async def test_user_flow(hass: HomeAssistant) -> None:
     assert result["result"].version == 2
 
 
+async def test_only_one_entry(hass: HomeAssistant) -> None:
+    """All rooms live in one entry; a second setup is refused."""
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    await hass.config_entries.flow.async_configure(result["flow_id"], {})
+
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "single_instance_allowed"
+    assert len(hass.config_entries.async_entries(DOMAIN)) == 1
+
+
 async def test_edit_room_applies_without_reload(hass: HomeAssistant) -> None:
     """Changing a room's content keeps the entities and the running state."""
     entry = await setup_entry(hass)

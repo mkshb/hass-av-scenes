@@ -7,7 +7,8 @@
       }
     },
     "abort": {
-      "already_configured": "Diese Integration ist bereits konfiguriert"
+      "already_configured": "Diese Integration ist bereits konfiguriert",
+      "single_instance_allowed": "AV Scenes ist bereits eingerichtet. Alle Räume liegen in diesem einen Eintrag."
     }
   },
   "options": {
