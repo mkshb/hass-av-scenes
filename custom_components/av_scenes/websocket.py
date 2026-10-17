@@ -4,8 +4,9 @@ control/*: what the card shows. Commands go through the regular services
 (``av_scenes.start_activity``, ``send_command`` …).
 
 config/*: read, check and save the configuration (admins only), the
-remembered source lists of the media players for the pickers, and the flow
-of an activity (what a start or stop switches, see flow.py). Saving
+remembered source lists of the media players for the pickers, the flow of
+an activity (what a start or stop switches, see flow.py) and a preview of
+the card while an activity runs. Saving
 takes the revision that was read, so changes made elsewhere in the meantime
 (options flow, a second browser) are not overwritten silently.
 """
@@ -19,6 +20,7 @@ import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.json import json_bytes_sorted
 
@@ -26,10 +28,14 @@ from .const import (
     ATTR_ACTIVITY,
     ATTR_ROOM,
     CONF_ACTIVITIES,
+    CONF_AREA_ID,
+    CONF_DEFAULT_ACTIVITY,
+    CONF_NAME,
     CONF_ROOMS,
     DOMAIN,
     SIGNAL_ROOMS_UPDATED,
 )
+from .control import activity_list, describe_command, remote_view, route_summary
 from .coordinator import AVScenesCoordinator
 from .flow import plan_start, plan_stop
 from .model import async_validate_config, find_missing_entities
@@ -63,6 +69,7 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_config_save)
     websocket_api.async_register_command(hass, ws_config_sources)
     websocket_api.async_register_command(hass, ws_config_flow)
+    websocket_api.async_register_command(hass, ws_config_remote)
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/control/rooms"})
@@ -265,6 +272,31 @@ def ws_config_sources(
     connection.send_result(msg["id"], sources)
 
 
+_UNKNOWN_ACTIVITY = {"error": {"path": [], "message": "Unknown activity"}}
+
+
+async def _async_edited_room(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> dict[str, Any] | None:
+    """The room being edited (``config``), validated, with its activity.
+
+    Sends the validation error, or an unknown activity, as the result and
+    returns None then.
+    """
+    room_id: str = msg[ATTR_ROOM]
+    try:
+        config = await async_validate_config(hass, {CONF_ROOMS: {room_id: msg["config"]}})
+    except vol.Invalid as err:
+        error = {"path": [str(p) for p in err.path], "message": err.msg}
+        connection.send_result(msg["id"], {"error": error})
+        return None
+    room = config[CONF_ROOMS][room_id]
+    if msg[ATTR_ACTIVITY] not in room[CONF_ACTIVITIES]:
+        connection.send_result(msg["id"], _UNKNOWN_ACTIVITY)
+        return None
+    return room
+
+
 @websocket_api.websocket_command(
     {
         vol.Required("type"): f"{DOMAIN}/config/flow",
@@ -285,22 +317,13 @@ async def ws_config_flow(
     Works on the room as it is being edited (``config``), saved or not. A
     configuration that does not validate yields its error instead.
     """
-    room_id: str = msg[ATTR_ROOM]
-    try:
-        config = await async_validate_config(hass, {CONF_ROOMS: {room_id: msg["config"]}})
-    except vol.Invalid as err:
-        error = {"path": [str(p) for p in err.path], "message": err.msg}
-        connection.send_result(msg["id"], {"error": error})
+    if (room := await _async_edited_room(hass, connection, msg)) is None:
         return
-    room = config[CONF_ROOMS][room_id]
+    room_id: str = msg[ATTR_ROOM]
     activity: str = msg[ATTR_ACTIVITY]
     previous: str | None = msg.get("from")
-    if activity not in room[CONF_ACTIVITIES] or (
-        previous is not None and previous not in room[CONF_ACTIVITIES]
-    ):
-        connection.send_result(
-            msg["id"], {"error": {"path": [], "message": "Unknown activity"}}
-        )
+    if previous is not None and previous not in room[CONF_ACTIVITIES]:
+        connection.send_result(msg["id"], _UNKNOWN_ACTIVITY)
         return
     # Other rooms as saved, for outlets they share with this one
     others: dict[str, Any] = {}
@@ -311,3 +334,62 @@ async def ws_config_flow(
     else:
         flow = plan_start(hass, room_id, room, activity, previous, others)
     connection.send_result(msg["id"], {"error": None, **flow})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/config/remote",
+        vol.Required(ATTR_ROOM): str,
+        vol.Required("config"): dict,
+        vol.Required(ATTR_ACTIVITY): str,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_config_remote(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """The card as it looks while an activity runs, and where each button goes.
+
+    Works on the room as it is being edited (``config``), saved or not.
+    ``view`` has the shape of control/subscribe; ``targets`` describes each
+    button by "command|device" (device empty when it is routed).
+    """
+    if (room := await _async_edited_room(hass, connection, msg)) is None:
+        return
+    room_id: str = msg[ATTR_ROOM]
+    activity_id: str = msg[ATTR_ACTIVITY]
+    activity = room[CONF_ACTIVITIES][activity_id]
+    remote = remote_view(room, activity)
+    registry = er.async_get(hass)
+
+    def platform_of(entity_id: str) -> str | None:
+        entry = registry.async_get(entity_id)
+        return entry.platform if entry is not None else None
+
+    buttons = [(c, None) for group in remote["groups"].values() for c in group["commands"]]
+    buttons += [(button["command"], button["device"]) for button in remote["buttons"]]
+    targets = {
+        f"{command}|{device_id or ''}": describe_command(
+            room, activity, command, device_id, platform_of
+        )
+        for command, device_id in buttons
+    }
+    view = {
+        "entry_id": "",
+        "room": room_id,
+        "name": room.get(CONF_NAME, room_id),
+        "area_id": room.get(CONF_AREA_ID),
+        "state": "active",
+        "activity": activity_id,
+        "error": None,
+        "warnings": [],
+        "progress": [0, 0],
+        "default_activity": room.get(CONF_DEFAULT_ACTIVITY),
+        "activities": activity_list(room),
+        "remote": remote,
+    }
+    connection.send_result(
+        msg["id"],
+        {"error": None, "view": view, "targets": targets, "routes": route_summary(room, activity)},
+    )

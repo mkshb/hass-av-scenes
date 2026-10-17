@@ -26,7 +26,8 @@ def player_calls(hass: HomeAssistant) -> list[tuple[str, dict[str, Any]]]:
 
     for service in (
         "volume_up", "volume_down", "volume_mute", "volume_set", "media_next_track",
-        "media_previous_track", "media_play_pause", "select_source",
+        "media_previous_track", "media_play_pause", "media_play", "media_pause", "media_stop",
+        "select_source",
     ):
         hass.services.async_register("media_player", service, record)
     hass.services.async_register("test", "key", record)
@@ -347,3 +348,96 @@ def test_remote_entity_must_be_a_remote() -> None:
     data["rooms"]["wz"]["devices"]["vu"]["remote_entity"] = "media_player.vu"
     with pytest.raises(vol.Invalid):
         validate_config(data)
+
+
+async def _preview(hass_ws_client, hass: HomeAssistant, room: dict[str, Any], activity: str) -> dict:
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "av_scenes/config/remote", "room": "wz", "config": room, "activity": activity}
+    )
+    return (await client.receive_json())["result"]
+
+
+async def test_card_preview_is_the_card(
+    hass: HomeAssistant, devices: Devices, player_calls, hass_ws_client
+) -> None:
+    """The preview shows what the card shows while the activity runs, and every
+    button does what the preview says."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from homeassistant.helpers import entity_registry as er
+
+    apple = MockConfigEntry(domain="apple_tv")
+    apple.add_to_hass(hass)
+    er.async_get(hass).async_get_or_create(
+        "remote", "apple_tv", "atv", suggested_object_id="atv", config_entry=apple
+    )
+    data = remote_room()
+    room = data["rooms"]["wz"]
+    room["devices"]["atv"] = {"entity_id": "media_player.atv", "remote_entity": "remote.atv"}
+    room["activities"]["tv"]["devices"].append("atv")
+    room["activities"]["tv"]["remote"]["buttons"].append({"device": "atv", "source": "Netflix"})
+    hass.states.async_set("media_player.atv", "off")
+    coordinator = await setup(hass, devices, data)
+    await coordinator.async_start_activity("wz", "tv")
+
+    preview = await _preview(hass_ws_client, hass, room, "tv")
+
+    assert preview["error"] is None
+    assert preview["view"]["remote"] == coordinator.room_view("wz")["remote"]
+    assert preview["view"]["activities"] == coordinator.room_view("wz")["activities"]
+    targets = preview["targets"]
+    assert targets["volume_up|"] == {
+        "via": "media_player", "action": "media_player.volume_up",
+        "device": "onkyo", "entity_id": ONKYO, "ready": True,
+    }
+    assert targets["ok|"]["via"] == "remote" and targets["ok|"]["key"] == "select"
+    assert targets["netflix|"] == {"via": "activity_commands", "device": None, "actions": ["test.key"]}
+    assert targets["select_source|atv"]["action"] == "media_player.select_source"
+    # "guide" goes with the navigation to the Apple TV, which has no such key
+    assert targets["guide|"]["via"] is None and targets["guide|"]["device"] == "atv"
+
+    # Press every button the preview shows: the engine runs what it announced
+    hass.states.async_set(ONKYO, "on", {"is_volume_muted": False})
+    for key, target in targets.items():
+        command, device = key.split("|")
+        player_calls.clear()
+        value = 0.3 if command == "volume_set" else "Netflix" if command == "select_source" else None
+        extra = {**({"device": device} if device else {}), **({"value": value} if value else {})}
+        if target["via"] is None:
+            # A button nothing handles: the preview says so, the action refuses it
+            with pytest.raises(ServiceValidationError):
+                await send(hass, command, **extra)
+            continue
+        await send(hass, command, **extra)
+        called, data_ = player_calls[-1]
+        if target["via"] in ("remote", "media_player"):
+            assert called == target["action"], key
+            assert data_["entity_id"] == target["entity_id"], key
+        else:
+            assert called == "test.key", key
+
+
+async def test_card_preview_routes(
+    hass: HomeAssistant, devices: Devices, hass_ws_client
+) -> None:
+    """Which device each group goes to, and why a group is missing."""
+    data = remote_room()
+    await setup(hass, devices, data)
+    room = data["rooms"]["wz"]
+    room["activities"]["tv"]["remote"].update(channels=None, transport="onkyo")
+
+    preview = await _preview(hass_ws_client, hass, room, "tv")
+
+    routes = {r["group"]: r for r in preview["routes"]}
+    assert routes["volume"]["mode"] == "auto" and routes["volume"]["device"] == "onkyo"
+    assert routes["channels"]["mode"] == "hidden" and routes["channels"]["commands"] == []
+    assert routes["transport"]["mode"] == "set" and routes["transport"]["device"] == "onkyo"
+    assert "channels" not in preview["view"]["remote"]["groups"]
+
+    # Unsaved and invalid: the error, and an unknown activity
+    room["activities"]["tv"]["remote"]["volume"] = "nope"
+    assert (await _preview(hass_ws_client, hass, room, "tv"))["error"]["path"][-1] == "volume"
+    assert (await _preview(hass_ws_client, hass, remote_room()["rooms"]["wz"], "kino"))[
+        "error"
+    ]["message"] == "Unknown activity"

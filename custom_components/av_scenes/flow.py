@@ -43,6 +43,7 @@ from .const import (
     STEP_TYPE_POWER_ON,
     STEP_TYPE_WAIT_AVAILABLE,
 )
+from .control import action_names
 from .coordinator import can_switch, power_service, power_switches, step_service
 from .model import CONF_DELAY_AFTER
 
@@ -68,26 +69,6 @@ class _Clock:
     @property
     def at(self) -> list[float]:
         return [round(self.min, 1), round(self.max, 1)]
-
-
-def hook_actions(actions: Any) -> list[str]:
-    """The actions a hook calls, also inside if/then, choose and the like."""
-    found: list[str] = []
-
-    def walk(value: Any) -> None:
-        if isinstance(value, list):
-            for item in value:
-                walk(item)
-        elif isinstance(value, dict):
-            action = value.get("action") or value.get("service")
-            if isinstance(action, str) and action not in found:
-                found.append(action)
-            for item in value.values():
-                if isinstance(item, (list, dict)):
-                    walk(item)
-
-    walk(actions)
-    return found
 
 
 def shared_outlets(
@@ -130,7 +111,7 @@ def _hook(activity: dict[str, Any], key: str, at: list[float]) -> dict[str, Any]
     actions = activity.get(key) or []
     if not actions:
         return None
-    return {"kind": "hook", "at": at, "hook": key, "actions": hook_actions(actions)}
+    return {"kind": "hook", "at": at, "hook": key, "actions": action_names(actions)}
 
 
 def _ready_row(entity_id: str, options: dict[str, Any], at: list[float], **extra: Any) -> dict[str, Any]:

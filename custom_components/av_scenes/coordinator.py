@@ -90,14 +90,11 @@ from .const import (
     ACTIVITY_STATE_IDLE,
     ACTIVITY_STATE_STARTING,
     ACTIVITY_STATE_STOPPING,
-    COMMAND_GROUPS,
     CONF_ACTION,
     CONF_ACTIVITIES,
     CONF_AREA_ID,
     CONF_BRIGHTNESS_PCT,
-    CONF_BUTTONS,
     CONF_COLOR_TEMP_KELVIN,
-    CONF_COMMAND,
     CONF_COMMANDS,
     CONF_DEFAULT_ACTIVITY,
     CONF_DATA,
@@ -107,7 +104,6 @@ from .const import (
     CONF_DEVICE,
     CONF_DEVICES,
     CONF_ENTITY_ID,
-    CONF_ICON,
     CONF_NAME,
     CONF_ON_START,
     CONF_ON_STOP,
@@ -116,7 +112,6 @@ from .const import (
     CONF_POWER_SWITCH,
     CONF_READY,
     CONF_RELOAD_INTEGRATION,
-    CONF_REMOTE,
     CONF_REMOTE_ENTITY,
     CONF_ROOMS,
     CONF_SOUND_MODE,
@@ -146,14 +141,7 @@ from .const import (
     STEP_TYPE_SET_VOLUME,
     STEP_TYPE_WAIT_AVAILABLE,
 )
-from .control import (
-    COMMAND_SELECT_SOURCE,
-    builtin_call,
-    remote_call,
-    command_group,
-    device_commands,
-    routing,
-)
+from .control import activity_list, builtin_call, remote_call, remote_view, route
 from .model import CONF_DELAY_AFTER, async_validate_config, find_missing_entities
 
 _LOGGER = logging.getLogger(__name__)
@@ -254,26 +242,6 @@ def step_service(
 
 class ActivityAborted(Exception):
     """Raised when a readiness check aborts an activity start."""
-
-
-def _button_view(button: dict[str, Any]) -> dict[str, Any]:
-    """A remote button as the card shows and sends it."""
-    if CONF_SOURCE in button:
-        # Quick select: select_source with the source as value
-        return {
-            "command": COMMAND_SELECT_SOURCE,
-            "value": button[CONF_SOURCE],
-            "name": button.get(CONF_NAME) or button[CONF_SOURCE],
-            "icon": button.get(CONF_ICON),
-            "device": button[CONF_DEVICE],
-        }
-    return {
-        "command": button[CONF_COMMAND],
-        "value": None,
-        "name": button.get(CONF_NAME),
-        "icon": button.get(CONF_ICON),
-        "device": button.get(CONF_DEVICE),
-    }
 
 
 @dataclass
@@ -726,38 +694,8 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "warnings": list(rt.warnings),
             "progress": list(rt.progress),
             "default_activity": self.default_activity(room_id),
-            "activities": [
-                {
-                    "id": activity_id,
-                    "name": data.get(CONF_NAME, activity_id),
-                    "icon": data.get(CONF_ICON),
-                }
-                for activity_id, data in activities.items()
-            ],
-            "remote": self._remote_view(room, activity) if activity is not None else None,
-        }
-
-    @staticmethod
-    def _remote_view(room: dict[str, Any], activity: dict[str, Any]) -> dict[str, Any]:
-        devices = room[CONF_DEVICES]
-        own: list[str] = list(activity[CONF_COMMANDS])
-        groups: dict[str, Any] = {}
-        for group, device_id in routing(room, activity).items():
-            available = set(own)
-            if device_id is not None:
-                available.update(device_commands(devices[device_id]))
-            commands = [c for c in COMMAND_GROUPS[group] if c in available]
-            if commands:
-                groups[group] = {
-                    "device": device_id,
-                    "entity_id": devices[device_id][CONF_ENTITY_ID] if device_id else None,
-                    "commands": commands,
-                }
-        return {
-            "groups": groups,
-            "buttons": [
-                _button_view(button) for button in activity[CONF_REMOTE][CONF_BUTTONS]
-            ],
+            "activities": activity_list(room),
+            "remote": remote_view(room, activity) if activity is not None else None,
         }
 
     async def async_send_command(
@@ -799,14 +737,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 script = self._command_scripts[(room_id, "activity", activity_id, command)]
                 await self._async_run_command_script(script, variables, context)
                 return
-            group = command_group(command)
-            if group is not None:
-                device_id = routing(room, activity)[group]
-            else:
-                device_id = next(
-                    (d for d in activity[CONF_DEVICES] if command in devices[d][CONF_COMMANDS]),
-                    None,
-                )
+            device_id = route(room, activity, command)
             if device_id is None:
                 raise ServiceValidationError(
                     translation_domain=DOMAIN,

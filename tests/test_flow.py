@@ -17,7 +17,8 @@ from .common import (
     living_room,
     setup,
 )
-from custom_components.av_scenes.flow import hook_actions, plan_start, plan_stop
+from custom_components.av_scenes.control import action_names
+from custom_components.av_scenes.flow import plan_start, plan_stop
 from custom_components.av_scenes.model import validate_config
 
 
@@ -148,14 +149,14 @@ async def test_devices_that_cannot_be_switched_are_marked(
     assert "action" not in onkyo
 
 
-def test_hook_actions() -> None:
+def test_action_names() -> None:
     actions = [
         {"if": [{"condition": "state"}], "then": [{"action": "cover.close_cover"}]},
         {"action": "light.turn_on"},
         {"delay": 3},
         {"choose": [{"sequence": [{"action": "light.turn_on"}, {"action": "script.popcorn"}]}]},
     ]
-    assert hook_actions(actions) == ["cover.close_cover", "light.turn_on", "script.popcorn"]
+    assert action_names(actions) == ["cover.close_cover", "light.turn_on", "script.popcorn"]
 
 
 async def test_websocket_flow(hass: HomeAssistant, devices: Devices, hass_ws_client) -> None:

@@ -18,6 +18,7 @@ defines navigation commands.
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from homeassistant.const import ATTR_ENTITY_ID
@@ -25,11 +26,19 @@ from homeassistant.core import State
 
 from .const import (
     COMMAND_GROUPS,
+    CONF_ACTIVITIES,
+    CONF_BUTTONS,
+    CONF_COMMAND,
     CONF_COMMANDS,
+    CONF_DEVICE,
     CONF_DEVICES,
     CONF_ENTITY_ID,
+    CONF_ICON,
+    CONF_NAME,
+    CONF_READY,
     CONF_REMOTE,
     CONF_REMOTE_ENTITY,
+    CONF_SOURCE,
     GROUP_CHANNELS,
     GROUP_NAVIGATION,
     GROUP_TRANSPORT,
@@ -156,3 +165,148 @@ def builtin_call(
             value = int(value)
         data["source"] = str(value)
     return "media_player", service, data
+
+
+def route(room: dict[str, Any], activity: dict[str, Any], command: str) -> str | None:
+    """The device a command of the running activity goes to, or None.
+
+    The activity's own ``commands`` are checked before, by the caller.
+    """
+    group = command_group(command)
+    if group is not None:
+        return routing(room, activity)[group]
+    devices: dict[str, Any] = room[CONF_DEVICES]
+    return next(
+        (d for d in activity[CONF_DEVICES] if command in devices[d][CONF_COMMANDS]), None
+    )
+
+
+def button_view(button: dict[str, Any]) -> dict[str, Any]:
+    """A remote button as the card shows and sends it."""
+    if CONF_SOURCE in button:
+        # Quick select: select_source with the source as value
+        return {
+            "command": COMMAND_SELECT_SOURCE,
+            "value": button[CONF_SOURCE],
+            "name": button.get(CONF_NAME) or button[CONF_SOURCE],
+            "icon": button.get(CONF_ICON),
+            "device": button[CONF_DEVICE],
+        }
+    return {
+        "command": button[CONF_COMMAND],
+        "value": None,
+        "name": button.get(CONF_NAME),
+        "icon": button.get(CONF_ICON),
+        "device": button.get(CONF_DEVICE),
+    }
+
+
+def remote_view(room: dict[str, Any], activity: dict[str, Any]) -> dict[str, Any]:
+    """The remote control the card shows while an activity runs."""
+    devices = room[CONF_DEVICES]
+    own: list[str] = list(activity[CONF_COMMANDS])
+    groups: dict[str, Any] = {}
+    for group, device_id in routing(room, activity).items():
+        available = set(own)
+        if device_id is not None:
+            available.update(device_commands(devices[device_id]))
+        commands = [c for c in COMMAND_GROUPS[group] if c in available]
+        if commands:
+            groups[group] = {
+                "device": device_id,
+                "entity_id": devices[device_id][CONF_ENTITY_ID] if device_id else None,
+                "commands": commands,
+            }
+    return {
+        "groups": groups,
+        "buttons": [button_view(button) for button in activity[CONF_REMOTE][CONF_BUTTONS]],
+    }
+
+
+def route_summary(room: dict[str, Any], activity: dict[str, Any]) -> list[dict[str, Any]]:
+    """Per button group: the device it goes to, whether that was chosen or
+    automatic, and the buttons it gets (none: the group is not shown)."""
+    view = remote_view(room, activity)["groups"]
+    remote = activity.get(CONF_REMOTE) or {}
+    return [
+        {
+            "group": group,
+            "device": device_id,
+            "mode": ("hidden" if device_id is None else "set") if group in remote else "auto",
+            "commands": view[group]["commands"] if group in view else [],
+        }
+        for group, device_id in routing(room, activity).items()
+    ]
+
+
+def action_names(actions: Any) -> list[str]:
+    """The actions a list of Home Assistant actions calls, also nested ones
+    (if/then, choose, parallel and the like)."""
+    found: list[str] = []
+
+    def walk(value: Any) -> None:
+        if isinstance(value, list):
+            for item in value:
+                walk(item)
+        elif isinstance(value, dict):
+            action = value.get("action") or value.get("service")
+            if isinstance(action, str) and action not in found:
+                found.append(action)
+            for item in value.values():
+                if isinstance(item, (list, dict)):
+                    walk(item)
+
+    walk(actions)
+    return found
+
+
+def describe_command(
+    room: dict[str, Any],
+    activity: dict[str, Any],
+    command: str,
+    device_id: str | None = None,
+    platform_of: Callable[[str], str | None] = lambda entity_id: None,
+) -> dict[str, Any]:
+    """Where a button of the running activity goes and what runs there.
+
+    Follows AVScenesCoordinator.async_send_command. ``platform_of`` gives
+    the integration of a remote entity, for its key names.
+    ``via`` is ``activity_commands``, ``device_commands``, ``remote``,
+    ``media_player`` or None (the button does nothing).
+    """
+    devices: dict[str, Any] = room[CONF_DEVICES]
+    if device_id is None:
+        if command in activity[CONF_COMMANDS]:
+            return {
+                "via": "activity_commands",
+                "device": None,
+                "actions": action_names(activity[CONF_COMMANDS][command]),
+            }
+        device_id = route(room, activity, command)
+        if device_id is None:
+            return {"via": None, "device": None}
+    device = devices[device_id]
+    entity_id = device[CONF_ENTITY_ID]
+    base = {"device": device_id, "entity_id": entity_id, "ready": bool(device.get(CONF_READY))}
+    if command in device[CONF_COMMANDS]:
+        return {**base, "via": "device_commands", "actions": action_names(device[CONF_COMMANDS][command])}
+    remote = device.get(CONF_REMOTE_ENTITY)
+    if remote and (call := remote_call(command, remote, platform_of(remote))):
+        return {
+            **base,
+            "via": "remote",
+            "action": "remote.send_command",
+            "entity_id": remote,
+            "key": call[2]["command"],
+        }
+    if entity_id.startswith("media_player.") and command in _MEDIA_PLAYER_SERVICES:
+        return {**base, "via": "media_player", "action": f"media_player.{_MEDIA_PLAYER_SERVICES[command]}"}
+    return {**base, "via": None}
+
+
+def activity_list(room: dict[str, Any]) -> list[dict[str, Any]]:
+    """The activities of a room as the card lists them."""
+    return [
+        {"id": activity_id, "name": data.get(CONF_NAME, activity_id), "icon": data.get(CONF_ICON)}
+        for activity_id, data in room[CONF_ACTIVITIES].items()
+    ]
