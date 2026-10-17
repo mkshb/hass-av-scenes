@@ -1,34 +1,58 @@
 start_activity:
-  name: Start Activity
-  description: Start an activity in a room
   fields:
     room:
-      name: Room
-      description: The room identifier
       required: true
       example: "living_room"
       selector:
         text:
     activity:
-      name: Activity
-      description: The activity name to start
       required: true
-      example: "watch_movie"
+      example: "TV"
       selector:
         text:
 
 stop_activity:
-  name: Stop Activity
-  description: Stop the current activity in a room
   fields:
     room:
-      name: Room
-      description: The room identifier
       required: true
       example: "living_room"
       selector:
         text:
 
+toggle_activity:
+  fields:
+    room:
+      required: true
+      example: "living_room"
+      selector:
+        text:
+    activity:
+      required: false
+      example: "TV"
+      selector:
+        text:
+
+send_command:
+  fields:
+    room:
+      required: true
+      example: "living_room"
+      selector:
+        text:
+    command:
+      required: true
+      example: "volume_up"
+      selector:
+        text:
+    value:
+      required: false
+      example: 0.4
+      selector:
+        text:
+    device:
+      required: false
+      example: "vu"
+      selector:
+        text:
+
 reload:
-  name: Reload
-  description: Reload the AV Scenes configuration

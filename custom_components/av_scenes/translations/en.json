@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Set up AV Scenes",
-        "description": "This integration allows you to create activity-based scenes for your AV equipment. After setup, use the options flow to configure rooms and activities."
+        "description": "After setup, add rooms, devices and activities in the AV Scenes panel in the sidebar, or as YAML via \"Configure\"."
       }
     },
     "abort": {
@@ -12,268 +12,93 @@
   },
   "options": {
     "step": {
-      "room_menu": {
-        "title": "Room Management",
-        "description": "Configured rooms:\n{rooms}",
-        "data": {
-          "action": "Action"
-        }
-      },
-      "add_room": {
-        "title": "Add Room",
-        "description": "{info}",
-        "data": {
-          "room_id": "Area / Room",
-          "room_name": "Custom Display Name (optional)"
-        }
-      },
-      "add_custom_room": {
-        "title": "Add Custom Room",
-        "description": "{info}",
-        "data": {
-          "custom_room_id": "Room ID (e.g., home_cinema)",
-          "custom_room_name": "Room Name (e.g., Home Cinema)"
+      "init": {
+        "title": "AV Scenes",
+        "menu_options": {
+          "select_room": "Edit room",
+          "add_room": "Add room",
+          "delete_room": "Delete room",
+          "edit_all": "Edit whole configuration (YAML)"
         }
       },
       "select_room": {
-        "title": "Select Room",
-        "description": "Choose a room to edit",
+        "title": "Edit room",
         "data": {
-          "room_id": "Room"
+          "room": "Room"
+        }
+      },
+      "add_room": {
+        "title": "Add room",
+        "description": "Pick a Home Assistant area or enter a name. The editor for the new room opens next.",
+        "data": {
+          "area_id": "Area",
+          "name": "Name"
         }
       },
       "delete_room": {
-        "title": "Delete Room",
-        "description": "{warning}",
+        "title": "Delete room",
+        "description": "The room is deleted with all its devices and activities.",
         "data": {
-          "room_id": "Room to Delete"
+          "room": "Room"
         }
       },
-      "activity_menu": {
-        "title": "Activities for {room}",
-        "description": "Configured activities:\n{activities}",
+      "edit_room": {
+        "title": "Room \"{room}\"",
+        "description": "Devices, activities and steps as YAML. Step types: `power_on`, `power_off`, `set_source`, `set_volume`, `set_sound_mode`, `set_brightness`, `set_color_temp`, `set_position`, `set_tilt`, `call_action`, `delay`, `wait_available`. `on_start` and `on_stop` take any Home Assistant actions. For the remote control card: `icon` and `order` per activity, `remote` (button routing and extra buttons) and `commands` (own buttons as actions) – see the README. Example:\n\n```yaml\nname: Wohnzimmer\ndevices:\n  onkyo:\n    entity_id: media_player.onkyo_receiver\n    power_switch: switch.steckdose_multimedia\n    ready: {timeout: 60, reload_integration: true, on_timeout: abort}\n  beamer:\n    entity_id: media_player.epson_ehtw7400\n    power_switch: switch.steckdose_beamer\n    ready: {timeout: 60, reload_integration: true, on_timeout: continue}\n    delay_after_off: 180\nactivities:\n  tv:\n    name: TV\n    devices: [onkyo, beamer]\n    steps:\n      - {type: set_source, device: onkyo, source: SAT}\n      - {type: set_volume, device: onkyo, volume_level: 0.35}\n    on_start:\n      - action: cover.close_cover\n        target: {area_id: wohnzimmer}\n```",
         "data": {
-          "action": "Action"
+          "config": "Configuration"
         }
       },
-      "add_activity": {
-        "title": "Add Activity to {room}",
-        "description": "Create a new activity (e.g., Watch Movie, Listen Music)",
+      "edit_all": {
+        "title": "Whole configuration",
+        "description": "All rooms as YAML – handy for backups, copying or larger changes.",
         "data": {
-          "activity_name": "Activity Name"
+          "config": "Configuration"
         }
       },
-      "select_activity": {
-        "title": "Select Activity",
-        "description": "Choose an activity to edit in {room}",
-        "data": {
-          "activity_name": "Activity"
-        }
-      },
-      "edit_activity": {
-        "title": "Edit Activity: {activity}",
-        "description": "Current steps:\n{steps}",
-        "data": {
-          "action": "Action"
-        }
-      },
-      "rename_activity": {
-        "title": "Rename Activity",
-        "description": "Current name: {old_name}",
-        "data": {
-          "new_name": "New Activity Name"
-        }
-      },
-      "delete_activity": {
-        "title": "Delete Activity",
-        "description": "Select activity to delete from {room}\n\n{warning}",
-        "data": {
-          "activity_name": "Activity to Delete"
-        }
-      },
-      "copy_activity": {
-        "title": "Copy Activity",
-        "description": "{info}",
-        "data": {
-          "source_activity": "Activity to Copy",
-          "new_activity_name": "Name for New Activity"
-        }
-      },
-      "add_device": {
-        "title": "Add Device to {activity}",
-        "description": "Select a device (media player, light, switch, cover) to add to this activity in {room}",
-        "data": {
-          "entity_id": "Device"
-        }
-      },
-      "add_device_details": {
-        "title": "Configure {domain}: {device}",
-        "description": "Set configuration for {device}",
-        "data": {
-          "input_source": "Input Source",
-          "power_on_delay": "Power-on Delay (seconds)",
-          "is_volume_controller": "Use this device for volume control",
-          "volume_level": "Initial Volume Level (%)",
-          "brightness": "Brightness (%)",
-          "color_temp": "Color Temperature (Mired, 153-500)",
-          "transition": "Transition Time (seconds)",
-          "position": "Position (%)",
-          "tilt_position": "Tilt Position (%)"
-        }
-      },
-      "device_menu": {
-        "title": "Devices in Activity",
-        "description": "Configured devices:\n{devices}",
-        "data": {
-          "action": "Action"
-        }
-      },
-      "select_device_to_edit": {
-        "title": "Select Device to Edit",
-        "description": "Choose a device to edit",
-        "data": {
-          "device_id": "Device"
-        }
-      },
-      "edit_device": {
-        "title": "Edit {domain}: {device}",
-        "description": "Modify device configuration",
-        "data": {
-          "input_source": "Input Source",
-          "power_on_delay": "Power-on Delay (seconds)",
-          "is_volume_controller": "Use this device for volume control",
-          "volume_level": "Initial Volume Level (%)",
-          "brightness": "Brightness (%)",
-          "color_temp": "Color Temperature (Mired, 153-500)",
-          "transition": "Transition Time (seconds)",
-          "position": "Position (%)",
-          "tilt_position": "Tilt Position (%)"
-        }
-      },
-      "select_device_to_delete": {
-        "title": "Delete Device",
-        "description": "{warning}",
-        "data": {
-          "device_id": "Device to Delete"
-        }
-      },
-      "reorder_device": {
-        "title": "Change Device Order",
-        "description": "{info}",
-        "data": {
-          "device_id": "Device to Move",
-          "direction": "Direction"
-        }
-      },
-      "step_menu": {
-        "title": "Steps in Activity",
-        "description": "Configured steps:\n{steps}",
-        "data": {
-          "action": "Action"
-        }
-      },
-      "add_step": {
-        "title": "Add Step",
-        "description": "{info}",
-        "data": {
-          "step_type": "Step Type"
-        }
-      },
-      "add_step_entity": {
-        "title": "Select Device for Step",
-        "description": "Choose a device for: {step_type}",
-        "data": {
-          "entity_id": "Device"
-        }
-      },
-      "add_step_config": {
-        "title": "Configure {step_type}: {device}",
-        "description": "{info}",
-        "data": {
-          "delay_after": "Delay after (seconds)",
-          "input_source": "Input Source",
-          "volume_level": "Volume (%)",
-          "sound_mode": "Sound Mode",
-          "brightness": "Brightness (%)",
-          "color_temp": "Color Temperature (Mired, 153-500)",
-          "transition": "Transition Time (seconds)",
-          "position": "Position (%)",
-          "tilt_position": "Tilt Position (%)",
-          "action": "Action (e.g., light.turn_on)",
-          "service_data": "Service Data (JSON, optional)"
-        }
-      },
-      "add_step_delay_config": {
-        "title": "Configure Wait Time",
-        "description": "{info}",
-        "data": {
-          "delay_after": "How many seconds to wait?"
-        }
-      },
-      "add_step_action_config": {
-        "title": "Call Action",
-        "description": "{info}",
-        "data": {
-          "action": "Action (e.g., light.turn_on)",
-          "service_data": "Service Data (JSON, optional)",
-          "delay_after": "Delay after (seconds)"
-        }
-      },
-      "select_step_to_edit": {
-        "title": "Select Step to Edit",
-        "description": "Choose a step to edit",
-        "data": {
-          "step_id": "Step"
-        }
-      },
-      "edit_step": {
-        "title": "Edit {step_type}: {device}",
-        "description": "{info}",
-        "data": {
-          "delay_after": "Delay after (seconds)",
-          "input_source": "Input Source",
-          "volume_level": "Volume (%)",
-          "sound_mode": "Sound Mode",
-          "brightness": "Brightness (%)",
-          "color_temp": "Color Temperature (Mired, 153-500)",
-          "transition": "Transition Time (seconds)",
-          "position": "Position (%)",
-          "tilt_position": "Tilt Position (%)",
-          "action": "Action (e.g., light.turn_on)",
-          "service_data": "Service Data (JSON, optional)"
-        }
-      },
-      "select_step_to_delete": {
-        "title": "Delete Step",
-        "description": "{warning}",
-        "data": {
-          "step_id": "Step to Delete"
-        }
-      },
-      "reorder_step": {
-        "title": "Change Step Order",
-        "description": "{info}",
-        "data": {
-          "step_id": "Step to Move",
-          "direction": "Direction"
+      "confirm_missing": {
+        "title": "Unknown entities",
+        "description": "These entities do not exist in Home Assistant:\n\n{entities}\n\nA device without power is usually still known to the registry – this is most likely a typo or a renamed entity.",
+        "menu_options": {
+          "save_anyway": "Save anyway",
+          "back_to_room": "Back to the editor",
+          "back_to_all": "Back to the editor"
         }
       }
     },
     "error": {
-      "already_exists": "This item already exists",
-      "entity_not_found": "Entity not found in Home Assistant",
-      "invalid_name": "Invalid name provided",
-      "room_not_found": "Room not found",
-      "unknown": "Unknown error occurred"
+      "invalid_config": "Invalid configuration – {error}",
+      "name_required": "Please pick an area or enter a name",
+      "room_exists": "A room with this name already exists"
     }
   },
   "entity": {
     "sensor": {
-      "room_config": {
-        "name": "{room_name} Configuration",
+      "activity": {
+        "name": "Activity",
         "state": {
-          "idle": "Idle"
+          "idle": "Idle",
+          "starting": "Starting",
+          "active": "Active",
+          "stopping": "Stopping",
+          "error": "Error"
         }
+      }
+    },
+    "select": {
+      "scene": {
+        "name": "Scene",
+        "state": {
+          "idle": "—",
+          "starting": "Starting …",
+          "stopping": "Stopping …",
+          "error": "Error"
+        }
+      }
+    },
+    "switch": {
+      "active": {
+        "name": "Active"
       }
     }
   },
@@ -305,6 +130,75 @@
     "reload": {
       "name": "Reload",
       "description": "Reloads the AV Scenes configuration"
+    },
+    "toggle_activity": {
+      "name": "Toggle activity",
+      "description": "Stops the running activity of a room, or starts one – the last used one if none is given.",
+      "fields": {
+        "room": {
+          "name": "Room",
+          "description": "The room identifier"
+        },
+        "activity": {
+          "name": "Activity",
+          "description": "Optional: activity to start when nothing runs in the room"
+        }
+      }
+    },
+    "send_command": {
+      "name": "Send command",
+      "description": "Sends a remote control command (e.g. volume_up, channel_down, ok) to the device the running activity routes it to.",
+      "fields": {
+        "room": {
+          "name": "Room",
+          "description": "The room identifier"
+        },
+        "command": {
+          "name": "Command",
+          "description": "volume_up, volume_down, mute, volume_set, channel_up, channel_down, play_pause, play, pause, stop, next, previous, up, down, left, right, ok, back, menu, home, info, guide, exit – or a name from `commands`"
+        },
+        "value": {
+          "name": "Value",
+          "description": "Value for the command, e.g. 0.4 for volume_set or the source for select_source"
+        },
+        "device": {
+          "name": "Device",
+          "description": "Optional: send to this device instead of the routed one; works while nothing runs"
+        }
+      }
+    }
+  },
+  "issues": {
+    "missing_entity": {
+      "title": "AV Scenes: entity {entity_id} is missing",
+      "description": "In room **{room}**, `{path}` refers to `{entity_id}`. This entity does not exist in Home Assistant – it was probably renamed or removed. Fix the entry in the AV Scenes configuration."
+    },
+    "activity_aborted": {
+      "title": "AV Scenes: start of \"{activity}\" aborted",
+      "description": "In room **{room}**, the start of activity **{activity}** was aborted:\n\n`{reason}`\n\nCheck that the device has power and its integration loads, or raise `timeout` or set `on_timeout: continue`. This message disappears with the next start or stop of the room."
+    }
+  },
+  "exceptions": {
+    "unknown_room": {
+      "message": "AV Scenes has no room \"{room}\""
+    },
+    "unknown_activity": {
+      "message": "Room \"{room}\" has no activity \"{activity}\""
+    },
+    "unknown_device": {
+      "message": "Room \"{room}\" has no device \"{device}\""
+    },
+    "no_activity": {
+      "message": "Nothing runs in room \"{room}\", so there is no device for \"{command}\""
+    },
+    "unknown_command": {
+      "message": "No device in room \"{room}\" handles the command \"{command}\""
+    },
+    "command_timeout": {
+      "message": "Command \"{command}\" did not finish in time ({target})"
+    },
+    "device_not_ready": {
+      "message": "Command \"{command}\" not sent: {reason}"
     }
   }
 }

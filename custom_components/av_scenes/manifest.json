@@ -1,12 +1,14 @@
 {
   "domain": "av_scenes",
   "name": "AV Scenes",
+  "after_dependencies": ["frontend", "lovelace", "panel_custom"],
   "codeowners": ["@mkshb"],
   "config_flow": true,
-  "dependencies": [],
+  "dependencies": ["http", "websocket_api"],
   "documentation": "https://github.com/mkshb/hass-av-scenes",
   "integration_type": "hub",
   "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/mkshb/hass-av-scenes/issues",
   "requirements": [],
-  "version": "0.3.1"
+  "version": "0.7.0"
 }
