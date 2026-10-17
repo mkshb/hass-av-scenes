@@ -8,6 +8,7 @@
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 
 import "./editor";
+import { commandLabel } from "./labels";
 import { localize } from "./localize";
 import { clock, nowPlaying, type NowPlaying } from "./now-playing";
 import { coolingText, progressText } from "./progress";
@@ -192,6 +193,9 @@ export class AvScenesRemoteCard extends LitElement {
       message.entry_id = this._config.entry_id;
     }
     const subscription = this.hass.connection.subscribeMessage<RoomView | null>((view) => {
+      if (this._unsubscribe !== subscription) {
+        return; // from a subscription replaced by a newer one (another room)
+      }
       this._view = view;
       this._loaded = true;
       this._subscribeError = undefined;
@@ -366,7 +370,14 @@ export class AvScenesRemoteCard extends LitElement {
     const doing = busy ? progressText(view.current, Date.now(), (key, params) => this._t(key, params)) : undefined;
     return html`
       ${busy
-        ? html`<div class="progress" role="progressbar" aria-valuenow=${pct}>
+        ? html`<div
+            class="progress"
+            role="progressbar"
+            aria-label=${this._t(`state.${view.state}`)}
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow=${pct}
+          >
             <div style="width: ${view.state === "starting" ? pct : 100}%"></div>
           </div>`
         : nothing}
@@ -484,11 +495,18 @@ export class AvScenesRemoteCard extends LitElement {
     </div>`;
   }
 
-  private _key(command: string, cls = "key", content?: TemplateResult | string): TemplateResult {
+  private _key(
+    command: string,
+    cls = "key",
+    content?: TemplateResult | string,
+    pressed?: boolean,
+  ): TemplateResult {
+    const label = commandLabel(command, (key) => this._t(key));
     return html`<button
       class=${cls}
-      title=${this._t(`command.${command}`)}
-      aria-label=${this._t(`command.${command}`)}
+      title=${label}
+      aria-label=${label}
+      aria-pressed=${pressed === undefined ? nothing : String(pressed)}
       @pointerdown=${(ev: PointerEvent) => this._pressStart(ev, command)}
       @pointerup=${() => this._pressEnd(true)}
       @pointerleave=${() => this._pressEnd(false)}
@@ -509,8 +527,9 @@ export class AvScenesRemoteCard extends LitElement {
             "mute",
             `key label ${muted ? "active" : ""}`,
             html`<ha-icon .icon=${muted ? "mdi:volume-off" : "mdi:volume-high"}></ha-icon>`,
+            muted,
           )
-        : html`<span class="label">VOL</span>`}
+        : html`<span class="label">${this._t("rocker.volume")}</span>`}
       ${group.commands.includes("volume_down") ? this._key("volume_down") : html`<span></span>`}
     </div>`;
   }
@@ -518,7 +537,7 @@ export class AvScenesRemoteCard extends LitElement {
   private _renderChannelRocker(group: GroupView): TemplateResult {
     return html`<div class="rocker">
       ${group.commands.includes("channel_up") ? this._key("channel_up") : html`<span></span>`}
-      <span class="label">CH</span>
+      <span class="label">${this._t("rocker.channels")}</span>
       ${group.commands.includes("channel_down") ? this._key("channel_down") : html`<span></span>`}
     </div>`;
   }
@@ -661,7 +680,7 @@ export class AvScenesRemoteCard extends LitElement {
   }
 
   private _customButton(button: ButtonView): TemplateResult {
-    const label = button.name ?? this._t(`command.${button.command}`);
+    const label = button.name ?? commandLabel(button.command, (key) => this._t(key));
     const extra: Record<string, unknown> = {};
     if (button.device) extra.device = button.device;
     if (button.value !== null && button.value !== undefined) extra.value = button.value;

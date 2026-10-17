@@ -8,6 +8,7 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 
 import "../av-scenes-card";
+import { commandLabel } from "../labels";
 import type { HomeAssistant, RoomView } from "../types";
 import type { Room } from "./model";
 import { t } from "./strings";
@@ -114,7 +115,7 @@ export class AvScenesRemotePreview extends LitElement {
   private _button(view: RoomView, key: string): string {
     const [command, device] = key.split("|");
     const custom = view.remote?.buttons.find((b) => b.command === command && (b.device ?? "") === device);
-    return custom?.name || this._t(`command.${command}`);
+    return custom?.name || commandLabel(command, (key) => this._t(key));
   }
 
   private _onCall(ev: CustomEvent<{ service: string; data: Record<string, unknown> }>): void {
@@ -173,7 +174,7 @@ export class AvScenesRemotePreview extends LitElement {
                 ? `${this._device(route.device)} (${this._t(`preview.mode_${route.mode}`)})`
                 : this._t("preview.no_device");
           const keys = route.commands.length
-            ? route.commands.map((c) => this._t(`command.${c}`)).join(", ")
+            ? route.commands.map((c) => commandLabel(c, (key) => this._t(key))).join(", ")
             : route.mode === "hidden"
               ? ""
               : route.device
