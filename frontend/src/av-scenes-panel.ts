@@ -5,7 +5,7 @@
  * config/validate and saves it with config/save; the integration applies it
  * like a save in the options flow.
  */
-import { LitElement, css, html, nothing, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 
 import "./panel/guide";
 import "./panel/room-editor";
@@ -157,14 +157,14 @@ export class AvScenesPanel extends LitElement {
     </form>`;
   }
 
-  protected updated(): void {
+  protected updated(changed: PropertyValues): void {
     if (this.hass && !this._rooms && !this._loading && !this._loadError) {
       void this._load();
     }
-    // Focus the name field of a new room
-    const input = this.shadowRoot?.querySelector<HTMLInputElement>("form.new-room input");
-    if (input && this.shadowRoot?.activeElement !== input && !input.value) {
-      input.focus();
+    // Focus the name field of a new room once, when it opens; not on every
+    // update, which would take the focus away from other fields
+    if (changed.has("_adding") && this._adding) {
+      this.shadowRoot?.querySelector<HTMLInputElement>("form.new-room input")?.focus();
     }
   }
 
@@ -182,6 +182,19 @@ export class AvScenesPanel extends LitElement {
   private _discard(): void {
     this._rooms = JSON.parse(this._original) as Rooms;
     this._banner = undefined;
+    // A room added and discarded is gone again
+    if (!this._selected || !(this._selected in this._rooms)) {
+      this._selected = Object.keys(this._rooms)[0];
+    }
+  }
+
+  /** Load the saved configuration again, after asking if that loses changes. */
+  private _reload(): void {
+    if (this._dirty && !window.confirm(this._t("reload_confirm"))) {
+      return;
+    }
+    this._loadError = undefined;
+    void this._load();
   }
 
   private async _save(force = false): Promise<void> {
@@ -196,11 +209,8 @@ export class AvScenesPanel extends LitElement {
     }
     this._saving = true;
     try {
-      const check = await this.hass.callWS<Check>({
-        type: "av_scenes/config/validate",
-        rooms,
-        ...(this._selected ? { room: this._selected } : {}),
-      });
+      // All rooms: the save covers them all, also those not on screen
+      const check = await this.hass.callWS<Check>({ type: "av_scenes/config/validate", rooms });
       if (check.error) {
         this._banner = {
           kind: "invalid",
@@ -259,7 +269,10 @@ export class AvScenesPanel extends LitElement {
 
   private _renderContent(): TemplateResult {
     if (this._loadError) {
-      return html`<div class="banner error">${this._t("load_error", { error: this._loadError })}</div>`;
+      return html`<div class="banner error">
+        ${this._t("load_error", { error: this._loadError })}
+        <button class="flat" @click=${() => this._reload()}>${this._t("retry")}</button>
+      </div>`;
     }
     if (!this._rooms || !this._ready) {
       return html`<div class="empty">${this._t("loading")}</div>`;
@@ -312,13 +325,17 @@ export class AvScenesPanel extends LitElement {
       case "conflict":
         return html`<div class="banner error">
           ${this._t("conflict")}
-          <button class="flat" @click=${() => this._load()}>${this._t("reload")}</button>
+          <button class="flat" @click=${() => this._reload()}>${this._t("reload")}</button>
         </div>`;
       case "missing":
         return html`<div class="banner warning">
           ${this._t("missing")}
           <ul>
-            ${banner.missing.map((m) => html`<li><code>${m.entity_id}</code> (${m.path})</li>`)}
+            ${banner.missing.map(
+              (m) => html`<li>
+                <code>${m.entity_id}</code> (${this._rooms?.[m.room]?.name ?? m.room}: ${m.path})
+              </li>`,
+            )}
           </ul>
           <div class="sub">${this._t("missing_hint")}</div>
           <button class="primary" @click=${() => this._save(true)}>${this._t("save_anyway")}</button>
@@ -348,8 +365,12 @@ export class AvScenesPanel extends LitElement {
     }
     .main-title {
       flex: 1;
+      min-width: 0;
       font-size: 20px;
       margin-left: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .dirty {
       font-size: 0.85em;
@@ -486,6 +507,16 @@ export class AvScenesPanel extends LitElement {
     .empty {
       color: var(--secondary-text-color);
       padding: 24px 0;
+    }
+    @media (max-width: 600px) {
+      /* Room for the buttons: Save is only enabled with unsaved changes anyway */
+      .dirty {
+        display: none;
+      }
+      .toolbar button.primary,
+      .toolbar button.flat {
+        padding: 6px 12px;
+      }
     }
   `;
 }
