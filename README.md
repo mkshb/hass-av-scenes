@@ -69,6 +69,7 @@ The panel edits everything the [configuration](#configuration) below describes:
 
 - **Devices** — entity and power outlet with Home Assistant's entity picker; boot time, wait times and readiness check as fields; own `commands` in a YAML field. Renaming a device ID updates every reference; a device that an activity still uses cannot be deleted.
 - **Activities** — name, icon, position, devices in power-on order, steps (source and sound mode lists come from the device), remote button routing, and `on_start` / `on_stop` in Home Assistant's action editor, the same as in automations. The activity ID is part of the entity IDs and cannot be changed.
+- **Flow** — on every activity's page: what a start, a switch from another activity or a stop does with this configuration, step by step: which outlets and devices are switched with which action, boot times, readiness checks with their timeout and what happens on a timeout, steps, the actions on start and stop, outlets cut in the background, and the earliest and latest time of each row. It follows every change before it is saved; see also [ACTIVITY_FLOW.md](ACTIVITY_FLOW.md).
 - **YAML** — the whole room as YAML, for anything the forms do not cover.
 
 **Save** checks the configuration first: errors are shown with their exact place, unknown entities of the room as a warning you can confirm. If the configuration was changed elsewhere in the meantime (a second browser, the YAML editor below), the panel asks you to reload instead of overwriting it.

@@ -27,6 +27,7 @@ import {
   type Sources,
   type Step,
 } from "./model";
+import "./flow-view";
 import { t } from "./strings";
 
 type Tab = "devices" | "activities" | "yaml";
@@ -557,6 +558,17 @@ export class AvScenesRoomEditor extends LitElement {
             STEP_TYPES.map((type) => ({ value: type, label: this._t(`step.${type}`) })),
             (type) => this._setActivity(id, { ...activity, steps: [...(activity.steps ?? []), { type }] }),
           )}`,
+      )}
+
+      ${this._card(
+        this._t("section_flow"),
+        this._t("hint_flow"),
+        html`<av-scenes-flow
+          .hass=${this.hass}
+          .room=${this.room}
+          .roomId=${this.roomId}
+          .activityId=${id}
+        ></av-scenes-flow>`,
       )}
 
       ${this._card(
