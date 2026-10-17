@@ -177,6 +177,81 @@ _RESTORED_STATES = {
 _current_room: ContextVar["RoomRuntime | None"] = ContextVar("av_scenes_room", default=None)
 
 
+def power_service(entity_id: str, *, on: bool) -> tuple[str, str]:
+    """The action that switches a device on or off: covers open and close."""
+    if entity_id.startswith("cover."):
+        return "cover", "open_cover" if on else "close_cover"
+    return "homeassistant", SERVICE_TURN_ON if on else SERVICE_TURN_OFF
+
+
+def can_switch(hass: HomeAssistant, entity_id: str, *, on: bool) -> bool:
+    """False for a media player that cannot be switched, e.g. a Sonos speaker.
+
+    Without a known state (unavailable) the call is tried anyway.
+    """
+    if not entity_id.startswith("media_player."):
+        return True
+    state = hass.states.get(entity_id)
+    if state is None or "supported_features" not in state.attributes:
+        return True
+    feature = MediaPlayerEntityFeature.TURN_ON if on else MediaPlayerEntityFeature.TURN_OFF
+    return bool(state.attributes["supported_features"] & feature)
+
+
+def power_switches(devices: dict[str, Any], device_ids: list[str]) -> list[str]:
+    """Power switches of the given devices, in order, without duplicates."""
+    switches: list[str] = []
+    for device_id in device_ids:
+        switch = devices[device_id].get(CONF_POWER_SWITCH)
+        if switch and switch not in switches:
+            switches.append(switch)
+    return switches
+
+
+def step_service(
+    step_type: str, step: dict[str, Any], entity_id: str | None
+) -> tuple[str, str, dict[str, Any], dict[str, Any] | None] | None:
+    """The action a settings step runs: domain, service, data and target."""
+    target = {ATTR_ENTITY_ID: entity_id}
+    if step_type == STEP_TYPE_SET_SOURCE:
+        return "media_player", "select_source", {"source": step[CONF_SOURCE]}, target
+    if step_type == STEP_TYPE_SET_VOLUME:
+        return (
+            "media_player",
+            "volume_set",
+            {"volume_level": step[CONF_VOLUME_LEVEL]},
+            target,
+        )
+    if step_type == STEP_TYPE_SET_SOUND_MODE:
+        return (
+            "media_player",
+            "select_sound_mode",
+            {"sound_mode": step[CONF_SOUND_MODE]},
+            target,
+        )
+    if step_type in (STEP_TYPE_SET_BRIGHTNESS, STEP_TYPE_SET_COLOR_TEMP):
+        data = {
+            key: step[key]
+            for key in (CONF_BRIGHTNESS_PCT, CONF_COLOR_TEMP_KELVIN, CONF_TRANSITION)
+            if key in step
+        }
+        return "light", SERVICE_TURN_ON, data, target
+    if step_type == STEP_TYPE_SET_POSITION:
+        return "cover", "set_cover_position", {"position": step[CONF_POSITION]}, target
+    if step_type == STEP_TYPE_SET_TILT:
+        return (
+            "cover",
+            "set_cover_tilt_position",
+            {"tilt_position": step[CONF_TILT_POSITION]},
+            target,
+        )
+    if step_type == STEP_TYPE_CALL_ACTION:
+        domain, service = step[CONF_ACTION].split(".", 1)
+        return domain, service, dict(step.get(CONF_DATA) or {}), step.get(CONF_TARGET)
+    _LOGGER.warning("Unknown step type: %s", step_type)
+    return None
+
+
 class ActivityAborted(Exception):
     """Raised when a readiness check aborts an activity start."""
 
@@ -830,7 +905,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         ir.async_delete_issue(self.hass, DOMAIN, self._aborted_issue_id(room_id))
         self._changed()
 
-        needed_switches = self._power_switches(devices, new_devices)
+        needed_switches = power_switches(devices, new_devices)
         for switch in needed_switches:
             self._cancel_cut(rt, switch)
 
@@ -955,7 +1030,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if switch:
                 cooldown[switch] = max(cooldown.get(switch, 0), device[CONF_DELAY_AFTER_OFF])
 
-        still_needed = set(self._power_switches(devices, new_devices))
+        still_needed = set(power_switches(devices, new_devices))
         still_needed |= self._switches_used_elsewhere(rt)
         for switch, delay in cooldown.items():
             if switch not in still_needed:
@@ -1002,7 +1077,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 activity = room[CONF_ACTIVITIES].get(other.activity) if room else None
                 if activity is not None:
                     switches.update(
-                        self._power_switches(room[CONF_DEVICES], activity[CONF_DEVICES])
+                        power_switches(room[CONF_DEVICES], activity[CONF_DEVICES])
                     )
         return switches
 
@@ -1052,7 +1127,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 used_elsewhere = self._switches_used_elsewhere(rt)
                 switches = [
                     s
-                    for s in reversed(self._power_switches(devices, device_ids))
+                    for s in reversed(power_switches(devices, device_ids))
                     if s not in used_elsewhere
                 ]
                 for switch in switches:
@@ -1240,54 +1315,11 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self._async_power_off(entity_id, context)
             return
 
-        call = self._service_for_step(step_type, step, entity_id)
+        call = step_service(step_type, step, entity_id)
         if call is None:
             return
         domain, service, data, target = call
         await self._async_call(domain, service, data, context, step_type, target)
-
-    @staticmethod
-    def _service_for_step(
-        step_type: str, step: dict[str, Any], entity_id: str | None
-    ) -> tuple[str, str, dict[str, Any], dict[str, Any] | None] | None:
-        target = {ATTR_ENTITY_ID: entity_id}
-        if step_type == STEP_TYPE_SET_SOURCE:
-            return "media_player", "select_source", {"source": step[CONF_SOURCE]}, target
-        if step_type == STEP_TYPE_SET_VOLUME:
-            return (
-                "media_player",
-                "volume_set",
-                {"volume_level": step[CONF_VOLUME_LEVEL]},
-                target,
-            )
-        if step_type == STEP_TYPE_SET_SOUND_MODE:
-            return (
-                "media_player",
-                "select_sound_mode",
-                {"sound_mode": step[CONF_SOUND_MODE]},
-                target,
-            )
-        if step_type in (STEP_TYPE_SET_BRIGHTNESS, STEP_TYPE_SET_COLOR_TEMP):
-            data = {
-                key: step[key]
-                for key in (CONF_BRIGHTNESS_PCT, CONF_COLOR_TEMP_KELVIN, CONF_TRANSITION)
-                if key in step
-            }
-            return "light", SERVICE_TURN_ON, data, target
-        if step_type == STEP_TYPE_SET_POSITION:
-            return "cover", "set_cover_position", {"position": step[CONF_POSITION]}, target
-        if step_type == STEP_TYPE_SET_TILT:
-            return (
-                "cover",
-                "set_cover_tilt_position",
-                {"tilt_position": step[CONF_TILT_POSITION]},
-                target,
-            )
-        if step_type == STEP_TYPE_CALL_ACTION:
-            domain, service = step[CONF_ACTION].split(".", 1)
-            return domain, service, dict(step.get(CONF_DATA) or {}), step.get(CONF_TARGET)
-        _LOGGER.warning("Unknown step type: %s", step_type)
-        return None
 
     def _is_off(self, entity_id: str) -> bool:
         state = self.hass.states.get(entity_id)
@@ -1297,18 +1329,6 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """The integration that provides an entity, e.g. apple_tv."""
         entry = er.async_get(self.hass).async_get(entity_id)
         return entry.platform if entry is not None else None
-
-    def _supports(self, entity_id: str, feature: MediaPlayerEntityFeature) -> bool:
-        """False for a media player that cannot be switched, e.g. a Sonos speaker.
-
-        Without a known state (unavailable) the call is tried anyway.
-        """
-        if not entity_id.startswith("media_player."):
-            return True
-        state = self.hass.states.get(entity_id)
-        if state is None or "supported_features" not in state.attributes:
-            return True
-        return bool(state.attributes["supported_features"] & feature)
 
     def _entity_unavailable(self, entity_id: str) -> bool:
         """True when the integration reports its entity as not available.
@@ -1321,33 +1341,21 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return entity is not None and not entity.available
 
     async def _async_power_on(self, entity_id: str, context: Context) -> None:
-        if not self._supports(entity_id, MediaPlayerEntityFeature.TURN_ON):
+        if not can_switch(self.hass, entity_id, on=True):
             _LOGGER.debug("%s cannot be switched on, skipping", entity_id)
             return
         if self._entity_unavailable(entity_id):
             self._warn(f"turn on: {entity_id} is not reachable, it was not switched on")
             return
-        if entity_id.startswith("cover."):
-            await self._async_call(
-                "cover", "open_cover", {ATTR_ENTITY_ID: entity_id}, context, "open"
-            )
-        else:
-            await self._async_call(
-                "homeassistant", SERVICE_TURN_ON, {ATTR_ENTITY_ID: entity_id}, context, "turn on"
-            )
+        domain, service = power_service(entity_id, on=True)
+        await self._async_call(domain, service, {ATTR_ENTITY_ID: entity_id}, context, "turn on")
 
     async def _async_power_off(self, entity_id: str, context: Context) -> None:
-        if not self._supports(entity_id, MediaPlayerEntityFeature.TURN_OFF):
+        if not can_switch(self.hass, entity_id, on=False):
             _LOGGER.debug("%s cannot be switched off, skipping", entity_id)
             return
-        if entity_id.startswith("cover."):
-            await self._async_call(
-                "cover", "close_cover", {ATTR_ENTITY_ID: entity_id}, context, "close"
-            )
-        else:
-            await self._async_call(
-                "homeassistant", SERVICE_TURN_OFF, {ATTR_ENTITY_ID: entity_id}, context, "turn off"
-            )
+        domain, service = power_service(entity_id, on=False)
+        await self._async_call(domain, service, {ATTR_ENTITY_ID: entity_id}, context, "turn off")
 
     async def _async_call(
         self,
@@ -1397,16 +1405,6 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._warn(f"{key} failed: {err}")
 
         return self.hass.async_create_task(_run(), f"{DOMAIN} {room_id} {key}")
-
-    @staticmethod
-    def _power_switches(devices: dict[str, Any], device_ids: list[str]) -> list[str]:
-        """Power switches of the given devices, in order, without duplicates."""
-        switches: list[str] = []
-        for device_id in device_ids:
-            switch = devices[device_id].get(CONF_POWER_SWITCH)
-            if switch and switch not in switches:
-                switches.append(switch)
-        return switches
 
     def _aborted_issue_id(self, room_id: str) -> str:
         return f"activity_aborted_{self.entry.entry_id}_{room_id}"

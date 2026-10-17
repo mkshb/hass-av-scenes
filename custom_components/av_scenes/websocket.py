@@ -3,8 +3,9 @@
 control/*: what the card shows. Commands go through the regular services
 (``av_scenes.start_activity``, ``send_command`` …).
 
-config/*: read, check and save the configuration (admins only), and the
-remembered source lists of the media players for the pickers. Saving
+config/*: read, check and save the configuration (admins only), the
+remembered source lists of the media players for the pickers, and the flow
+of an activity (what a start or stop switches, see flow.py). Saving
 takes the revision that was read, so changes made elsewhere in the meantime
 (options flow, a second browser) are not overwritten silently.
 """
@@ -21,8 +22,16 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.json import json_bytes_sorted
 
-from .const import ATTR_ROOM, CONF_ROOMS, DOMAIN, SIGNAL_ROOMS_UPDATED
+from .const import (
+    ATTR_ACTIVITY,
+    ATTR_ROOM,
+    CONF_ACTIVITIES,
+    CONF_ROOMS,
+    DOMAIN,
+    SIGNAL_ROOMS_UPDATED,
+)
 from .coordinator import AVScenesCoordinator
+from .flow import plan_start, plan_stop
 from .model import async_validate_config, find_missing_entities
 
 
@@ -53,6 +62,7 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_config_validate)
     websocket_api.async_register_command(hass, ws_config_save)
     websocket_api.async_register_command(hass, ws_config_sources)
+    websocket_api.async_register_command(hass, ws_config_flow)
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/control/rooms"})
@@ -253,3 +263,51 @@ def ws_config_sources(
     for coordinator in _coordinators(hass):
         sources.update(coordinator.source_lists)
     connection.send_result(msg["id"], sources)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/config/flow",
+        vol.Required(ATTR_ROOM): str,
+        vol.Required("config"): dict,
+        vol.Required(ATTR_ACTIVITY): str,
+        vol.Optional("mode", default="start"): vol.In(["start", "stop"]),
+        vol.Optional("from"): vol.Any(None, str),
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_config_flow(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """What a start or stop of an activity switches, when and how.
+
+    Works on the room as it is being edited (``config``), saved or not. A
+    configuration that does not validate yields its error instead.
+    """
+    room_id: str = msg[ATTR_ROOM]
+    try:
+        config = await async_validate_config(hass, {CONF_ROOMS: {room_id: msg["config"]}})
+    except vol.Invalid as err:
+        error = {"path": [str(p) for p in err.path], "message": err.msg}
+        connection.send_result(msg["id"], {"error": error})
+        return
+    room = config[CONF_ROOMS][room_id]
+    activity: str = msg[ATTR_ACTIVITY]
+    previous: str | None = msg.get("from")
+    if activity not in room[CONF_ACTIVITIES] or (
+        previous is not None and previous not in room[CONF_ACTIVITIES]
+    ):
+        connection.send_result(
+            msg["id"], {"error": {"path": [], "message": "Unknown activity"}}
+        )
+        return
+    # Other rooms as saved, for outlets they share with this one
+    others: dict[str, Any] = {}
+    for coordinator in _coordinators(hass):
+        others.update(coordinator.rooms)
+    if msg["mode"] == "stop":
+        flow = plan_stop(hass, room_id, room, activity, others)
+    else:
+        flow = plan_start(hass, room_id, room, activity, previous, others)
+    connection.send_result(msg["id"], {"error": None, **flow})
