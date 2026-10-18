@@ -52,7 +52,7 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.components.media_player import MediaPlayerEntityFeature
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import (
     ATTR_ENTITY_ID,
     SERVICE_TURN_OFF,
@@ -155,6 +155,11 @@ from .model import CONF_DELAY_AFTER, async_validate_config, find_missing_entitie
 _LOGGER = logging.getLogger(__name__)
 
 STORAGE_VERSION = 1
+
+# While waiting for a device, an integration still in setup_retry is reloaded
+# again after this many seconds instead of waiting for its growing back-off
+# (5, 10, 20, 40 s ...), which can miss a device that came up meanwhile
+RELOAD_RETRY_INTERVAL = 5.0
 
 # States in which a device counts as switched off
 _OFF_STATES = {STATE_OFF, STATE_STANDBY, STATE_UNAVAILABLE, STATE_UNKNOWN, "closed"}
@@ -1293,9 +1298,14 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         unsub: CALLBACK_TYPE = async_track_state_change_event(
             self.hass, [entity_id], _state_changed
         )
+        retry: asyncio.Task | None = None
         try:
             if options[CONF_RELOAD_INTEGRATION] if reload is None else reload:
                 self._reload_integration_of(entity_id)
+            if options[CONF_RELOAD_INTEGRATION]:
+                retry = self.hass.async_create_background_task(
+                    self._async_retry_reload(entity_id), f"{DOMAIN} retry {entity_id}"
+                )
             # The entity may have come up between the first check and subscribing
             if self._state_ok(self.hass.states.get(entity_id), wanted):
                 return True
@@ -1326,9 +1336,33 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         finally:
             # A started reload is left to finish on its own
             unsub()
+            if retry is not None:
+                retry.cancel()
+
+    async def _async_retry_reload(self, entity_id: str) -> None:
+        """Reload an entity's integration again while it is in setup_retry.
+
+        Runs until cancelled. A reload that is still running is waited for, so
+        one attempt follows the other with a pause in between.
+        """
+        entity = er.async_get(self.hass).async_get(entity_id)
+        if entity is None or entity.config_entry_id is None:
+            return
+        entry_id = entity.config_entry_id
+        while True:
+            running = self._reloads.get(entry_id)
+            if running is not None and not running.done():
+                await asyncio.shield(running)
+            await asyncio.sleep(RELOAD_RETRY_INTERVAL)
+            entry = self.hass.config_entries.async_get_entry(entry_id)
+            if entry is None:
+                return
+            if entry.state is ConfigEntryState.SETUP_RETRY:
+                _LOGGER.debug("%s is still not set up, reloading it again", entry.title)
+                self._reload_integration_of(entity_id)
 
     def _reload_integration_of(self, entity_id: str) -> asyncio.Task | None:
-        """Reload the config entry that provides an entity, once.
+        """Reload the config entry that provides an entity; a running reload is reused.
 
         Resets the back-off of an entry in setup_retry. The registry keeps the
         entry even while the entity has no state.

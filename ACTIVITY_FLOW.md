@@ -112,7 +112,7 @@ flowchart TD
     r1 -- no --> r3
     r2 --> r3{"Ready?<br/>ready.entity_id, else the device:<br/>one of ready.state,<br/>else anything but unavailable"}
     r3 -- yes --> o1
-    r3 -- no --> r4["With reload_integration (not done yet):<br/>reload the integration once.<br/>Wait for the state, at most ready.timeout"]
+    r3 -- no --> r4["With reload_integration (not done yet):<br/>reload the integration, again every 5 s<br/>while it is in setup_retry.<br/>Wait for the state, at most ready.timeout"]
     r4 -- ready --> o1
     r4 -- "timeout,<br/>on_timeout: continue" --> o1
     r4 -- "timeout,<br/>on_timeout: abort" --> err(["Start aborted:<br/>room error"])

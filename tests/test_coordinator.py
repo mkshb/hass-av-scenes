@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from homeassistant.core import Context, HomeAssistant, ServiceCall
+from homeassistant.core import Context, HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import entity_registry as er, issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.util import dt as dt_util
@@ -117,6 +117,83 @@ async def test_hanging_reload_does_not_hold_up_the_start(
     assert any("did not finish within 1 s" in w for w in coordinator.runtime("wz").warnings)
     never.set()
     await hass.async_block_till_done(wait_background_tasks=True)
+
+
+async def test_reload_repeated_while_in_setup_retry(
+    hass: HomeAssistant, devices: Devices
+) -> None:
+    """A device that boots longer than the first reload: its integration is
+    reloaded again while it is in setup_retry, not left to its back-off."""
+    from homeassistant.config_entries import ConfigEntryState
+
+    other = MockConfigEntry(domain="onkyo")
+    other.add_to_hass(hass)
+    hass.states.async_remove(ONKYO)
+    er.async_get(hass).async_get_or_create(
+        "media_player", "onkyo", "x", suggested_object_id="onkyo_receiver",
+        config_entry=other,
+    )
+    coordinator = await setup(hass, devices, living_room())
+    hass.states.async_set(ONKYO, "unavailable")
+    reloads: list[str] = []
+
+    async def fake_reload(entry_id: str) -> bool:
+        reloads.append(entry_id)
+        await asyncio.sleep(0)
+        if len(reloads) < 3:
+            # The receiver does not answer yet
+            other.mock_state(hass, ConfigEntryState.SETUP_RETRY)
+            return False
+        other.mock_state(hass, ConfigEntryState.LOADED)
+        hass.states.async_set(ONKYO, "off")
+        return True
+
+    with (
+        patch("custom_components.av_scenes.coordinator.RELOAD_RETRY_INTERVAL", 0.01),
+        patch.object(hass.config_entries, "async_reload", side_effect=fake_reload),
+    ):
+        async with asyncio.timeout(5):
+            await coordinator.async_start_activity("wz", "musik")
+
+    assert reloads == [other.entry_id] * 3
+    assert ("homeassistant.turn_on", (ONKYO,)) in devices.names()
+    assert coordinator.activity_states["wz"] == "active"
+    other.mock_state(hass, ConfigEntryState.NOT_LOADED)  # nothing to unload
+
+
+async def test_no_repeated_reload_without_setup_retry(
+    hass: HomeAssistant, devices: Devices
+) -> None:
+    """An integration that is loaded but whose device stays unavailable is
+    reloaded once only."""
+    from homeassistant.config_entries import ConfigEntryState
+
+    other = MockConfigEntry(domain="onkyo")
+    other.add_to_hass(hass)
+    hass.states.async_remove(ONKYO)
+    er.async_get(hass).async_get_or_create(
+        "media_player", "onkyo", "x", suggested_object_id="onkyo_receiver",
+        config_entry=other,
+    )
+    data = living_room()
+    data["rooms"]["wz"]["devices"]["onkyo"]["ready"].update(timeout=1, on_timeout="continue")
+    coordinator = await setup(hass, devices, data)
+    hass.states.async_set(ONKYO, "unavailable")
+    reloads: list[str] = []
+
+    async def fake_reload(entry_id: str) -> bool:
+        reloads.append(entry_id)
+        other.mock_state(hass, ConfigEntryState.LOADED)
+        return True
+
+    with (
+        patch("custom_components.av_scenes.coordinator.RELOAD_RETRY_INTERVAL", 0.01),
+        patch.object(hass.config_entries, "async_reload", side_effect=fake_reload),
+    ):
+        await coordinator.async_start_activity("wz", "musik")
+
+    assert reloads == [other.entry_id]
+    other.mock_state(hass, ConfigEntryState.NOT_LOADED)  # nothing to unload
 
 
 async def test_wait_available_immediate(hass: HomeAssistant, devices: Devices) -> None:
@@ -617,6 +694,9 @@ def _record_current(hass: HomeAssistant, coordinator: AVScenesCoordinator) -> li
     """What the card is told the room is busy with, each time it changes."""
     seen: list[dict] = []
 
+    # A callback runs right away in the event loop; a plain function would run
+    # in a worker thread and could miss states that change quickly
+    @callback
     def changed() -> None:
         current = coordinator.room_view("wz")["current"]
         if current and (not seen or seen[-1] != current):

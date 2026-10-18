@@ -110,7 +110,7 @@ devices:
 |---------|-------------|
 | Device profiles | Each device is described once per room: entity, power outlet, readiness check, warm-up and cool-down time |
 | Power outlets | Devices without standby power are supplied via a switch; shared outlets stay on as long as any device on them is needed, also by another room |
-| Readiness check | Waits until a device's entity is available instead of guessing delays; reloads its integration once to skip the `setup_retry` back-off |
+| Readiness check | Waits until a device's entity is available instead of guessing delays; reloads its integration to skip the `setup_retry` back-off |
 | Cool-down | `delay_after_off` per device, e.g. 180 s for a projector before its outlet may be switched off |
 | Smart switching | Devices the new activity does not use are switched off; shared devices stay on and are reconfigured |
 | Hooks | `on_start` / `on_stop` take any Home Assistant actions — conditions, covers, lights, scripts |
@@ -248,7 +248,7 @@ activities:
 | `entity_id` | the device | Check another entity, e.g. `remote.apple_tv`: the Apple TV integration reports its media player as `off` while it is not connected, while its remote is `on` only when connected |
 | `state` | — | Wait for this state (or a list of states) instead of "not `unavailable`" |
 | `timeout` | `60` | Seconds to wait for the entity |
-| `reload_integration` | `false` | Reload the integration that provides the entity once, before waiting. This skips the back-off of an integration in `setup_retry`, which can otherwise take more than a minute after the device got power. When the device's `power_switch` was just switched on, the integration is reloaded after the boot time even if the device looks ready: some integrations keep reporting the last state (e.g. `off`) while the device has no power. A reload that does not finish within `timeout` does not hold up the start; it goes on with a warning |
+| `reload_integration` | `false` | Reload the integration that provides the entity before waiting, and again every 5 s while it stays in `setup_retry` because the device does not answer yet. This skips the back-off of an integration in `setup_retry`, whose growing pauses (5, 10, 20, 40 s …) can otherwise take more than a minute after the device got power. When the device's `power_switch` was just switched on, the integration is reloaded after the boot time even if the device looks ready: some integrations keep reporting the last state (e.g. `off`) while the device has no power. A reload that does not finish within `timeout` does not hold up the start; it goes on with a warning |
 | `on_timeout` | `abort` | `abort` stops the start and puts the room into `error`; `continue` logs a warning and goes on |
 
 The check also runs before a remote button (`send_command`) reaches the device: if the connection was lost while the activity runs, it is brought back first, then the command is sent. Example for an Apple TV:
