@@ -33,7 +33,7 @@ A script that switches on a receiver, a projector and a set-top box works until 
 
 ### Remote control card
 
-Power, activities, start progress with what it is busy with, now playing, volume, d-pad or touch surface, channels and own buttons.
+Power, activities, start progress with what it is busy with, now playing, volume, d-pad or touch surface, channels, own buttons and device settings.
 
 <p>
   <img src="https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/card.png" alt="Remote control card while an activity runs, light theme" width="49%">
@@ -45,6 +45,13 @@ With arrow keys instead of the touch surface, here for a satellite receiver with
 <p>
   <img src="https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/card-dpad.png" alt="Remote control card with arrow keys, light theme" width="49%">
   <img src="https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/card-dpad-dark.png" alt="Remote control card with arrow keys, dark theme" width="49%">
+</p>
+
+Below the buttons, the settings of the activity's devices: sound mode with favourites, tone controls and speaker levels of the receiver, the inputs of projector and Apple TV:
+
+<p>
+  <img src="https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/card-settings.png" alt="Device settings opened in the remote control card, light theme" width="49%">
+  <img src="https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/card-settings-dark.png" alt="Device settings opened in the remote control card, dark theme" width="49%">
 </p>
 
 ### Configuration panel

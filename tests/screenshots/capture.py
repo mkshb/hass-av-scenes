@@ -35,7 +35,7 @@ ROOM = "living_room"
 DASHBOARD = "av-scenes-demo"
 OUTLETS = ["switch.av_rack_outlet", "switch.projector_outlet"]
 # preview shows the live state of Movie, which card leaves running; dpad switches to TV
-SHOTS = ("card", "panel", "flow", "preview", "dpad")
+SHOTS = ("card", "settings", "panel", "flow", "preview", "dpad")
 THEMES = ("light", "dark")
 
 
@@ -173,6 +173,25 @@ def card(page: Page, theme: str) -> None:
     frames.append((final, 3))
     final.save(image("card", theme))
     save_gif(frames, image("card", theme, "gif"), width=420)
+
+
+def settings(page: Page, theme: str) -> None:
+    """The device settings of the running Movie, opened."""
+    element = open_card(page)
+    # Tall enough for the whole opened card
+    page.set_viewport_size({"width": 412, "height": 2000})
+    toggle = element.get_by_role("button", name="Settings")
+    toggle.click()
+    page.wait_for_timeout(800)
+    # The lower part of the card, with its border and padding
+    card = element.locator("ha-card").bounding_box()
+    top = element.locator(".settings").bounding_box()["y"] - 12
+    page.screenshot(
+        path=image("card-settings", theme),
+        clip={"x": card["x"], "y": top, "width": card["width"], "height": card["y"] + card["height"] - top},
+    )
+    # Closed again, as every other image shows it
+    toggle.click()
 
 
 def dpad(page: Page, theme: str) -> None:
