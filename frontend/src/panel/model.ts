@@ -1,0 +1,343 @@
+/**
+ * Configuration model of the panel: the stored YAML structure, edited as
+ * plain objects. Validation stays in the integration (config/validate).
+ */
+import type { HomeAssistant } from "../types";
+
+export type Obj = Record<string, unknown>;
+
+export interface Device extends Obj {
+  entity_id: string;
+  name?: string;
+  power_switch?: string | null;
+  remote_entity?: string | null;
+  ready?: {
+    entity_id?: string;
+    state?: string | string[];
+    timeout?: number;
+    reload_integration?: boolean;
+    on_timeout?: string;
+  } | null;
+  delay_after_power?: number;
+  delay_after_on?: number;
+  delay_after_off?: number;
+  commands?: Obj;
+}
+
+export interface Step extends Obj {
+  type: string;
+  device?: string;
+}
+
+export interface Activity extends Obj {
+  name?: string;
+  icon?: string;
+  order?: number;
+  devices?: string[];
+  steps?: Step[];
+  on_start?: unknown[];
+  on_stop?: unknown[];
+  remote?: Obj;
+  commands?: Obj;
+}
+
+export interface Room extends Obj {
+  name?: string;
+  area_id?: string | null;
+  default_activity?: string | null;
+  devices?: Record<string, Device>;
+  activities?: Record<string, Activity>;
+}
+
+export type Rooms = Record<string, Room>;
+
+export const STEP_TYPES = [
+  "power_on",
+  "power_off",
+  "set_source",
+  "set_volume",
+  "set_sound_mode",
+  "set_brightness",
+  "set_color_temp",
+  "set_position",
+  "set_tilt",
+  "call_action",
+  "delay",
+  "wait_available",
+] as const;
+
+export const GROUPS = ["volume", "channels", "transport", "navigation"] as const;
+
+const SECONDS = { number: { min: 0, max: 3600, step: 1, mode: "box", unit_of_measurement: "s" } };
+const PERCENT = { number: { min: 0, max: 100, step: 1, mode: "slider" } };
+
+/** Remembered source lists per media player (av_scenes/config/sources). */
+export type Sources = Record<string, string[]>;
+
+/** A list of a media player (source_list, sound_mode_list): live while it is
+ * on, else the remembered one. */
+export function deviceList(
+  hass: HomeAssistant,
+  remembered: Sources,
+  entity: string | undefined,
+  attribute = "source_list",
+): string[] {
+  if (!entity) {
+    return [];
+  }
+  const live = hass.states[entity]?.attributes[attribute];
+  if (Array.isArray(live) && live.length) {
+    return live.map(String);
+  }
+  return remembered[entity] ?? [];
+}
+
+/** Source list of a media player: live while it is on, else the remembered one. */
+export function sourceList(hass: HomeAssistant, sources: Sources, entity: string | undefined): string[] {
+  return deviceList(hass, sources, entity, "source_list");
+}
+
+/** Device settings the card can offer, and the list each one chooses from. */
+export const SETTINGS = ["source", "sound_mode"] as const;
+/** Entities a device setting can be: shown as slider, list or on/off key. */
+export const SETTING_ENTITY_DOMAINS = ["number", "input_number", "select", "input_select", "switch", "input_boolean"] as const;
+export const SETTING_LISTS: Record<string, string> = {
+  source: "source_list",
+  sound_mode: "sound_mode_list",
+};
+
+/** Numbers and selects per device entity that a device offers automatically
+ * (av_scenes/config/related). */
+export type Related = Record<string, string[]>;
+
+/** What a device offers without a choice, as the integration does: source
+ * and sound mode of a media player with a known list, and its related
+ * numbers and selects. */
+export function deviceAutoSettings(
+  hass: HomeAssistant,
+  room: Room,
+  deviceId: string,
+  lists: Record<string, Sources>,
+  related: Related = {},
+): Obj[] {
+  const entity = room.devices?.[deviceId]?.entity_id;
+  if (!entity) {
+    return [];
+  }
+  const found: Obj[] = [];
+  if (entity.startsWith("media_player.")) {
+    for (const setting of SETTINGS) {
+      const attribute = SETTING_LISTS[setting];
+      if (deviceList(hass, lists[attribute] ?? {}, entity, attribute).length) {
+        found.push({ device: deviceId, setting });
+      }
+    }
+  }
+  for (const other of related[entity] ?? []) {
+    found.push({ device: deviceId, entity: other });
+  }
+  return found;
+}
+
+/** The settings a device offers in the card: its own choice, else automatic. */
+export function deviceSettings(
+  hass: HomeAssistant,
+  room: Room,
+  deviceId: string,
+  lists: Record<string, Sources>,
+  related: Related = {},
+): Obj[] {
+  const own = room.devices?.[deviceId]?.settings;
+  if (Array.isArray(own)) {
+    return own.map((s) => ({ ...(s as Obj), device: deviceId }));
+  }
+  return deviceAutoSettings(hass, room, deviceId, lists, related);
+}
+
+/** The settings the card shows for an activity without its own choice:
+ * those of its devices. */
+export function autoSettings(
+  hass: HomeAssistant,
+  room: Room,
+  activity: Activity,
+  lists: Record<string, Sources>,
+  related: Related = {},
+): Obj[] {
+  return (activity.devices ?? []).flatMap((d) => deviceSettings(hass, room, d, lists, related));
+}
+
+/** A quick-select button: selects a source on its device. */
+export function isQuickSelect(button: unknown): button is Obj {
+  return typeof button === "object" && button !== null && "source" in button;
+}
+
+/** ha-form schema of a step, depending on its type. */
+export function stepSchema(
+  hass: HomeAssistant,
+  room: Room,
+  step: Step,
+  label: (key: string) => string,
+  sources: Sources = {},
+  soundModes: Sources = {},
+): Obj[] {
+  const devices = Object.entries(room.devices ?? {}).map(([id, d]) => ({
+    value: id,
+    label: d.name ? `${d.name} (${id})` : id,
+  }));
+  const deviceField = { name: "device", required: true, selector: { select: { options: devices, mode: "dropdown" } } };
+  const entity = step.device ? room.devices?.[step.device]?.entity_id : undefined;
+  const fields: Record<string, Obj[]> = {
+    power_on: [deviceField],
+    power_off: [deviceField],
+    set_source: [
+      deviceField,
+      { name: "source", required: true, selector: { select: { options: sourceList(hass, sources, entity), custom_value: true, mode: "dropdown" } } },
+    ],
+    set_volume: [
+      deviceField,
+      { name: "volume_level", required: true, selector: { number: { min: 0, max: 1, step: 0.01, mode: "slider" } } },
+    ],
+    set_sound_mode: [
+      deviceField,
+      { name: "sound_mode", required: true, selector: { select: { options: deviceList(hass, soundModes, entity, "sound_mode_list"), custom_value: true, mode: "dropdown" } } },
+    ],
+    set_brightness: [
+      deviceField,
+      { name: "brightness_pct", selector: PERCENT },
+      { name: "color_temp_kelvin", selector: { color_temp: { unit: "kelvin", min: 2000, max: 6500 } } },
+      { name: "transition", selector: SECONDS },
+    ],
+    set_color_temp: [
+      deviceField,
+      { name: "color_temp_kelvin", required: true, selector: { color_temp: { unit: "kelvin", min: 2000, max: 6500 } } },
+    ],
+    set_position: [deviceField, { name: "position", required: true, selector: PERCENT }],
+    set_tilt: [deviceField, { name: "tilt_position", required: true, selector: PERCENT }],
+    call_action: [
+      { name: "action", required: true, selector: { text: {} } },
+      { name: "target", selector: { target: {} } },
+      { name: "data", selector: { object: {} } },
+    ],
+    delay: [],
+    wait_available: [
+      { ...deviceField, required: false },
+      { name: "entity_id", selector: { entity: {} } },
+      { name: "timeout", selector: SECONDS },
+      { name: "reload_integration", selector: { boolean: {} } },
+      {
+        name: "on_timeout",
+        selector: {
+          select: {
+            options: [
+              { value: "abort", label: label("on_timeout_abort") },
+              { value: "continue", label: label("on_timeout_continue") },
+            ],
+            mode: "dropdown",
+          },
+        },
+      },
+    ],
+  };
+  return [...(fields[step.type] ?? []), { name: "delay_after", selector: SECONDS }];
+}
+
+/** Drop empty optional values so the stored YAML stays tidy. */
+export function clean<T extends Obj>(value: T, keep: string[] = []): T {
+  const out: Obj = {};
+  for (const [key, v] of Object.entries(value)) {
+    if (keep.includes(key)) {
+      out[key] = v;
+    } else if (v === undefined || v === null || v === "") {
+      continue;
+    } else if (Array.isArray(v) && v.length === 0) {
+      continue;
+    } else if (typeof v === "object" && !Array.isArray(v) && Object.keys(v as Obj).length === 0) {
+      continue;
+    } else {
+      out[key] = v;
+    }
+  }
+  return out as T;
+}
+
+/** Like clean, but a group set to null (hidden) stays hidden, and an empty
+ * settings list (no settings in the card) stays. */
+export function cleanRemote(remote: Obj): Obj {
+  const keep: string[] = GROUPS.filter((g) => remote[g] === null);
+  if (Array.isArray(remote.settings)) {
+    keep.push("settings");
+  }
+  return clean(remote, keep);
+}
+
+/** Home Assistant's slugify: lower case, no accents, underscores. */
+export function slugify(text: string): string {
+  return text
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/ß/g, "ss")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+export function uniqueKey(base: string, taken: Iterable<string>): string {
+  const used = new Set(taken);
+  const root = base || "item";
+  if (!used.has(root)) {
+    return root;
+  }
+  let n = 2;
+  while (used.has(`${root}_${n}`)) {
+    n += 1;
+  }
+  return `${root}_${n}`;
+}
+
+/** Where a device is referenced: activity names. */
+export function deviceUsage(room: Room, deviceId: string): string[] {
+  const where: string[] = [];
+  for (const [id, activity] of Object.entries(room.activities ?? {})) {
+    const used =
+      (activity.devices ?? []).includes(deviceId) ||
+      (activity.steps ?? []).some((s) => s.device === deviceId) ||
+      GROUPS.some((g) => activity.remote?.[g] === deviceId) ||
+      ((activity.remote?.buttons as Obj[] | undefined) ?? []).some(
+        (b) => typeof b === "object" && b?.device === deviceId,
+      );
+    if (used) {
+      where.push(activity.name ?? id);
+    }
+  }
+  return where;
+}
+
+/** Rename a device and every reference to it. */
+export function renameDevice(room: Room, from: string, to: string): Room {
+  const devices: Record<string, Device> = {};
+  for (const [id, device] of Object.entries(room.devices ?? {})) {
+    devices[id === from ? to : id] = device;
+  }
+  const swap = (v: unknown) => (v === from ? to : v);
+  const activities: Record<string, Activity> = {};
+  for (const [id, a] of Object.entries(room.activities ?? {})) {
+    const remote = a.remote ? { ...a.remote } : undefined;
+    if (remote) {
+      for (const g of GROUPS) {
+        if (g in remote) remote[g] = swap(remote[g]);
+      }
+      if (Array.isArray(remote.buttons)) {
+        remote.buttons = remote.buttons.map((b) =>
+          typeof b === "object" && b ? { ...(b as Obj), device: swap((b as Obj).device) } : b,
+        );
+      }
+    }
+    activities[id] = clean({
+      ...a,
+      devices: a.devices?.map((d) => swap(d) as string),
+      steps: a.steps?.map((s) => (s.device === from ? { ...s, device: to } : s)),
+      remote,
+    });
+  }
+  return { ...room, devices, activities };
+}

@@ -7,17 +7,18 @@ from typing import Any
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     DOMAIN,
-    ACTIVITY_STATE_ACTIVE,
+    ACTIVITY_STATE_IDLE,
     ATTR_CURRENT_ACTIVITY,
     ATTR_AVAILABLE_ACTIVITIES,
-    DEVICE_NAME_PREFIX,
 )
 from .coordinator import AVScenesCoordinator
+from .model import switch_unique_id
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,6 +44,9 @@ async def async_setup_entry(
 class RoomActivitySwitch(CoordinatorEntity, SwitchEntity):
     """Representation of a room activity status."""
 
+    _attr_has_entity_name = True
+    _attr_translation_key = "active"
+
     def __init__(
         self,
         coordinator: AVScenesCoordinator,
@@ -51,15 +55,15 @@ class RoomActivitySwitch(CoordinatorEntity, SwitchEntity):
         """Initialize the switch."""
         super().__init__(coordinator)
         self.room_id = room_id
-        
-        room_name = coordinator.rooms[room_id].get("name", room_id)
-        self._attr_name = f"{room_name} Activity"
-        self._attr_unique_id = f"{DOMAIN}_activity_{room_id}"
+        self._attr_unique_id = switch_unique_id(room_id)
 
     @property
     def is_on(self) -> bool:
-        """Return true if an activity is running."""
-        return self.room_id in self.coordinator.active_activities
+        """Return true if an activity runs, starts or failed halfway."""
+        return (
+            self.coordinator.activity_states.get(self.room_id, ACTIVITY_STATE_IDLE)
+            != ACTIVITY_STATE_IDLE
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -77,26 +81,21 @@ class RoomActivitySwitch(CoordinatorEntity, SwitchEntity):
         return attrs
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn on is not supported - use scenes to start activities."""
-        _LOGGER.warning(
-            "Cannot turn on activity switch directly. Use a scene to start an activity."
-        )
+        """Start the last activity of the room (or the first one)."""
+        activity = self.coordinator.default_activity(self.room_id)
+        if activity is None:
+            _LOGGER.warning("Room '%s' has no activity to start", self.room_id)
+            return
+        await self.coordinator.async_start_activity(self.room_id, activity)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the current activity."""
         await self.coordinator.async_stop_activity(self.room_id)
 
     @property
-    def device_info(self) -> dict:
-        """Return device information for grouping."""
-        room_name = self.coordinator.rooms[self.room_id].get("name", self.room_id)
-        return {
-            "identifiers": {(DOMAIN, self.room_id)},
-            "name": f"{DEVICE_NAME_PREFIX}: {room_name}",
-            "manufacturer": "AV Scenes",
-            "model": "Activity Controller",
-            "suggested_area": room_name,
-        }
+    def device_info(self) -> DeviceInfo:
+        """The room's device, in the room's area."""
+        return self.coordinator.device_info(self.room_id)
 
     @callback
     def _handle_coordinator_update(self) -> None:

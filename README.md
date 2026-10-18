@@ -2,17 +2,112 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
 [![GitHub Release](https://img.shields.io/github/release/mkshb/hass-av-scenes.svg)](https://github.com/mkshb/hass-av-scenes/releases)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.11%2B-41BDF5.svg)](https://www.home-assistant.io/)
 [![License](https://img.shields.io/github/license/mkshb/hass-av-scenes.svg)](LICENSE)
 
-Activity-based AV control for Home Assistant — an open-source alternative to Logitech Harmony and Roomie Remote.
+**One button for the whole home cinema.** Activity-based AV control for Home Assistant — an open-source alternative to Logitech Harmony and Roomie Remote.
+
+<p>
+  <img src="https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/card.gif" alt="The remote control card starting the Movie activity, light theme" width="49%">
+  <img src="https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/card-dark.gif" alt="The remote control card starting the Movie activity, dark theme" width="49%">
+</p>
+
+AV Scenes controls the devices of a room (AV receiver, projector, TV, set-top box, lights, covers, power outlets) through named **activities** such as "TV" or "Movie". Starting an activity powers the devices it needs, waits until they are actually ready, applies sources, sound modes and volume, and runs any Home Assistant actions you attach. Switching to another activity only touches what differs; stopping shuts everything down in reverse order, with cool-down times and power outlets last.
 
 ---
 
-## Overview
+## Why AV Scenes
 
-AV Scenes lets you control groups of devices (AV receivers, projectors, TVs, lights, outlets, covers) through named activities. Each activity executes a sequence of steps in order, with optional delays between them. When switching activities, devices that are no longer needed are turned off automatically; devices shared between activities stay on and are simply reconfigured.
+A script that switches on a receiver, a projector and a set-top box works until one of them takes longer to boot than its delay. AV Scenes handles what such scripts get wrong:
 
-Everything is configured through the Home Assistant UI — no YAML required.
+- **No guessed delays.** Each device is switched on once its entity is actually available. Integrations that gave up while the device had no power are reloaded instead of waiting minutes for their retry.
+- **Power outlets done right.** Devices on switched outlets boot in parallel. A projector keeps its power for its cool-down before the outlet is cut, and an outlet shared with another room stays on while that room needs it.
+- **Switching, not restarting.** Going from TV to Music switches off the projector and the set-top box, changes the receiver's input and leaves it on.
+- **One remote for every activity.** The dashboard card shows only what the running activity offers and sends volume to the receiver, channels to the set-top box and arrow keys to the Apple TV.
+- **Set up in the UI.** Devices and activities are edited in a sidebar panel with Home Assistant's own pickers; a flow view shows step by step what a start, a switch and a stop will do before you save. YAML stays available.
+- **Wall buttons and automations.** Every room is a switch, a select and a sensor; `toggle_activity` and `send_command` make a single push button or a volume rocker on the wall work like the remote.
+
+---
+
+## Screenshots
+
+### Remote control card
+
+Power, activities, start progress with what it is busy with, now playing, volume, d-pad or touch surface, channels, own buttons and device settings.
+
+<p>
+  <img src="https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/card.png" alt="Remote control card while an activity runs, light theme" width="49%">
+  <img src="https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/card-dark.png" alt="Remote control card while an activity runs, dark theme" width="49%">
+</p>
+
+With arrow keys instead of the touch surface, here for a satellite receiver with its channel keys:
+
+<p>
+  <img src="https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/card-dpad.png" alt="Remote control card with arrow keys, light theme" width="49%">
+  <img src="https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/card-dpad-dark.png" alt="Remote control card with arrow keys, dark theme" width="49%">
+</p>
+
+Below the buttons, the settings of the activity's devices: sound mode with favourites, tone controls and speaker levels of the receiver, the inputs of projector and Apple TV:
+
+<p>
+  <img src="https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/card-settings.png" alt="Device settings opened in the remote control card, light theme" width="49%">
+  <img src="https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/card-settings-dark.png" alt="Device settings opened in the remote control card, dark theme" width="49%">
+</p>
+
+### Configuration panel
+
+Rooms, devices and activities in the sidebar, each edited on its own page with help texts.
+
+![Configuration panel with the devices and activities of a room, light theme](https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/panel.png)
+
+![Configuration panel with the devices and activities of a room, dark theme](https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/panel-dark.png)
+
+### Flow of an activity
+
+What starting, switching and stopping do with the configuration you are editing, with the earliest and latest time of each row.
+
+![Flow view of an activity in the configuration panel, light theme](https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/flow.png)
+
+![Flow view of an activity in the configuration panel, dark theme](https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/flow-dark.png)
+
+### Remote control preview
+
+The card as it looks while the activity runs. A tap shows which device gets the button and what runs there instead of sending it.
+
+![Remote control preview in the configuration panel, light theme](https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/preview.png)
+
+![Remote control preview in the configuration panel, dark theme](https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/preview-dark.png)
+
+---
+
+## Coming from Harmony
+
+The concepts carry over almost one to one:
+
+| Harmony | AV Scenes |
+|---------|-----------|
+| Device | Device: entity, power outlet, readiness check, boot and cool-down time |
+| Activity | Activity: its devices in power-on order, then steps |
+| Power-on order and inter-device delay | Device order; readiness check instead of a fixed delay, `delay_after_on` where a device needs one |
+| Inputs and settings of an activity | Steps: `set_source`, `set_sound_mode`, `set_volume` |
+| Switching between activities | Smart switching: only devices the new activity does not use are switched off |
+| Button mapping per activity | Button groups (`volume`, `channels`, `transport`, `navigation`) routed to a device per activity |
+| Favorite channels and custom buttons | Extra buttons, quick select for inputs and apps |
+| Help button for devices out of sync | Not needed: devices report their real state through their Home Assistant integrations, and a device that is already on is not toggled |
+| Harmony remote | The card in the browser and the Home Assistant app, wall buttons through `toggle_activity` and `send_command` |
+
+Devices that only understand infrared keep working through any Home Assistant integration that sends IR codes, such as a Harmony Hub or a Broadlink: an own command calls `remote.send_command` on it (see [Own commands and buttons](#own-commands-and-buttons)):
+
+```yaml
+devices:
+  onkyo:
+    entity_id: media_player.onkyo_receiver
+    commands:
+      volume_up:
+        action: remote.send_command
+        target: {entity_id: remote.harmony_hub}
+        data: {device: Onkyo AV Receiver, command: VolumeUp}
+```
 
 ---
 
@@ -20,296 +115,542 @@ Everything is configured through the Home Assistant UI — no YAML required.
 
 | Feature | Description |
 |---------|-------------|
-| Multi-room | Independent activity management per room |
-| 11 step types | Power on/off, source, volume, sound mode, brightness, color temp, position, tilt, delay, any HA action |
-| Smart activity switching | Devices no longer needed in the new activity are turned off automatically |
-| Ordered shutdown | When an activity stops, devices are powered off in reverse start order, respecting the original `delay_after` values |
-| Flexible delays | Configurable wait time (0–60 s) after each step |
-| Race condition protection | Concurrent calls for the same room are serialized |
-| 4 entity platforms | Scene, Switch, Sensor, Select — one virtual HA device per room |
-| Areas integration | Each virtual device links automatically to the matching HA Area |
-| UI configuration | Full setup via the config flow and options flow |
-| Persistence | Configuration survives HA restarts |
-
----
-
-## Supported Entity Types
-
-| Type | Domain | Controllable parameters |
-|------|--------|------------------------|
-| AV Receiver, Projector, TV, Media Player | `media_player.*` | On/off, input source, volume, sound mode |
-| Lights | `light.*` | On/off, brightness, color temperature, transition |
-| Outlets / Switches | `switch.*` | On/off |
-| Covers (blinds, shutters) | `cover.*` | Open/close, position, tilt |
-| Any HA entity | — | Via `call_action` step |
+| Device profiles | Each device is described once per room: entity, power outlet, readiness check, warm-up and cool-down time |
+| Power outlets | Devices without standby power are supplied via a switch; shared outlets stay on as long as any device on them is needed, also by another room |
+| Readiness check | Waits until a device's entity is available instead of guessing delays; reloads its integration to skip the `setup_retry` back-off |
+| Cool-down | `delay_after_off` per device, e.g. 180 s for a projector before its outlet may be switched off |
+| Smart switching | Devices the new activity does not use are switched off; shared devices stay on and are reconfigured |
+| Hooks | `on_start` / `on_stop` take any Home Assistant actions — conditions, covers, lights, scripts |
+| Cancelling | A stop during a long start takes effect immediately |
+| Failure handling | A failed readiness check can abort the start; the room shows `error` with the reason |
+| Restart-safe | The running activity survives a Home Assistant restart |
+| Repairs | Entities that do not exist (typo, renamed entity) are reported in **Settings → Repairs** |
+| Configuration panel | An admin page in the sidebar with a built-in guide: devices and activities as lists, each edited on its own page in short sections with help texts, using Home Assistant's own pickers; plus a YAML view |
+| Remote control card | A dashboard card per room: power, activities, volume, d-pad, channels, playback, your own buttons and device settings such as source, sound mode or tone controls — only what the running activity offers |
+| Command routing | `av_scenes.send_command` sends a button (e.g. `volume_up`) to whichever device the running activity uses for it — from the card, automations or wall switches |
+| 4 entity platforms | Scene, Switch, Sensor, Select — one virtual device per room |
 
 ---
 
 ## Installation
 
-### HACS (Recommended)
+### HACS (recommended)
 
 1. Open HACS in Home Assistant
 2. **Integrations** → three dots top right → **Custom repositories**
-3. Add repository:
-   - **Repository:** `https://github.com/mkshb/hass-av-scenes`
-   - **Category:** Integration
-4. Find "AV Scenes" in the list and click **Download**
+3. Add `https://github.com/mkshb/hass-av-scenes`, category **Integration**
+4. Find "AV Scenes" and click **Download**
 5. Restart Home Assistant
+
+HACS installs the release archive `av_scenes.zip`, which contains the built remote control card.
 
 ### Manual
 
-1. Download the latest release from [Releases](https://github.com/mkshb/hass-av-scenes/releases)
-2. Copy the `custom_components/av_scenes` folder into your `config/custom_components/` directory
+1. Download `av_scenes.zip` from the latest [release](https://github.com/mkshb/hass-av-scenes/releases)
+2. Extract it into `config/custom_components/av_scenes/`
 3. Restart Home Assistant
+
+A plain copy of the repository lacks the remote control card, which is built at release time; see [Development](#development) to build it yourself.
 
 ---
 
 ## Setup
 
-1. **Settings** → **Devices & Services** → **+ Add Integration**
-2. Search for **AV Scenes** and select it
-3. Click **Configure** to open the options flow
+1. **Settings** → **Devices & Services** → **+ Add Integration** → **AV Scenes**
+2. Open **AV Scenes** in the sidebar (administrators only)
+3. **Add room**, then add devices and activities and **Save**
 
-### Add a Room
+### Configuration panel
 
-1. Choose an existing Home Assistant Area **or** enter a custom room name
-2. Confirm — the room appears in the list immediately and a virtual device is created in the matching Area
+The panel edits everything the [configuration](#configuration) below describes:
 
-### Create an Activity
+- **Devices** — entity and power outlet with Home Assistant's entity picker; boot time, wait times and readiness check as fields; own `commands` in a YAML field. Renaming a device ID updates every reference; a device that an activity still uses cannot be deleted.
+- **Activities** — name, icon, position, devices in power-on order, steps (source and sound mode lists come from the device), remote button routing, and `on_start` / `on_stop` in Home Assistant's action editor, the same as in automations. The activity ID is part of the entity IDs and cannot be changed.
+- **Flow** — on every activity's page: what a start, a switch from another activity or a stop does with this configuration, step by step: which outlets and devices are switched with which action, boot times, readiness checks with their timeout and what happens on a timeout, steps, the actions on start and stop, outlets cut in the background, and the earliest and latest time of each row. It follows every change before it is saved; see also [ACTIVITY_FLOW.md](ACTIVITY_FLOW.md).
+- **Remote control preview** — on every activity's page: the card as it looks while the activity runs, following the button routing, quick select and extra buttons as you change them. Tapping a button sends nothing but shows which device gets it and what runs there (e.g. `remote.send_command "select"` on the Apple TV's remote). Buttons that would do nothing are listed, and every button group shows its device, whether it was chosen or automatic, and why it is missing.
+- **YAML** — the whole room as YAML, for anything the forms do not cover.
 
-1. Select a room → **Manage activities** → **Add new activity**
-2. Enter a name (e.g., "Watch Movie")
-3. Add steps one by one — the wizard guides you through each step type
+**Save** checks the configuration first: errors are shown with their exact place, unknown entities of the room as a warning you can confirm. If the configuration was changed elsewhere in the meantime (a second browser, the YAML editor below), the panel asks you to reload instead of overwriting it.
 
-### Step Types
+### YAML editor in the integration options
 
-| Step type | Applicable device | Configurable parameters |
-|-----------|------------------|------------------------|
-| **Turn on device** | Any | — |
-| **Turn off device** | Any | — |
-| **Set input source** | `media_player` | Source from the device's source list |
-| **Set volume** | `media_player` | Volume 0–100 % |
-| **Set sound mode** | `media_player` | Sound mode from the device's mode list |
-| **Set brightness / color** | `light` | Brightness 0–100 %, color temperature (Mired), transition time |
-| **Set color temperature** | `light` | Color temperature 153–500 Mired |
-| **Set position** | `cover` | Position 0–100 % |
-| **Set tilt** | `cover` | Tilt 0–100 % |
-| **Call action** | Any | HA action (`domain.action`), optional JSON service data |
-| **Wait / Delay** | — | Fixed delay 1–60 seconds |
+**Configure** on the integration opens the same configuration as YAML: **Add room**, **Edit room**, **Delete room** and **Edit whole configuration**, which shows all rooms as one YAML document — handy for backups and copying activities between rooms.
 
-Every step except *Wait / Delay* accepts an optional **delay_after** (0–60 s) that is waited after the step executes.
+Every save is validated. Errors name the exact place, e.g. `rooms.wohnzimmer.activities.tv.devices.0: unknown device 'vu'`. Entities that do not exist in Home Assistant are listed as warnings that you can confirm or go back and fix. A device without power still counts as existing, because its entity stays in the entity registry.
 
-After creating an activity you can **edit**, **delete**, **reorder**, **copy**, or **rename** both steps and activities at any time.
+Changes to the content of a room are applied immediately without interrupting a running activity. Adding, removing or renaming rooms or activities reloads the integration, since entities change.
+
+---
+
+## Configuration
+
+A room consists of **devices** and **activities**:
+
+```yaml
+name: Wohnzimmer
+default_activity: tv   # optional: what a plain "on" starts (switch, toggle_activity)
+devices:
+  onkyo:
+    entity_id: media_player.onkyo_receiver
+    power_switch: switch.wz_steckdose_multimedia_5_4_grau
+    ready: {timeout: 60, reload_integration: true, on_timeout: abort}
+  beamer:
+    entity_id: media_player.epson_ehtw7400
+    power_switch: switch.wz_steckdose_beamer_5_3_schwarz
+    ready: {timeout: 60, reload_integration: true, on_timeout: continue}
+    delay_after_off: 180
+  vu:
+    entity_id: media_player.vu_as2b_de
+    power_switch: switch.wz_steckdose_multimedia_5_4_grau
+    ready: {timeout: 60, reload_integration: true, on_timeout: continue}
+activities:
+  tv:
+    name: TV
+    devices: [onkyo, beamer, vu]
+    steps:
+      - {type: set_source, device: onkyo, source: SAT}
+      - {type: set_sound_mode, device: onkyo, sound_mode: THX}
+      - {type: set_volume, device: onkyo, volume_level: 0.35}
+    on_start:
+      - if:
+          - condition: numeric_state
+            entity_id: sensor.wz_helligkeit
+            above: 20000
+        then:
+          - action: cover.close_cover
+            target: {area_id: wohnzimmer}
+      - action: light.turn_on
+        target: {entity_id: light.wz_ambiente}
+        data: {brightness_pct: 15, color_temp_kelvin: 2400}
+    on_stop:
+      - action: cover.open_cover
+        target: {area_id: wohnzimmer}
+  musik:
+    name: Musik
+    devices: [onkyo]
+    steps:
+      - {type: set_source, device: onkyo, source: NET}
+```
+
+`default_activity` is the activity a plain "on" starts: the room's switch, `toggle_activity` without an activity and wall buttons wired to them. Without it, the last used activity is started, which can be surprising on a single button: after watching TV, a press meant for music would switch the projector on.
+
+### Devices
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `entity_id` | — | The entity that represents the device (required) |
+| `name` | — | Optional display name |
+| `power_switch` | — | Switch that supplies the device with power. Several devices may share one |
+| `remote_entity` | — | A `remote` entity for the navigation keys of the card (arrows, OK, back, home, menu), e.g. `remote.apple_tv`, see [Own commands and buttons](#own-commands-and-buttons) |
+| `ready` | — | Readiness check before the device is switched on (see below) |
+| `delay_after_power` | `0` | Boot time: seconds the device needs after its `power_switch` came on before it accepts commands. Counted from switching the outlet on, so devices on the same outlet boot in parallel. Skipped when the outlet was already on. Use it for devices that report `off` instead of `unavailable` while they have no power — the readiness check cannot tell those states apart |
+| `delay_after_on` | `0` | Seconds to wait after switching the device on. Skipped when the device was already on |
+| `delay_after_off` | `0` | Seconds the device needs after switching off before its power is cut (cool-down); the room does not wait for it |
+| `commands` | — | Remote buttons as Home Assistant actions, see [Remote control](#remote-control) |
+
+`ready` takes:
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `entity_id` | the device | Check another entity, e.g. `remote.apple_tv`: the Apple TV integration reports its media player as `off` while it is not connected, while its remote is `on` only when connected |
+| `state` | — | Wait for this state (or a list of states) instead of "not `unavailable`" |
+| `timeout` | `60` | Seconds to wait for the entity |
+| `reload_integration` | `false` | Reload the integration that provides the entity before waiting, and again every 5 s while it stays in `setup_retry` because the device does not answer yet. This skips the back-off of an integration in `setup_retry`, whose growing pauses (5, 10, 20, 40 s …) can otherwise take more than a minute after the device got power. When the device's `power_switch` was just switched on, the integration is reloaded after the boot time even if the device looks ready: some integrations keep reporting the last state (e.g. `off`) while the device has no power. A reload that does not finish within `timeout` does not hold up the start; it goes on with a warning |
+| `on_timeout` | `abort` | `abort` stops the start and puts the room into `error`; `continue` logs a warning and goes on |
+
+The check also runs before a remote button (`send_command`) reaches the device: if the connection was lost while the activity runs, it is brought back first, then the command is sent. Example for an Apple TV:
+
+```yaml
+aptv:
+  entity_id: media_player.apple_tv
+  ready: {entity_id: remote.apple_tv, state: "on", timeout: 30, reload_integration: true, on_timeout: continue}
+```
+
+### Activities
+
+| Key | Description |
+|-----|-------------|
+| `name` | Display name (defaults to the key) |
+| `icon` | Icon in the remote control card, e.g. `mdi:television` |
+| `order` | Position in lists; without it, activities are sorted by name. Home Assistant stores the configuration with sorted keys, so the order in which you write activities is not kept |
+| `devices` | Devices the activity uses, in power-on order |
+| `steps` | Settings applied once the devices are up |
+| `on_start` | Home Assistant actions, run alongside the start |
+| `on_stop` | Home Assistant actions, run alongside a stop |
+| `remote` | Which device gets which remote buttons, and extra buttons, see [Remote control](#remote-control) |
+| `commands` | Remote buttons only this activity has, see [Remote control](#remote-control) |
+
+`on_start` and `on_stop` use the same syntax as scripts and automations: `action`, `if`/`then`, `choose`, `delay`, `wait_template`, `parallel` and so on. They run on a full stop only, not when switching to another activity.
+
+### Steps
+
+Every step has a `type` and may have `delay_after` (seconds to wait afterwards). `device` refers to a key in `devices`.
+
+| Type | Parameters | Action |
+|------|------------|--------|
+| `set_source` | `device`, `source` | `media_player.select_source` |
+| `set_volume` | `device`, `volume_level` (0–1) | `media_player.volume_set` |
+| `set_sound_mode` | `device`, `sound_mode` | `media_player.select_sound_mode` |
+| `set_brightness` | `device`, `brightness_pct`, `color_temp_kelvin`, `transition` | `light.turn_on` |
+| `set_color_temp` | `device`, `color_temp_kelvin` | `light.turn_on` |
+| `set_position` | `device`, `position` (0–100) | `cover.set_cover_position` |
+| `set_tilt` | `device`, `tilt_position` (0–100) | `cover.set_cover_tilt_position` |
+| `power_on` / `power_off` | `device` | Switch a device on or off in the middle of the sequence |
+| `call_action` | `action`, `data`, `target` | Any Home Assistant action |
+| `wait_available` | `device` or `entity_id`, `state`, `timeout`, `reload_integration`, `on_timeout` | Same as a device's `ready`, for any entity at any point |
+| `delay` | `delay_after` | Only wait |
+
+Every service call waits for the device to finish (`blocking`), at most 15 seconds. A failing step is logged and listed in the sensor's `warnings` attribute; the activity continues.
+
+---
+
+## What happens when
+
+The short version is below; [ACTIVITY_FLOW.md](ACTIVITY_FLOW.md) shows the whole flow as diagrams: commands, room states, start, readiness check, stop, which action switches which device, and the example step by step.
+
+### Start
+
+1. **Smart switching** — if another activity runs in the room, its devices that the new one does not use are switched off. Power outlets that are no longer needed are switched off in the background once those devices had their `delay_after_off`.
+2. **Power** — all outlets of the activity's devices are switched on at once, so the devices boot in parallel.
+3. **`on_start`** starts running alongside.
+4. **Devices**, in order: boot time `delay_after_power` (only if its outlet was off), readiness check, switch on (only if off), `delay_after_on` (only if it was switched on).
+5. **Steps**, in order.
+6. When `on_start` has finished too, the activity is `active`.
+
+### Stop
+
+1. **`on_stop`** starts running alongside.
+2. **Devices** are switched off in reverse order. The room is idle once they are off and `on_stop` is done; a status LED on a wall button goes out right away.
+3. **Power outlets** whose devices need no cool-down are switched off at once. The others follow in the background after the longest `delay_after_off` of their devices; a device that was already off only counts what is left of its cool-down. Starting an activity in the meantime keeps the outlets it needs.
+
+For the example above: VU+, projector and Onkyo off → room idle → multimedia outlet off → 180 s later the projector outlet off.
+
+### Commands while something runs
+
+A new command cancels whatever runs in the room: a stop during a long start takes effect immediately, and a stop from the `error` state switches off what the failed start had already powered. Sending the command that is already running just waits for it.
+
+---
+
+## Remote control
+
+### The card
+
+Add the card to any dashboard (**Edit dashboard → Add card → AV Scenes Remote**) and pick the room. Since Home Assistant 2026.6 the card picker also suggests it by entity: under **By entity**, open the area and the room's device ("AV: <room>") or pick one of its entities, and the card is offered with that room already set. Or in YAML:
+
+```yaml
+type: custom:av-scenes-remote-card
+room: wohnzimmer
+name: Living room   # optional title
+```
+
+The card shows the room's state with a power button (toggle), the activities as buttons, the start progress with what it is busy with (e.g. "Epson Beamer is booting, 40 s left", "Waiting for Apple TV, at most 1:56", "Step 1 of 3: Set source"), devices cooling down after a stop or switch ("Cooling down: Epson Beamer, power off in 2:30", also while the room is off), errors, and — while an activity runs — what is playing (app, title, series or artist, artwork and the position of a film or episode, from the activity's playback device or else its last media player) and the remote: volume rocker and slider, d-pad, channel rocker, navigation and playback keys and the activity's own and quick-select buttons. Only what the running activity offers is shown. Keys send when released, so scrolling the dashboard across the remote sends nothing; volume and arrow keys repeat while held. It works for every user, in the browser and in the Home Assistant app.
+
+The integration registers the card as a dashboard resource itself (**Settings → Dashboards → Resources**, `/av_scenes_static/av-scenes-card.js?v=…`) and updates its version after every update, so browsers and the app load the current card instead of a cached one. Removing the integration removes the resource. With resources in YAML (`lovelace: resource_mode: yaml`), the card is loaded on every page instead; there is nothing to add in either case. A dashboard loaded in the few seconds of a restart before the integration is set up shows "Custom element doesn't exist"; reloading it once fixes that.
+
+### Which device gets which button
+
+Buttons belong to four groups. Each activity sends a group to one of its devices:
+
+| Group | Commands | Default device |
+|-------|----------|----------------|
+| `volume` | `volume_up`, `volume_down`, `mute`, `volume_set` | First media player of the activity |
+| `channels` | `channel_up`, `channel_down` | Last media player, if it is a separate source (e.g. a set-top box behind the receiver) |
+| `transport` | `play_pause`, `play`, `pause`, `stop`, `next`, `previous` | Last media player |
+| `navigation` | `up`, `down`, `left`, `right`, `ok`, `back`, `menu`, `home`, `info`, `guide`, `exit` | Last device with a `remote_entity` or navigation `commands` |
+
+Media players handle volume, channels and playback without any configuration (`media_player.volume_up`, `media_next_track`, …; set-top boxes such as Enigma2 map next/previous track to the channel keys). Override the defaults per activity, or hide a group with `null`:
+
+```yaml
+activities:
+  tv:
+    remote:
+      volume: onkyo
+      channels: vu
+      transport: null
+```
+
+When navigation goes to a device with a `remote_entity` (e.g. an Apple TV), the card shows a touch surface instead of the arrow keys: every swipe of about 40 px sends one arrow key in its direction, a long swipe several, a tap sends OK. `touchpad: true` or `false` under `remote` turns it on or off for an activity; in the panel it is "Touch surface" next to the button groups. A key next to back and home switches between arrow keys and touch surface in the card; the browser remembers that choice per room and activity.
+
+### Own commands and buttons
+
+`commands` maps a command name to Home Assistant actions — on a device for every activity that uses it, or on an activity for that activity only. The variables `command`, `value` and (on devices) `entity_id` are available in templates. Own commands override the built-in ones.
+
+Navigation keys need a remote or commands, since most media players have no actions for them. A device with a `remote_entity` gets the arrow keys, OK, back, home and menu through `remote.send_command`, with the key names of its integration (Apple TV: `select`, `menu` for back, `top_menu` for menu; Android TV Remote: `DPAD_UP` …; others: the command name). In the panel, a device whose integration also provides a remote shows a button that sets this up together with the connection check:
+
+```yaml
+aptv:
+  entity_id: media_player.apple_tv
+  remote_entity: remote.apple_tv
+  ready: {entity_id: remote.apple_tv, state: "on", timeout: 60, reload_integration: true, on_timeout: continue}
+```
+
+Own `commands` win over the remote, key by key. Enigma2 receivers (VU+, Dreambox) accept key codes through OpenWebif; the codes below are Linux input key codes — check them against your box:
+
+```yaml
+# configuration.yaml
+rest_command:
+  vu_key:
+    url: "http://vu-as2b.local/api/remotecontrol?command={{ code }}"
+```
+
+```yaml
+# AV Scenes room
+devices:
+  vu:
+    entity_id: media_player.vu_as2b_de
+    commands:
+      up:    {action: rest_command.vu_key, data: {code: 103}}
+      down:  {action: rest_command.vu_key, data: {code: 108}}
+      left:  {action: rest_command.vu_key, data: {code: 105}}
+      right: {action: rest_command.vu_key, data: {code: 106}}
+      ok:    {action: rest_command.vu_key, data: {code: 352}}
+      exit:  {action: rest_command.vu_key, data: {code: 174}}
+      menu:  {action: rest_command.vu_key, data: {code: 139}}
+      info:  {action: rest_command.vu_key, data: {code: 358}}
+      guide: {action: rest_command.vu_key, data: {code: 365}}
+activities:
+  tv:
+    icon: mdi:television
+    order: 1
+    remote:
+      buttons:
+        - guide
+        - {command: netflix, name: Netflix, icon: mdi:netflix}
+    commands:
+      netflix:
+        - action: media_player.select_source
+          target: {entity_id: media_player.onkyo_receiver}
+          data: {source: STRM BOX}
+```
+
+`buttons` lists extra buttons of the activity; each names a command (standard or own) with optional `name`, `icon` and `device`.
+
+### Quick select
+
+A button with `device` and `source` instead of `command` switches that media player to a source: an input of a receiver, or an app on an Apple TV, whose source list holds its installed apps. It runs `media_player.select_source`, after the device's readiness check like every other button. Without `name`, the button is labelled with the source.
+
+```yaml
+activities:
+  apple_tv:
+    remote:
+      buttons:
+        - {device: aptv, source: Netflix, icon: mdi:netflix}
+        - {device: aptv, source: YouTube, icon: mdi:youtube}
+        - {device: aptv, source: ARD Mediathek, name: ARD}
+```
+
+In the configuration panel, quick select has its own list under **Remote control**: pick the device, then the source from its list. The integration remembers the last source list of every configured media player, so the list is there even while the device is off; an Apple TV reports its apps only while it is connected, so start it once after adding it. A name that is not in the list can be typed in.
+
+`av_scenes.send_command` does the same with `command: select_source`, `value: <source>` and `device`.
+
+### Device settings
+
+Below the buttons, the card has a **Settings** section for what you change during a film rather than at every start: the source and the sound mode of the activity's media players, and any number, select or switch entity of a device, such as the tone controls or speaker levels a receiver's integration provides. The card shows a source, sound mode or select as a list with its current value, a number as a slider with its range, a switch as an on/off key. The section is closed until it is opened; each browser remembers that per room. A change runs the matching action (`media_player.select_source`, `media_player.select_sound_mode`, `number.set_value`, `select.select_option`, `switch.turn_on`/`turn_off`) after the device's readiness check, like every button.
+
+Settings belong to a device, and every activity that uses the device shows them. Without configuration a device offers, automatically:
+
+- the source and sound mode of a media player that reported such a list (the integration remembers the lists while the device is off),
+- the `number` and `select` entities of the same device, such as tone controls or speaker levels. For an integration without devices, those of the same integration entry without a device. Disabled, hidden and diagnostic entities are left out, and switches are never added automatically.
+
+`settings` on a device chooses instead, in this order, with optional favourites, so a receiver with fifteen sound modes offers the three you use; an empty list shows nothing of that device:
+
+```yaml
+devices:
+  onkyo:
+    entity_id: media_player.onkyo_receiver
+    settings:
+      - {setting: sound_mode, options: ["DOLBY ATMOS/DOLBY SURROUND", "THX CINEMA", "DIRECT"]}
+      - {setting: source}   # the receiver's whole source list
+      - {entity: number.onkyo_bass, name: Bass}
+      - {entity: switch.onkyo_late_night, name: Late night}
+  beamer:
+    entity_id: media_player.epson_ehtw7400
+    settings: []            # nothing of the projector in the card
+```
+
+`entity` takes a `number`, `select`, `switch` or their `input_*` helpers; `name` labels it, else its own name. AV Scenes does not talk to the device itself: what the card can offer depends on the entities the device's integration provides.
+
+An activity can make its own choice instead of its devices' settings, with `settings` under `remote`; each entry then names its `device`:
+
+```yaml
+activities:
+  apple_tv:
+    remote:
+      settings:
+        - {device: onkyo, setting: sound_mode}
+```
+
+`av_scenes.send_command` sets an entity setting with the entity ID as `command`, the new value as `value` and the device as `device`, e.g. `command: number.onkyo_bass`, `value: -2`, `device: onkyo`.
+
+In the panel it is **Settings in the card** on every device's page (automatic, or chosen with favourites) and on every activity's page (from the devices, or chosen for that activity). A receiver can still refuse a sound mode that does not fit the incoming signal; the card then keeps showing the mode it actually uses.
+
+A command is resolved in this order: the activity's own `commands`, then the device of its group (own `commands` or built-in action), then the first device of the activity that defines it — so digit keys `"0"`–`"9"` only need to exist on the set-top box.
 
 ---
 
 ## Entities
 
-For each configured room, AV Scenes creates one virtual HA device (linked to the matching Area) with four entities:
+One virtual device per room, in the room's area (or in an existing area of the same name; no area is created) with four entities. Entity names and state labels are translated (English and German); the state values themselves are stable keys, so automations work regardless of the language. Entity IDs are generated by Home Assistant from the translated names and may differ per installation — look them up on the room's device page.
 
-### Select — `select.<room>_szene`
+### Select — Scene
 
-The primary control entity, visible in the HA Area dashboard under **Other**.
+Shows the running activity and starts, switches or stops activities.
 
-| Displayed option | Meaning |
-|-----------------|---------|
-| Activity name (e.g., "Watch Movie") | That activity is active — select a different one to switch |
-| `—` | Idle — no activity running; selecting this stops the current activity |
-| `⏳ Startet …` | Activity is starting (read-only, cannot be selected) |
-| `⏹ Stoppt …` | Activity is stopping (read-only, cannot be selected) |
+| Option (state value) | Shown as | Meaning |
+|----------------------|----------|---------|
+| Activity name | Activity name | That activity is active — select another one to switch |
+| `idle` | `—` | Idle; selecting it stops the current activity |
+| `starting` / `stopping` | `Starting …` / `Stopping …` | Transition in progress (read-only) |
+| `error` | `Error` | The last start was aborted (read-only) — see the sensor |
 
-Selecting an activity name starts it. Selecting `—` stops the current activity.
+### Sensor — Activity
 
-### Sensor — `sensor.<room>_aktivitat`
+**State:** `idle` · `starting` · `active` · `stopping` · `error`
 
-Reports the current activity lifecycle state with step-level progress.
+| Attribute | Description |
+|-----------|-------------|
+| `activity_id`, `activity_name` | The current activity, or `null` |
+| `available_activities` | Names of all activities of the room |
+| `current_step`, `total_steps`, `step_progress_pct` | Progress (devices and steps) |
+| `error` | Why the last start was aborted |
+| `warnings` | Steps that failed during the last start |
+| `devices`, `steps` | Summary of the current activity |
 
-**State values:** `idle` · `starting` · `active` · `stopping`
+An aborted start is also reported in **Settings → Repairs**; the entry disappears with the next start or stop of the room.
 
-**Attributes:**
+### Switch — Active
 
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `activity_name` | `str \| null` | Name of the active activity, or `null` when idle |
-| `available_activities` | `list[str]` | All configured activity names for this room |
-| `current_step` | `int` | Index of the step currently executing (0 when idle) |
-| `total_steps` | `int` | Total number of steps in the active activity |
-| `step_progress_pct` | `int` | Execution progress 0–100 % |
-| `steps` | `list` | Step summary (nr, type, entity, delay_after) — only present while an activity is active |
+`on` while an activity runs, starts or failed. `turn_on` starts the room's `default_activity`, else the last used activity (or the first one); `turn_off` stops. Exposed to KNX, its state drives the status LED of a wall button.
 
-### Switch — `switch.<room>_activity`
+### Scene — one per activity
 
-Binary on/off showing whether an activity is running.
+One scene per activity; activating it starts the activity. Like the other entities it is named after the room's device and the activity, e.g. "AV: Wohnzimmer TV".
 
-- `on` → an activity is active or transitioning
-- `off` → idle
-- `turn_off` → stops the current activity
-
-**Attributes:** `current_activity`, `available_activities`
-
-### Scene — `scene.<room>_<activity_name>`
-
-One HA scene entity per configured activity. Activating a scene starts the corresponding activity.
-
-```yaml
-action: scene.turn_on
-target:
-  entity_id: scene.living_room_watch_movie
-```
+Entities of a deleted activity and the device of a deleted room are removed on the next start of the integration, instead of staying "unavailable".
 
 ---
 
-## Services
+## Actions
 
 ```yaml
-# Start an activity
+# Start an activity (by key or display name)
 action: av_scenes.start_activity
 data:
-  room: living_room   # internal room ID
-  activity: watch_movie
+  room: wohnzimmer
+  activity: tv
 
-# Stop the current activity (turns off all devices in reverse order)
+# Stop the current activity
 action: av_scenes.stop_activity
 data:
-  room: living_room
+  room: wohnzimmer
 
-# Reload configuration without restarting HA
+# Stop if something runs, otherwise start (default: the last used activity)
+action: av_scenes.toggle_activity
+data:
+  room: wohnzimmer
+  activity: tv        # optional
+
+# Send a remote button to the device the running activity uses for it
+action: av_scenes.send_command
+data:
+  room: wohnzimmer
+  command: volume_up  # or volume_set with value: 0.4, ok, channel_up, an own command …
+  device: vu          # optional: this device instead, works while nothing runs
+
+# Reload the configuration
 action: av_scenes.reload
 ```
 
-> **Room ID:** lowercase version of the room name, spaces replaced with `_`. The exact ID is shown in the room list in the options flow.
+The room ID is the key in the configuration (shown in **Edit whole configuration**).
 
----
+The actions return when the activity has fully started or stopped, which can take minutes with cool-down times. Use `mode: parallel` in automations that call them, so that a second trigger (e.g. a stop while starting) is not swallowed by `mode: single`.
 
-## Shutdown Sequence
-
-When an activity stops (either manually or because a new activity is starting), devices are powered off in the **reverse of the start order**. The `delay_after` value of each device's last step is respected, so dependent devices (e.g., an outlet that powers a TV) are turned off in the correct order with the correct timing.
-
-**Example** — start order and delays:
-
-| # | Device | delay_after |
-|---|--------|-------------|
-| 1 | Outlet | 5 s |
-| 2 | TV | 3 s |
-| 3 | Apple TV | 0 s |
-
-**Shutdown order:**
-
-1. Turn off Apple TV → wait 0 s
-2. Turn off TV → wait 3 s
-3. Turn off Outlet → wait 0 s
-
----
-
-## Example Scenarios
-
-### Movie Night
-
-1. Turn on receiver (`delay_after: 3 s`)
-2. Turn on projector (`delay_after: 10 s`)
-3. Turn on Blu-ray player (`delay_after: 2 s`)
-4. Set receiver input to BD/DVD (`delay_after: 1 s`)
-5. Set receiver volume to 65 %
-6. Set cover to 0 % (closed)
-7. Dim light to 5 % brightness
-
-### Smart Activity Switching — Apple TV → Sonos
-
-**Running activity "Apple TV"** uses: Projector, Receiver, Apple TV
-**New activity "Sonos"** uses: Receiver, Sonos
-
-What AV Scenes does automatically:
-- Projector is **turned off** (not needed in Sonos)
-- Apple TV is **turned off** (not needed in Sonos)
-- Receiver **stays on** — input and volume are updated in place
-- Sonos is **turned on**
-
-Result: switch completes in 2–3 seconds instead of 20–30 seconds.
-
-### Dependent Devices (Outlet Before TV)
-
-1. Turn on outlet (`delay_after: 5 s`) — TV now has power
-2. Set cover to 60 % (`delay_after: 1 s`)
-3. Dim light to 8 % (`delay_after: 1 s`)
-4. Turn on TV (`delay_after: 3 s`) — boots correctly
-5. Set TV input to HDMI 1 (`delay_after: 1 s`)
-6. Turn on Apple TV
-
----
-
-## Lovelace Examples
-
-### Area Dashboard
-
-Because all entities belong to a virtual device with `suggested_area` set to the room name, they appear automatically in the HA Area dashboard. The **Select** entity shows up under **Other** and can be used to start, switch, and stop activities directly from the area card.
-
-### Entities Card
+### Example: KNX push button
 
 ```yaml
-type: entities
-title: Living Room
-entities:
-  - entity: select.living_room_szene
-    name: Activity
-  - entity: switch.living_room_activity
-    name: Status
-  - entity: sensor.living_room_aktivitat
-    name: State
+alias: Living room TV push button
+mode: parallel
+triggers:
+  - trigger: knx.telegram
+    destination: "5/1/10"
+    group_value_read: false
+    group_value_response: false
+actions:
+  - action: av_scenes.toggle_activity
+    data:
+      room: wohnzimmer
+      activity: tv
 ```
 
-### Progress Card (Markdown)
+With a rocker that sends separate on/off telegrams, switch the room's switch (it starts the `default_activity`) and expose it for the status LED:
 
 ```yaml
-type: markdown
-content: |
-  ## Living Room
-  **State:** {{ states('sensor.living_room_aktivitat') }}
-  {% set act = state_attr('sensor.living_room_aktivitat', 'activity_name') %}
-  {% if act %}
-  **Activity:** {{ act }}
-  **Progress:** {{ state_attr('sensor.living_room_aktivitat', 'step_progress_pct') }} %
-  (step {{ state_attr('sensor.living_room_aktivitat', 'current_step') }}
-  of {{ state_attr('sensor.living_room_aktivitat', 'total_steps') }})
-  {% endif %}
+alias: Living room rocker
+mode: parallel
+triggers:
+  - trigger: knx.telegram
+    destination: "2/0/35"
+    group_value_read: false
+    group_value_response: false
+actions:
+  - action: "switch.turn_{{ 'on' if trigger.payload == 1 else 'off' }}"
+    target:
+      entity_id: switch.wohnzimmer_activity
 ```
-
-### Automation — Start Activity at a Fixed Time
 
 ```yaml
-automation:
-  - alias: "Movie night at 8 PM"
-    trigger:
-      - platform: time
-        at: "20:00:00"
-    condition:
-      - condition: state
-        entity_id: binary_sensor.someone_home
-        state: "on"
-    action:
-      - action: av_scenes.start_activity
-        data:
-          room: living_room
-          activity: watch_movie
+# KNX expose (knx.yaml): status for the LED
+- type: binary
+  entity_id: switch.wohnzimmer_activity
+  address: "2/1/35"
 ```
+
+A long press on another group address can start a second activity with `start_activity`. Volume buttons on the wall work the same way with `send_command`, and always reach the device of the running activity.
 
 ---
 
-## Known Limitations
+## Upgrading from 0.6 and earlier
 
-- Input source selection requires the `source_list` attribute on the `media_player` entity
-- Sound mode selection requires the `sound_mode_list` attribute on the `media_player` entity
-- Cover tilt control requires the `cover.set_cover_tilt_position` service to be available
+The configuration is migrated automatically on the first start (config entry version 1 → 2). Nothing is lost:
+
+- Every entity used in a step becomes a device of its room.
+- `power_on` steps become the activity's device list; their `delay_after` becomes the device's `delay_after_on`.
+- The cool-down while stopping keeps its previous value: the largest `delay_after` of the device's steps becomes `delay_after_off`.
+- Entities that had steps but no `power_on` step (e.g. lights, covers) were switched off when stopping; this is kept as `on_stop` actions you can now edit.
+- Light brightness (0–255) becomes `brightness_pct`; color temperature in mireds becomes `color_temp_kelvin`.
+- Unknown keys are kept.
+
+Two behaviours change: all devices are switched on before the settings steps run, and `on_stop` actions (including the migrated ones) run on a full stop, not when switching activities.
+
+**Make a backup before upgrading.** A migrated configuration cannot be loaded by older versions.
 
 ---
 
-## Contributing
+## Troubleshooting
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Commit your changes: `git commit -m 'Add my feature'`
-4. Push the branch: `git push origin feature/my-feature`
-5. Open a Pull Request
+- **Logs:** **Settings → Devices & Services → AV Scenes → ⋮ → Enable debug logging**. Every step, wait and reload is logged with its room.
+- **Device not ready in time:** raise `ready.timeout`, and set `reload_integration: true` for integrations that go into `setup_retry` without power.
+- **Repairs entry "entity is missing":** the entity was renamed or removed; fix `entity_id` in the room.
+
+---
+
+## Development
+
+```bash
+pip install -r requirements_test.txt
+pytest
+```
+
+The remote control card and the configuration panel live in `frontend/` (Lit, TypeScript, esbuild):
+
+```bash
+cd frontend
+npm ci
+npm test        # tests of the card logic (Node test runner)
+npm run build   # writes av-scenes-card.js and av-scenes-panel.js to custom_components/av_scenes/frontend/
+```
+
+The build output is not tracked in git. Publishing a GitHub release runs `.github/workflows/release.yml`, which builds the card and attaches `av_scenes.zip`. The release tag sets the version in the archive (e.g. `v0.7.0-beta.1` for a pre-release that HACS offers under "Show beta versions").
 
 ---
 

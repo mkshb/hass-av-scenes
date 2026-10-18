@@ -1,0 +1,96 @@
+# The living room shown in the README screenshots (devices from av_demo/).
+# Actions carry data: {} as Home Assistant's action editor writes them, so
+# opening an activity in the panel leaves nothing unsaved.
+name: Living room
+default_activity: tv
+devices:
+  receiver:
+    name: AV receiver
+    entity_id: media_player.av_receiver
+    power_switch: switch.av_rack_outlet
+    ready: {timeout: 60, reload_integration: true, on_timeout: abort}
+    # What the card offers of the receiver in every activity
+    settings:
+      - {setting: sound_mode, options: [Dolby Atmos, DTS:X, Direct]}
+      - {entity: number.av_receiver_treble, name: Treble}
+      - {entity: number.av_receiver_bass, name: Bass}
+      - {entity: number.av_receiver_center_level, name: Center level}
+      - {entity: number.av_receiver_subwoofer_level, name: Subwoofer level}
+      - {entity: switch.av_receiver_late_night, name: Late night}
+      - {entity: select.av_receiver_display, name: Display}
+  projector:
+    name: Projector
+    entity_id: media_player.projector
+    power_switch: switch.projector_outlet
+    ready: {timeout: 90, reload_integration: true, on_timeout: continue}
+    delay_after_on: 6
+    delay_after_off: 180
+  sat:
+    name: Satellite receiver
+    entity_id: media_player.satellite_receiver
+    remote_entity: remote.satellite_receiver
+    power_switch: switch.av_rack_outlet
+    ready: {timeout: 60, reload_integration: true, on_timeout: continue}
+  apple_tv:
+    name: Apple TV
+    entity_id: media_player.apple_tv
+    remote_entity: remote.apple_tv
+    ready: {entity_id: remote.apple_tv, state: "on", timeout: 60, reload_integration: true, on_timeout: continue}
+activities:
+  tv:
+    name: TV
+    icon: mdi:television-classic
+    order: 1
+    devices: [receiver, projector, sat]
+    steps:
+      - {type: set_source, device: receiver, source: SAT}
+      - {type: set_sound_mode, device: receiver, sound_mode: DTS:X}
+      - {type: set_volume, device: receiver, volume_level: 0.35}
+    on_start: &dim
+      - if:
+          - condition: state
+            entity_id: cover.living_room_blinds
+            state: open
+        then:
+          - action: cover.close_cover
+            target: {entity_id: cover.living_room_blinds}
+            data: {}
+      - action: light.turn_on
+        target: {entity_id: light.living_room_ambient_light}
+        data: {brightness_pct: 15}
+    on_stop: &brighten
+      - action: cover.open_cover
+        target: {entity_id: cover.living_room_blinds}
+        data: {}
+      - action: light.turn_off
+        target: {entity_id: light.living_room_ambient_light}
+        data: {}
+    remote:
+      # Arrow keys, as on the receiver's own remote
+      touchpad: false
+  movie:
+    name: Movie
+    icon: mdi:movie-open
+    order: 2
+    devices: [receiver, projector, apple_tv]
+    steps:
+      - {type: set_source, device: receiver, source: Apple TV}
+      - {type: set_sound_mode, device: receiver, sound_mode: Dolby Atmos}
+      - {type: set_volume, device: receiver, volume_level: 0.42}
+    on_start: *dim
+    on_stop: *brighten
+    remote:
+      buttons:
+        - {device: apple_tv, source: Netflix, icon: mdi:netflix}
+        - {device: apple_tv, source: Disney+}
+        - {device: apple_tv, source: Plex, icon: mdi:plex}
+        - {device: apple_tv, source: YouTube, icon: mdi:youtube}
+  music:
+    name: Music
+    icon: mdi:music
+    order: 3
+    devices: [receiver]
+    steps:
+      - {type: set_source, device: receiver, source: NET}
+      - {type: set_sound_mode, device: receiver, sound_mode: Stereo}
+      - {type: set_volume, device: receiver, volume_level: 0.3}
