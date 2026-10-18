@@ -20,3 +20,6 @@ venv/
 frontend/node_modules
 custom_components/av_scenes/frontend/
 frontend/.test-build
+
+# Credentials for tests/screenshots/capture.py
+tests/screenshots/.env

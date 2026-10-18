@@ -2,15 +2,105 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
 [![GitHub Release](https://img.shields.io/github/release/mkshb/hass-av-scenes.svg)](https://github.com/mkshb/hass-av-scenes/releases)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.11%2B-41BDF5.svg)](https://www.home-assistant.io/)
 [![License](https://img.shields.io/github/license/mkshb/hass-av-scenes.svg)](LICENSE)
 
-Activity-based AV control for Home Assistant — an open-source alternative to Logitech Harmony and Roomie Remote.
+**One button for the whole home cinema.** Activity-based AV control for Home Assistant — an open-source alternative to Logitech Harmony and Roomie Remote.
+
+<p>
+  <img src="https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/card.gif" alt="The remote control card starting the Movie activity, light theme" width="49%">
+  <img src="https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/card-dark.gif" alt="The remote control card starting the Movie activity, dark theme" width="49%">
+</p>
+
+AV Scenes controls the devices of a room (AV receiver, projector, TV, set-top box, lights, covers, power outlets) through named **activities** such as "TV" or "Movie". Starting an activity powers the devices it needs, waits until they are actually ready, applies sources, sound modes and volume, and runs any Home Assistant actions you attach. Switching to another activity only touches what differs; stopping shuts everything down in reverse order, with cool-down times and power outlets last.
 
 ---
 
-## Overview
+## Why AV Scenes
 
-AV Scenes controls the devices of a room (AV receiver, projector, TV, set-top box, lights, covers, power outlets) through named **activities** such as "TV" or "Movie". Starting an activity powers the devices it needs, waits until they are actually ready, applies sources, sound modes and volume, and runs any Home Assistant actions you attach. Switching to another activity only touches what differs; stopping shuts everything down in reverse order, with cool-down times and power outlets last.
+A script that switches on a receiver, a projector and a set-top box works until one of them takes longer to boot than its delay. AV Scenes handles what such scripts get wrong:
+
+- **No guessed delays.** Each device is switched on once its entity is actually available. Integrations that gave up while the device had no power are reloaded instead of waiting minutes for their retry.
+- **Power outlets done right.** Devices on switched outlets boot in parallel. A projector keeps its power for its cool-down before the outlet is cut, and an outlet shared with another room stays on while that room needs it.
+- **Switching, not restarting.** Going from TV to Music switches off the projector and the set-top box, changes the receiver's input and leaves it on.
+- **One remote for every activity.** The dashboard card shows only what the running activity offers and sends volume to the receiver, channels to the set-top box and arrow keys to the Apple TV.
+- **Set up in the UI.** Devices and activities are edited in a sidebar panel with Home Assistant's own pickers; a flow view shows step by step what a start, a switch and a stop will do before you save. YAML stays available.
+- **Wall buttons and automations.** Every room is a switch, a select and a sensor; `toggle_activity` and `send_command` make a single push button or a volume rocker on the wall work like the remote.
+
+---
+
+## Screenshots
+
+### Remote control card
+
+Power, activities, start progress with what it is busy with, now playing, volume, d-pad or touch surface, channels and own buttons.
+
+<p>
+  <img src="https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/card.png" alt="Remote control card while an activity runs, light theme" width="49%">
+  <img src="https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/card-dark.png" alt="Remote control card while an activity runs, dark theme" width="49%">
+</p>
+
+With arrow keys instead of the touch surface, here for a satellite receiver with its channel keys:
+
+<p>
+  <img src="https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/card-dpad.png" alt="Remote control card with arrow keys, light theme" width="49%">
+  <img src="https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/card-dpad-dark.png" alt="Remote control card with arrow keys, dark theme" width="49%">
+</p>
+
+### Configuration panel
+
+Rooms, devices and activities in the sidebar, each edited on its own page with help texts.
+
+![Configuration panel with the devices and activities of a room, light theme](https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/panel.png)
+
+![Configuration panel with the devices and activities of a room, dark theme](https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/panel-dark.png)
+
+### Flow of an activity
+
+What starting, switching and stopping do with the configuration you are editing, with the earliest and latest time of each row.
+
+![Flow view of an activity in the configuration panel, light theme](https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/flow.png)
+
+![Flow view of an activity in the configuration panel, dark theme](https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/flow-dark.png)
+
+### Remote control preview
+
+The card as it looks while the activity runs. A tap shows which device gets the button and what runs there instead of sending it.
+
+![Remote control preview in the configuration panel, light theme](https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/preview.png)
+
+![Remote control preview in the configuration panel, dark theme](https://raw.githubusercontent.com/mkshb/hass-av-scenes/main/docs/images/preview-dark.png)
+
+---
+
+## Coming from Harmony
+
+The concepts carry over almost one to one:
+
+| Harmony | AV Scenes |
+|---------|-----------|
+| Device | Device: entity, power outlet, readiness check, boot and cool-down time |
+| Activity | Activity: its devices in power-on order, then steps |
+| Power-on order and inter-device delay | Device order; readiness check instead of a fixed delay, `delay_after_on` where a device needs one |
+| Inputs and settings of an activity | Steps: `set_source`, `set_sound_mode`, `set_volume` |
+| Switching between activities | Smart switching: only devices the new activity does not use are switched off |
+| Button mapping per activity | Button groups (`volume`, `channels`, `transport`, `navigation`) routed to a device per activity |
+| Favorite channels and custom buttons | Extra buttons, quick select for inputs and apps |
+| Help button for devices out of sync | Not needed: devices report their real state through their Home Assistant integrations, and a device that is already on is not toggled |
+| Harmony remote | The card in the browser and the Home Assistant app, wall buttons through `toggle_activity` and `send_command` |
+
+Devices that only understand infrared keep working through any Home Assistant integration that sends IR codes, such as a Harmony Hub or a Broadlink: an own command calls `remote.send_command` on it (see [Own commands and buttons](#own-commands-and-buttons)):
+
+```yaml
+devices:
+  onkyo:
+    entity_id: media_player.onkyo_receiver
+    commands:
+      volume_up:
+        action: remote.send_command
+        target: {entity_id: remote.harmony_hub}
+        data: {device: Onkyo AV Receiver, command: VolumeUp}
+```
 
 ---
 
