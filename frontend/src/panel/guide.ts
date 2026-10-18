@@ -41,7 +41,7 @@ const GUIDES: Record<string, Guide> = {
       ["Start sequence", "Settings once all devices are on: input, volume, sound mode, any action."],
       ["Remote control", "Which device gets volume, channels, playback and arrow keys. Automatic: volume to the first media player, the rest to the last."],
       ["Quick select", "Buttons that switch a media player to a source, on an Apple TV to an app."],
-      ["Settings in the card", "Source and sound mode, changeable in the card while the activity runs; automatic or chosen with favourites."],
+      ["Settings in the card", "Source, sound mode and entities of the devices such as tone controls, changeable in the card while the activity runs; automatic or chosen with favourites."],
     ],
     example_title: "Example: TV and Apple TV",
     example: [
@@ -76,7 +76,7 @@ const GUIDES: Record<string, Guide> = {
       ["Ablauf beim Start", "Einstellungen, sobald alle Geräte an sind: Eingang, Lautstärke, Klangmodus, beliebige Aktion."],
       ["Fernbedienung", "Welches Gerät Lautstärke, Sender, Wiedergabe und Pfeiltasten bekommt. Automatisch: Lautstärke an den ersten Mediaplayer, der Rest an den letzten."],
       ["Schnellwahl", "Tasten, die einen Mediaplayer auf eine Quelle schalten, beim Apple TV auf eine App."],
-      ["Einstellungen in der Karte", "Quelle und Klangmodus, in der Karte änderbar, während die Aktivität läuft; automatisch oder ausgewählt mit Favoriten."],
+      ["Einstellungen in der Karte", "Quelle, Klangmodus und Entitäten der Geräte wie Klangregler, in der Karte änderbar, während die Aktivität läuft; automatisch oder ausgewählt mit Favoriten."],
     ],
     example_title: "Beispiel: TV und Apple TV",
     example: [

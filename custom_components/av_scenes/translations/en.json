@@ -156,7 +156,7 @@
         },
         "command": {
           "name": "Command",
-          "description": "volume_up, volume_down, mute, volume_set, channel_up, channel_down, play_pause, play, pause, stop, next, previous, up, down, left, right, ok, back, menu, home, info, guide, exit – or a name from `commands`"
+          "description": "volume_up, volume_down, mute, volume_set, channel_up, channel_down, play_pause, play, pause, stop, next, previous, up, down, left, right, ok, back, menu, home, info, guide, exit – or a name from `commands`, or the entity ID of a device setting"
         },
         "value": {
           "name": "Value",

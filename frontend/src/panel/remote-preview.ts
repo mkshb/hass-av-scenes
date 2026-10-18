@@ -14,7 +14,7 @@ import type { Room } from "./model";
 import { t } from "./strings";
 
 type Target = {
-  via: "activity_commands" | "device_commands" | "remote" | "media_player" | null;
+  via: "activity_commands" | "device_commands" | "remote" | "media_player" | "entity" | null;
   device: string | null;
   entity_id?: string;
   action?: string;
@@ -115,7 +115,14 @@ export class AvScenesRemotePreview extends LitElement {
   private _button(view: RoomView, key: string): string {
     const [command, device] = key.split("|");
     const custom = view.remote?.buttons.find((b) => b.command === command && (b.device ?? "") === device);
-    return custom?.name || commandLabel(command, (key) => this._t(key));
+    if (custom?.name) {
+      return custom.name;
+    }
+    const setting = view.remote?.settings?.find((s) => s.command === command && s.device === device);
+    if (setting?.setting === "entity") {
+      return setting.label || this._entity(setting.entity_id);
+    }
+    return commandLabel(command, (key) => this._t(key));
   }
 
   private _onCall(ev: CustomEvent<{ service: string; data: Record<string, unknown> }>): void {
@@ -130,6 +137,7 @@ export class AvScenesRemotePreview extends LitElement {
     const to = target.device ? this._device(target.device) : this._t("preview.this_activity");
     switch (target.via) {
       case "media_player":
+      case "entity":
         return { to, how: `${target.action} → ${this._entity(target.entity_id)}` };
       case "remote":
         return {

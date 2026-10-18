@@ -109,6 +109,8 @@ export class AvScenesRemoteCard extends LitElement {
   private _padChoices = new Map<string, string>();
   // Device settings opened or closed on this device, also when storage is blocked
   private _settingsOpen = new Map<string, boolean>();
+  // Slider positions of number settings while they are dragged
+  private _settingDrafts = new Map<string, number>();
   // The key held down, until it is released or the press is cancelled
   private _press?: { command: string; extra: Record<string, unknown>; sent: boolean };
 
@@ -550,42 +552,139 @@ export class AvScenesRemoteCard extends LitElement {
         <span>${this._t("settings")}</span>
         <ha-icon class="chevron" .icon=${open ? "mdi:chevron-up" : "mdi:chevron-down"}></ha-icon>
       </button>
-      ${open ? html`<div class="setting-list">${settings.map((s) => this._renderSetting(s))}</div>` : nothing}
+      ${open
+        ? html`<div class="setting-list">
+            ${settings.map(
+              (s, i) => html`${i === 0 || settings[i - 1].device !== s.device
+                ? html`<span class="setting-device">${this._settingDevice(s)}</span>`
+                : nothing}${this._renderSetting(s)}`,
+            )}
+          </div>`
+        : nothing}
     </div>`;
   }
 
   private _renderSetting(setting: SettingView): TemplateResult {
+    if (setting.setting === "entity") {
+      return this._renderEntitySetting(setting);
+    }
     const state = this.hass?.states[setting.entity_id];
-    const value = state?.attributes[setting.attribute];
+    const value = setting.attribute ? state?.attributes[setting.attribute] : undefined;
     const current = value === undefined || value === null ? undefined : String(value);
+    return this._settingRow(
+      setting,
+      this._t(`setting.${setting.setting}`),
+      this._settingSelect(setting, this._t(`setting.${setting.setting}`), current, setting.options),
+    );
+  }
+
+  /** The device a group of settings belongs to, as heading. */
+  private _settingDevice(setting: SettingView): string {
+    return (
+      setting.name ||
+      (this.hass?.states[setting.device_entity_id]?.attributes.friendly_name as string | undefined) ||
+      setting.device
+    );
+  }
+
+  /** The label on the left, the control on the right. */
+  private _settingRow(setting: SettingView, label: string, control: TemplateResult): TemplateResult {
+    return html`<div class="setting">
+      <span class="setting-name">${label}</span>
+      ${control}
+    </div>`;
+  }
+
+  private _settingSelect(
+    setting: SettingView,
+    label: string,
+    current: string | undefined,
+    list: string[],
+    disabled = false,
+  ): TemplateResult {
     // The current value also when it is not among the favourites or the list
-    const options =
-      current !== undefined && !setting.options.includes(current)
-        ? [current, ...setting.options]
-        : setting.options;
-    const device =
-      setting.name || (state?.attributes.friendly_name as string | undefined) || setting.device;
-    const label = this._t(`setting.${setting.setting}`);
-    return html`<label class="setting">
-      <span class="setting-text">
-        <span class="setting-name">${label}</span>
-        <span class="setting-device">${device}</span>
-      </span>
-      <select
-        aria-label=${`${label} – ${device}`}
-        .value=${live(current ?? "")}
-        ?disabled=${!options.length}
-        @change=${(ev: Event) => {
-          const choice = (ev.target as HTMLSelectElement).value;
-          if (choice && choice !== current) {
-            this._send(setting.command, { device: setting.device, value: choice });
-          }
-        }}
+    const options = current !== undefined && !list.includes(current) ? [current, ...list] : list;
+    return html`<select
+      aria-label=${`${label}, ${this._settingDevice(setting)}`}
+      .value=${live(current ?? "")}
+      ?disabled=${disabled || !options.length}
+      @change=${(ev: Event) => {
+        const choice = (ev.target as HTMLSelectElement).value;
+        if (choice && choice !== current) {
+          this._send(setting.command, { device: setting.device, value: choice });
+        }
+      }}
+    >
+      ${current === undefined ? html`<option value="" disabled>–</option>` : nothing}
+      ${options.map((o) => html`<option value=${o} ?selected=${o === current}>${o}</option>`)}
+    </select>`;
+  }
+
+  /** A number as slider, a select as list, a switch as on/off key. */
+  private _renderEntitySetting(setting: SettingView): TemplateResult {
+    const state = this.hass?.states[setting.entity_id];
+    const label =
+      setting.label || (state?.attributes.friendly_name as string | undefined) || setting.entity_id;
+    const off = !state || state.state === "unavailable" || state.state === "unknown";
+    const domain = setting.entity_id.split(".")[0];
+    if (domain === "number" || domain === "input_number") {
+      const min = Number(state?.attributes.min ?? 0);
+      const max = Number(state?.attributes.max ?? 100);
+      const step = Number(state?.attributes.step ?? 1);
+      const draft = this._settingDrafts.get(setting.entity_id);
+      const value = draft ?? (off ? undefined : Number(state!.state));
+      const shown =
+        value === undefined || Number.isNaN(value) ? "–" : `${min < 0 && value > 0 ? "+" : ""}${value}`;
+      return this._settingRow(
+        setting,
+        label,
+        html`<span class="setting-range">
+          <input
+            type="range"
+            aria-label=${`${label}, ${this._settingDevice(setting)}`}
+            min=${min}
+            max=${max}
+            step=${step}
+            .value=${live(String(value ?? min))}
+            ?disabled=${off}
+            @input=${(ev: Event) => {
+              this._settingDrafts.set(setting.entity_id, Number((ev.target as HTMLInputElement).value));
+              this.requestUpdate();
+            }}
+            @change=${(ev: Event) => {
+              this._settingDrafts.delete(setting.entity_id);
+              this._send(setting.command, {
+                device: setting.device,
+                value: Number((ev.target as HTMLInputElement).value),
+              });
+            }}
+          />
+          <span class="value">${shown}</span>
+        </span>`,
+      );
+    }
+    if (domain === "select" || domain === "input_select") {
+      const all = Array.isArray(state?.attributes.options) ? (state!.attributes.options as unknown[]).map(String) : [];
+      return this._settingRow(
+        setting,
+        label,
+        this._settingSelect(setting, label, off ? undefined : state!.state, setting.options.length ? setting.options : all, off),
+      );
+    }
+    const on = state?.state === "on";
+    return this._settingRow(
+      setting,
+      label,
+      html`<button
+        class="key toggle ${on ? "active" : ""}"
+        aria-label=${`${label}, ${this._settingDevice(setting)}`}
+        aria-pressed=${on ? "true" : "false"}
+        ?disabled=${off}
+        @click=${() => this._send(setting.command, { device: setting.device, value: on ? "off" : "on" })}
       >
-        ${current === undefined ? html`<option value="" disabled>–</option>` : nothing}
-        ${options.map((o) => html`<option value=${o} ?selected=${o === current}>${o}</option>`)}
-      </select>
-    </label>`;
+        ${this._t(on ? "toggle.on" : "toggle.off")}
+      </button>`,
+    );
   }
 
   private _key(
@@ -1155,25 +1254,50 @@ export class AvScenesRemoteCard extends LitElement {
       gap: 8px;
     }
     .setting {
+      min-height: 40px;
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
       align-items: center;
       gap: 12px;
     }
-    .setting-text {
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-    }
     .setting-name {
+      min-width: 0;
       overflow-wrap: anywhere;
     }
     .setting-device {
+      margin-top: 4px;
       font-size: 0.85em;
+      font-weight: 500;
       color: var(--secondary-text-color);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+    .setting-range {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .setting-range input {
+      flex: 1;
+      min-width: 0;
+      accent-color: var(--avs-accent);
+    }
+    .setting-range .value {
+      width: 4ch;
+      text-align: right;
+      color: var(--secondary-text-color);
+      font-variant-numeric: tabular-nums;
+    }
+    .setting .toggle {
+      height: 40px;
+      justify-self: start;
+      padding: 0 20px;
+    }
+    .setting .toggle.active {
+      background: var(--avs-accent);
+      color: var(--text-primary-color, #fff);
     }
     .setting select {
       width: 100%;

@@ -119,7 +119,7 @@ devices:
 | Restart-safe | The running activity survives a Home Assistant restart |
 | Repairs | Entities that do not exist (typo, renamed entity) are reported in **Settings → Repairs** |
 | Configuration panel | An admin page in the sidebar with a built-in guide: devices and activities as lists, each edited on its own page in short sections with help texts, using Home Assistant's own pickers; plus a YAML view |
-| Remote control card | A dashboard card per room: power, activities, volume, d-pad, channels, playback, your own buttons and device settings such as source and sound mode — only what the running activity offers |
+| Remote control card | A dashboard card per room: power, activities, volume, d-pad, channels, playback, your own buttons and device settings such as source, sound mode or tone controls — only what the running activity offers |
 | Command routing | `av_scenes.send_command` sends a button (e.g. `volume_up`) to whichever device the running activity uses for it — from the card, automations or wall switches |
 | 4 entity platforms | Scene, Switch, Sensor, Select — one virtual device per room |
 
@@ -438,7 +438,7 @@ In the configuration panel, quick select has its own list under **Remote control
 
 ### Device settings
 
-Below the buttons, the card has a **Settings** section for what you change during a film rather than at every start: the source and the sound mode of the activity's media players, each as a list to choose from with its current value. The section is closed until it is opened; each browser remembers that per room. A choice runs `media_player.select_source` or `media_player.select_sound_mode` after the device's readiness check, like every button.
+Below the buttons, the card has a **Settings** section for what you change during a film rather than at every start: the source and the sound mode of the activity's media players, and any number, select or switch entity of a device, such as the tone controls or speaker levels a receiver's integration provides. The card shows a source, sound mode or select as a list with its current value, a number as a slider with its range, a switch as an on/off key. The section is closed until it is opened; each browser remembers that per room. A change runs the matching action (`media_player.select_source`, `media_player.select_sound_mode`, `number.set_value`, `select.select_option`, `switch.turn_on`/`turn_off`) after the device's readiness check, like every button.
 
 Without configuration the card offers the source and sound mode of every media player of the activity that reported such a list; the integration remembers the lists while a device is off. `settings` under `remote` chooses instead, in this order, with optional favourites, so a receiver with fifteen sound modes offers the three you use; an empty list hides the section:
 
@@ -449,9 +449,15 @@ activities:
       settings:
         - {device: onkyo, setting: sound_mode, options: ["DOLBY ATMOS/DOLBY SURROUND", "THX CINEMA", "DIRECT"]}
         - {device: onkyo, setting: source}   # the receiver's whole source list
+        - {device: onkyo, entity: number.onkyo_bass, name: Bass}
+        - {device: onkyo, entity: switch.onkyo_late_night, name: Late night}
 ```
 
-In the panel it is **Settings in the card** on every activity's page: automatic, or chosen settings with favourites picked from the device's list. A receiver can still refuse a sound mode that does not fit the incoming signal; the card then keeps showing the mode it actually uses.
+`entity` takes a `number`, `select`, `switch` or their `input_*` helpers; `name` labels it, else its own name. AV Scenes does not talk to the device itself: what the card can offer depends on the entities the device's integration provides.
+
+`av_scenes.send_command` sets an entity setting with the entity ID as `command`, the new value as `value` and the device as `device`, e.g. `command: number.onkyo_bass`, `value: -2`, `device: onkyo`.
+
+In the panel it is **Settings in the card** on every activity's page: automatic, or chosen settings with favourites picked from the device's list, and entities of the device. A receiver can still refuse a sound mode that does not fit the incoming signal; the card then keeps showing the mode it actually uses.
 
 A command is resolved in this order: the activity's own `commands`, then the device of its group (own `commands` or built-in action), then the first device of the activity that defines it — so digit keys `"0"`–`"9"` only need to exist on the set-top box.
 

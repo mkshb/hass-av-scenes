@@ -37,6 +37,7 @@ Layout of ``entry.data``::
                 - {device: aptv, source: YouTube}   # quick select: source or app
               settings:                    # device settings in the card; default: all
                 - {device: onkyo, setting: sound_mode, options: [THX, STEREO]}
+                - {device: onkyo, entity: number.onkyo_bass, name: Bass}
             commands: {netflix: [...]}     # activity-only commands
 """
 from __future__ import annotations
@@ -67,6 +68,7 @@ from .const import (
     CONF_DELAY_AFTER_POWER,
     CONF_DEVICE,
     CONF_DEVICES,
+    CONF_ENTITY,
     CONF_ENTITY_ID,
     CONF_ICON,
     CONF_ID,
@@ -100,6 +102,7 @@ from .const import (
     DOMAIN,
     ON_TIMEOUT_ABORT,
     ON_TIMEOUT_OPTIONS,
+    SETTING_ENTITY_DOMAINS,
     SETTING_SOUND_MODE,
     SETTING_SOURCE,
     STEP_TYPE_CALL_ACTION,
@@ -274,14 +277,26 @@ BUTTON_SCHEMA = vol.Schema(
     }
 )
 
-# A device setting the card offers, with optional favourites to choose from
+# A device setting the card offers: the source or sound mode of a media
+# player, or an entity of the device (a number, select or switch), with
+# optional favourites to choose from
 SETTING_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_DEVICE): _KEY,
-        vol.Required(CONF_SETTING): vol.In([SETTING_SOURCE, SETTING_SOUND_MODE]),
+        vol.Optional(CONF_SETTING): vol.In([SETTING_SOURCE, SETTING_SOUND_MODE]),
+        vol.Optional(CONF_ENTITY): vol.All(cv.entity_id, cv.entity_domain(SETTING_ENTITY_DOMAINS)),
+        vol.Optional(CONF_NAME): str,
         vol.Optional(CONF_OPTIONS, default=list): [vol.Coerce(str)],
     }
 )
+
+
+def _setting(value: Any) -> dict[str, Any]:
+    setting = SETTING_SCHEMA(value)
+    if (CONF_SETTING in setting) == (CONF_ENTITY in setting):
+        raise vol.Invalid("a setting has either a setting (source, sound_mode) or an entity")
+    return setting
+
 
 REMOTE_SCHEMA = vol.Schema(
     {
@@ -291,7 +306,7 @@ REMOTE_SCHEMA = vol.Schema(
         vol.Optional(CONF_TOUCHPAD): vol.Any(None, cv.boolean),
         vol.Optional(CONF_BUTTONS, default=list): [_button],
         # Device settings in the card; without them, those of every media player
-        vol.Optional(CONF_SETTINGS): vol.Any(None, [SETTING_SCHEMA]),
+        vol.Optional(CONF_SETTINGS): vol.Any(None, [_setting]),
     }
 )
 
@@ -371,7 +386,9 @@ def _check_references(rooms: dict[str, Any]) -> None:
                 path = [*base, CONF_REMOTE, CONF_SETTINGS, idx, CONF_DEVICE]
                 if device not in devices:
                     raise vol.Invalid(f"unknown device '{device}'", path=path)
-                if not devices[device][CONF_ENTITY_ID].startswith("media_player."):
+                if CONF_SETTING in setting and not devices[device][CONF_ENTITY_ID].startswith(
+                    "media_player."
+                ):
                     raise vol.Invalid(
                         f"device settings need a media player, '{device}' is none", path=path
                     )

@@ -32,6 +32,7 @@ from .const import (
     CONF_COMMANDS,
     CONF_DEVICE,
     CONF_DEVICES,
+    CONF_ENTITY,
     CONF_ENTITY_ID,
     CONF_ICON,
     CONF_NAME,
@@ -251,11 +252,30 @@ def settings_view(
     for item in chosen:
         device = devices[item[CONF_DEVICE]]
         entity_id = device[CONF_ENTITY_ID]
+        base = {
+            "device": item[CONF_DEVICE],
+            "name": device.get(CONF_NAME),
+            # The card names the device after this entity without a name
+            "device_entity_id": entity_id,
+            "label": item.get(CONF_NAME),
+        }
+        if CONF_ENTITY in item:
+            # The card reads the entity's state, range or options itself
+            view.append(
+                {
+                    **base,
+                    "entity_id": item[CONF_ENTITY],
+                    "setting": "entity",
+                    "attribute": None,
+                    "command": item[CONF_ENTITY],
+                    "options": list(item.get(CONF_OPTIONS) or []),
+                }
+            )
+            continue
         attribute, _, command = SETTINGS[item[CONF_SETTING]]
         view.append(
             {
-                "device": item[CONF_DEVICE],
-                "name": device.get(CONF_NAME),
+                **base,
                 "entity_id": entity_id,
                 "setting": item[CONF_SETTING],
                 "attribute": attribute,
@@ -264,6 +284,50 @@ def settings_view(
             }
         )
     return view
+
+
+def setting_entities(room: dict[str, Any], device_id: str) -> set[str]:
+    """The entities a device has as settings in any activity of the room;
+    send_command sets them with the entity ID as command."""
+    return {
+        item[CONF_ENTITY]
+        for activity in room[CONF_ACTIVITIES].values()
+        for item in (activity.get(CONF_REMOTE) or {}).get(CONF_SETTINGS) or []
+        if item[CONF_DEVICE] == device_id and CONF_ENTITY in item
+    }
+
+
+# Action of an entity setting by domain; switches are turned on or off
+_ENTITY_SERVICES = {
+    "number": "set_value",
+    "input_number": "set_value",
+    "select": "select_option",
+    "input_select": "select_option",
+}
+
+
+def entity_setting_call(entity_id: str, value: Any) -> tuple[str, str, dict[str, Any]]:
+    """The action that sets an entity setting to a value.
+
+    Raises ValueError for a missing or unusable value.
+    """
+    domain = entity_id.split(".", 1)[0]
+    if value is None or value == "":
+        raise ValueError(f"{entity_id} needs a value")
+    data: dict[str, Any] = {ATTR_ENTITY_ID: entity_id}
+    if _ENTITY_SERVICES.get(domain) == "set_value":
+        try:
+            data["value"] = float(value)
+        except (TypeError, ValueError) as err:
+            raise ValueError(f"{entity_id} needs a number, not {value!r}") from err
+        return domain, "set_value", data
+    if _ENTITY_SERVICES.get(domain) == "select_option":
+        data["option"] = str(value)
+        return domain, "select_option", data
+    on = value is True or str(value).lower() in ("on", "true", "1")
+    if not on and not (value is False or str(value).lower() in ("off", "false", "0")):
+        raise ValueError(f"{entity_id} needs on or off, not {value!r}")
+    return domain, "turn_on" if on else "turn_off", data
 
 
 def remote_view(
@@ -392,6 +456,10 @@ def describe_command(
     device = devices[device_id]
     entity_id = device[CONF_ENTITY_ID]
     base = {"device": device_id, "entity_id": entity_id, "ready": bool(device.get(CONF_READY))}
+    if command in setting_entities(room, device_id):
+        domain = command.split(".", 1)[0]
+        service = _ENTITY_SERVICES.get(domain, "turn_on / turn_off")
+        return {**base, "via": "entity", "action": f"{domain}.{service}", "entity_id": command}
     if command in device[CONF_COMMANDS]:
         return {**base, "via": "device_commands", "actions": action_names(device[CONF_COMMANDS][command])}
     remote = device.get(CONF_REMOTE_ENTITY)

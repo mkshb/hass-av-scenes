@@ -149,7 +149,16 @@ from .const import (
     STEP_TYPE_SET_VOLUME,
     STEP_TYPE_WAIT_AVAILABLE,
 )
-from .control import SETTINGS, activity_list, builtin_call, remote_call, remote_view, route
+from .control import (
+    SETTINGS,
+    activity_list,
+    builtin_call,
+    entity_setting_call,
+    remote_call,
+    remote_view,
+    route,
+    setting_entities,
+)
 from .model import CONF_DELAY_AFTER, async_validate_config, find_missing_entities
 
 _LOGGER = logging.getLogger(__name__)
@@ -848,9 +857,13 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         remote = device.get(CONF_REMOTE_ENTITY)
         try:
-            call = (
-                remote_call(command, remote, self._platform_of(remote)) if remote else None
-            ) or builtin_call(command, entity_id, self.hass.states.get(entity_id), value)
+            if command in setting_entities(room, device_id):
+                # A device setting of the card: the entity is the command
+                call: tuple[str, str, dict[str, Any]] | None = entity_setting_call(command, value)
+            else:
+                call = (
+                    remote_call(command, remote, self._platform_of(remote)) if remote else None
+                ) or builtin_call(command, entity_id, self.hass.states.get(entity_id), value)
         except ValueError as err:
             raise ServiceValidationError(str(err)) from err
         if call is None:

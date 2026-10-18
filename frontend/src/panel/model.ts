@@ -99,6 +99,8 @@ export function sourceList(hass: HomeAssistant, sources: Sources, entity: string
 
 /** Device settings the card can offer, and the list each one chooses from. */
 export const SETTINGS = ["source", "sound_mode"] as const;
+/** Entities a device setting can be: shown as slider, list or on/off key. */
+export const SETTING_ENTITY_DOMAINS = ["number", "input_number", "select", "input_select", "switch", "input_boolean"] as const;
 export const SETTING_LISTS: Record<string, string> = {
   source: "source_list",
   sound_mode: "sound_mode_list",

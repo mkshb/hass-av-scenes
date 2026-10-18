@@ -374,6 +374,8 @@ def test_settings_view() -> None:
     assert settings_view(room, tv, lists)[1] == {
         "device": "onkyo",
         "name": None,
+        "device_entity_id": ONKYO,
+        "label": None,
         "entity_id": ONKYO,
         "setting": "sound_mode",
         "attribute": "sound_mode",
@@ -391,6 +393,75 @@ def test_settings_view() -> None:
     ]
     tv["remote"]["settings"] = []
     assert settings_view(room, tv, lists) == []
+
+    # An entity of the device: the card reads its state, the entity is the command
+    tv["remote"]["settings"] = [
+        {"device": "onkyo", "entity": "number.onkyo_bass", "name": "Bass", "options": []}
+    ]
+    assert settings_view(room, tv, lists) == [
+        {
+            "device": "onkyo",
+            "name": None,
+            "device_entity_id": ONKYO,
+            "label": "Bass",
+            "entity_id": "number.onkyo_bass",
+            "setting": "entity",
+            "attribute": None,
+            "command": "number.onkyo_bass",
+            "options": [],
+        }
+    ]
+
+
+async def test_entity_settings(hass: HomeAssistant, devices: Devices, hass_ws_client) -> None:
+    """A number, select or switch of a device is set with its entity ID as
+    command; other entities are no commands."""
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    async def record(call: ServiceCall) -> None:
+        calls.append((f"{call.domain}.{call.service}", dict(call.data)))
+
+    data = remote_room()
+    room = data["rooms"]["wz"]
+    room["activities"]["musik"]["remote"] = {"settings": [
+        {"device": "onkyo", "entity": "number.onkyo_bass"},
+        {"device": "onkyo", "entity": "select.onkyo_dimmer", "options": ["Dim", "Off"]},
+        {"device": "onkyo", "entity": "switch.onkyo_late_night"},
+    ]}
+    coordinator = await setup(hass, devices, data)
+    await coordinator.async_start_activity("wz", "musik")
+    # After the setup, which loads the select and switch components with their own actions
+    for domain, service in (
+        ("number", "set_value"), ("select", "select_option"),
+        ("switch", "turn_on"), ("switch", "turn_off"),
+    ):
+        hass.services.async_register(domain, service, record)
+
+    await send(hass, "number.onkyo_bass", value="-3", device="onkyo")
+    await send(hass, "select.onkyo_dimmer", value="Dim", device="onkyo")
+    await send(hass, "switch.onkyo_late_night", value="on", device="onkyo")
+    await send(hass, "switch.onkyo_late_night", value=False, device="onkyo")
+    assert calls == [
+        ("number.set_value", {"entity_id": "number.onkyo_bass", "value": -3.0}),
+        ("select.select_option", {"entity_id": "select.onkyo_dimmer", "option": "Dim"}),
+        ("switch.turn_on", {"entity_id": "switch.onkyo_late_night"}),
+        ("switch.turn_off", {"entity_id": "switch.onkyo_late_night"}),
+    ]
+
+    for command, value, device in (
+        ("number.onkyo_bass", "loud", "onkyo"),  # not a number
+        ("number.onkyo_bass", None, "onkyo"),  # no value
+        ("number.onkyo_bass", 3, "beamer"),  # not a setting of that device
+        ("number.other", 3, "onkyo"),  # not a setting at all
+    ):
+        with pytest.raises(ServiceValidationError):
+            await send(hass, command, device=device, **({"value": value} if value is not None else {}))
+
+    preview = await _preview(hass_ws_client, hass, room, "musik")
+    assert preview["targets"]["number.onkyo_bass|onkyo"] == {
+        "via": "entity", "action": "number.set_value", "entity_id": "number.onkyo_bass",
+        "device": "onkyo", "ready": True,
+    }
 
 
 async def test_device_settings(

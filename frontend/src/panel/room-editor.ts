@@ -11,6 +11,7 @@ import type { HomeAssistant } from "../types";
 import {
   GROUPS,
   SETTINGS,
+  SETTING_ENTITY_DOMAINS,
   SETTING_LISTS,
   STEP_TYPES,
   autoSettings,
@@ -807,12 +808,20 @@ export class AvScenesRoomEditor extends LitElement {
       this.room.devices?.[d]?.entity_id?.startsWith("media_player."),
     );
     const deviceName = (d: unknown) => this.room.devices?.[String(d)]?.name ?? String(d);
+    const isPlayer = (d: unknown) =>
+      Boolean(this.room.devices?.[String(d)]?.entity_id?.startsWith("media_player."));
     const auto = autoSettings(this.hass, this.room, activity, {
       source_list: this.sources,
       sound_mode_list: this.soundModes,
     });
-    const describe = (s: { device: unknown; setting: unknown }) =>
-      `${this._t(`setting.${s.setting}`)} (${deviceName(s.device)})`;
+    const describe = (s: Obj) => {
+      const what = s.entity
+        ? (s.name as string) ||
+          (this.hass.states[s.entity as string]?.attributes.friendly_name as string | undefined) ||
+          (s.entity as string)
+        : this._t(`setting.${s.setting ?? "entity"}`);
+      return `${what} (${deviceName(s.device)})`;
+    };
 
     const mode = html`<ha-form
       .hass=${this.hass}
@@ -850,51 +859,83 @@ export class AvScenesRoomEditor extends LitElement {
         </p>`;
     }
 
-    const deviceOptions = players.map((d) => ({ value: d, label: deviceName(d) }));
-    const settingOptions = SETTINGS.map((value) => ({ value, label: this._t(`setting.${value}`) }));
+    const devices = activity.devices ?? [];
+    const deviceOptions = devices.map((d) => ({ value: d, label: deviceName(d) }));
     return html`${mode}
-      ${chosen.map((item, i) => html`<div class="step">
-        <div class="step-head">
-          <span class="title">${describe(item as { device: unknown; setting: unknown })}</span>
-          ${this._moveButtons(chosen, i, setSettings)}
-        </div>
-        <ha-form
-          .hass=${this.hass}
-          .data=${{ device: item.device, setting: item.setting, options: item.options ?? [] }}
-          .schema=${[
-            { name: "device", required: true, selector: { select: { options: deviceOptions, mode: "dropdown" } } },
-            { name: "setting", required: true, selector: { select: { options: settingOptions, mode: "dropdown" } } },
-            {
-              name: "options",
-              selector: {
-                select: {
-                  options: this._settingList(item.device, item.setting),
-                  multiple: true,
-                  custom_value: true,
-                  mode: "dropdown",
+      ${chosen.map((item, i) => {
+        const kind = item.entity !== undefined ? "entity" : (item.setting as string);
+        // Source and sound mode need a media player; any device can have entities
+        const kinds = isPlayer(item.device) ? [...SETTINGS, "entity"] : ["entity"];
+        const entity = item.entity as string | undefined;
+        const entityOptions = entity ? this.hass.states[entity]?.attributes.options : undefined;
+        const choices =
+          kind === "entity"
+            ? Array.isArray(entityOptions)
+              ? entityOptions.map(String)
+              : undefined
+            : this._settingList(item.device, kind);
+        return html`<div class="step">
+          <div class="step-head">
+            <span class="title">${describe(item)}</span>
+            ${this._moveButtons(chosen, i, setSettings)}
+          </div>
+          <ha-form
+            .hass=${this.hass}
+            .data=${{ device: item.device, setting: kind, entity, name: item.name, options: item.options ?? [] }}
+            .schema=${[
+              { name: "device", required: true, selector: { select: { options: deviceOptions, mode: "dropdown" } } },
+              {
+                name: "setting",
+                required: true,
+                selector: {
+                  select: { options: kinds.map((value) => ({ value, label: this._t(`setting.${value}`) })), mode: "dropdown" },
                 },
               },
-            },
-          ]}
-          .computeLabel=${this._label}
-          .computeHelper=${this._helper}
-          @value-changed=${(ev: CustomEvent) => {
-            const v = ev.detail.value as Obj;
-            const list = [...chosen];
-            list[i] = clean({ device: v.device, setting: v.setting, options: v.options });
-            setSettings(list);
-          }}
-        ></ha-form>
-      </div>`)}
+              ...(kind === "entity"
+                ? [
+                    { name: "entity", required: true, selector: { entity: { filter: { domain: [...SETTING_ENTITY_DOMAINS] } } } },
+                    { name: "name", selector: { text: {} } },
+                  ]
+                : []),
+              // Favourites for lists: source, sound mode, a select
+              ...(choices !== undefined
+                ? [
+                    {
+                      name: "options",
+                      selector: { select: { options: choices, multiple: true, custom_value: true, mode: "dropdown" } },
+                    },
+                  ]
+                : []),
+            ]}
+            .computeLabel=${this._label}
+            .computeHelper=${this._helper}
+            @value-changed=${(ev: CustomEvent) => {
+              const v = ev.detail.value as Obj;
+              const next = isPlayer(v.device) ? (v.setting as string) : "entity";
+              const list = [...chosen];
+              list[i] =
+                next === "entity"
+                  ? // An entity not picked yet stays "" so the entry remains an entity setting
+                    clean({ device: v.device, entity: v.entity ?? "", name: v.name, options: v.options }, ["entity"])
+                  : clean({ device: v.device, setting: next, options: v.options });
+              setSettings(list);
+            }}
+          ></ha-form>
+        </div>`;
+      })}
       ${chosen.length ? nothing : html`<p class="hint">${this._t("settings_none")}</p>`}
-      ${players.length
+      ${devices.length
         ? html`<button
             class="add"
-            @click=${() => setSettings([...chosen, { device: players[0], setting: "sound_mode" }])}
+            @click=${() =>
+              setSettings([
+                ...chosen,
+                players.length ? { device: players[0], setting: "sound_mode" } : { device: devices[0], entity: "" },
+              ])}
           >
             + ${this._t("add_setting")}
           </button>`
-        : html`<p class="hint">${this._t("quick_select_no_player")}</p>`}`;
+        : nothing}`;
   }
 
   private _addActivity(): void {

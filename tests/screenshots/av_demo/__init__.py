@@ -19,7 +19,15 @@ from homeassistant.helpers.typing import ConfigType
 DOMAIN = "av_demo"
 POSTER = "/av_demo/poster.svg"
 
-PLATFORMS = (Platform.SWITCH, Platform.MEDIA_PLAYER, Platform.REMOTE, Platform.LIGHT, Platform.COVER)
+PLATFORMS = (
+    Platform.SWITCH,
+    Platform.MEDIA_PLAYER,
+    Platform.REMOTE,
+    Platform.LIGHT,
+    Platform.COVER,
+    Platform.NUMBER,
+    Platform.SELECT,
+)
 
 
 class Outlets:

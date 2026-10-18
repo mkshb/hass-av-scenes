@@ -46,6 +46,11 @@ CONF_SETTING: Final = "setting"
 CONF_OPTIONS: Final = "options"
 SETTING_SOURCE: Final = "source"
 SETTING_SOUND_MODE: Final = "sound_mode"
+# A setting can also be an entity of the device, e.g. number.receiver_bass
+CONF_ENTITY: Final = "entity"
+SETTING_ENTITY_DOMAINS: Final = (
+    "number", "input_number", "select", "input_select", "switch", "input_boolean",
+)
 CONF_COMMAND: Final = "command"
 
 # Step parameters

@@ -81,10 +81,15 @@ export interface SettingView {
   device: string;
   /** The device's name in the configuration, if it has one */
   name: string | null;
+  /** The device's own entity, for its name */
+  device_entity_id: string;
+  /** The setting's own name, if it has one */
+  label: string | null;
+  /** The media player, or for "entity" the number, select or switch */
   entity_id: string;
-  setting: "source" | "sound_mode";
-  /** The attribute with the current value */
-  attribute: string;
+  setting: "source" | "sound_mode" | "entity";
+  /** The attribute with the current value; null: the entity's state */
+  attribute: string | null;
   /** send_command command that sets it, with the choice as value */
   command: string;
   /** Favourites, else the device's list */

@@ -76,6 +76,14 @@ activities:
         - {device: apple_tv, source: Disney+}
         - {device: apple_tv, source: Plex, icon: mdi:plex}
         - {device: apple_tv, source: YouTube, icon: mdi:youtube}
+      settings:
+        - {device: receiver, setting: sound_mode, options: [Dolby Atmos, DTS:X, Direct]}
+        - {device: receiver, entity: number.av_receiver_treble, name: Treble}
+        - {device: receiver, entity: number.av_receiver_bass, name: Bass}
+        - {device: receiver, entity: number.av_receiver_center_level, name: Center level}
+        - {device: receiver, entity: number.av_receiver_subwoofer_level, name: Subwoofer level}
+        - {device: receiver, entity: switch.av_receiver_late_night, name: Late night}
+        - {device: receiver, entity: select.av_receiver_display, name: Display}
   music:
     name: Music
     icon: mdi:music

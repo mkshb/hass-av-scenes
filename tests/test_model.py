@@ -171,7 +171,21 @@ def test_device_settings() -> None:
     # Without settings the card offers all; an empty list none
     assert "settings" not in validate_config(_config())["rooms"]["wz"]["activities"]["tv"]["remote"]
 
+    # An entity of the device instead of a setting, on any device
+    data = _config(remote={"settings": [
+        {"device": "onkyo", "entity": "number.onkyo_bass", "name": "Bass"},
+        {"device": "plug", "entity": "switch.plug_led"},
+    ]})
+    data["rooms"]["wz"]["devices"]["plug"] = {"entity_id": "switch.plug"}
+    assert validate_config(data)["rooms"]["wz"]["activities"]["tv"]["remote"]["settings"] == [
+        {"device": "onkyo", "entity": "number.onkyo_bass", "name": "Bass", "options": []},
+        {"device": "plug", "entity": "switch.plug_led", "options": []},
+    ]
+
     for setting, path in (
+        ({"device": "onkyo", "entity": "light.lamp"}, ["entity"]),
+        ({"device": "onkyo"}, []),
+        ({"device": "onkyo", "setting": "source", "entity": "number.x"}, []),
         ({"device": "onkyo", "setting": "volume"}, ["setting"]),
         ({"device": "nope", "setting": "source"}, ["device"]),
         ({"device": "plug", "setting": "source"}, ["device"]),
@@ -180,7 +194,8 @@ def test_device_settings() -> None:
         data["rooms"]["wz"]["devices"]["plug"] = {"entity_id": "switch.plug"}
         with pytest.raises(vol.Invalid) as err:
             validate_config(data)
-        assert err.value.path[-1] == path[-1]
+        if path:
+            assert err.value.path[-1] == path[-1]
 
 
 def test_default_activity_must_exist() -> None:
