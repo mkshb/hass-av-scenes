@@ -15,6 +15,7 @@ import {
   SETTING_LISTS,
   STEP_TYPES,
   autoSettings,
+  deviceAutoSettings,
   clean,
   cleanRemote,
   deviceList,
@@ -28,6 +29,7 @@ import {
   type Activity,
   type Device,
   type Obj,
+  type Related,
   type Room,
   type Sources,
   type Step,
@@ -60,6 +62,7 @@ export class AvScenesRoomEditor extends LitElement {
     _tab: { state: true },
     _view: { state: true },
     _notice: { state: true },
+    _related: { state: true },
   };
 
   declare hass: HomeAssistant;
@@ -73,6 +76,9 @@ export class AvScenesRoomEditor extends LitElement {
   declare _tab: Tab;
   declare _view: View;
   declare _notice?: string;
+  /** Numbers and selects each device entity offers automatically */
+  declare _related: Related;
+  private _relatedKey = "";
 
   constructor() {
     super();
@@ -80,9 +86,31 @@ export class AvScenesRoomEditor extends LitElement {
     this._view = { kind: "list" };
     this.sources = {};
     this.soundModes = {};
+    this._related = {};
+  }
+
+  /** Ask for the related entities whenever the room's device entities change. */
+  private _loadRelated(): void {
+    const ids = [...new Set(Object.values(this.room?.devices ?? {}).map((d) => d.entity_id).filter(Boolean))].sort();
+    const key = ids.join(",");
+    if (!this.hass || key === this._relatedKey) {
+      return;
+    }
+    this._relatedKey = key;
+    this.hass
+      .callWS<Related>({ type: "av_scenes/config/related", entity_ids: ids })
+      .then((related) => {
+        if (key === this._relatedKey) {
+          this._related = related;
+        }
+      })
+      .catch(() => undefined);
   }
 
   protected willUpdate(changed: Map<string, unknown>): void {
+    if (changed.has("room") || changed.has("hass")) {
+      this._loadRelated();
+    }
     // Another room: back to its lists
     if (changed.has("roomId") && changed.get("roomId") !== undefined) {
       this._view = { kind: "list" };
@@ -367,6 +395,7 @@ export class AvScenesRoomEditor extends LitElement {
               : []),
           ])}`,
       )}
+      ${this._card(this._t("card_settings"), this._t("device_settings_hint"), this._renderDeviceSettings(id, device))}
       ${this._advanced(
         this._t("hint_device_advanced"),
         html`<label class="id">
@@ -413,6 +442,11 @@ export class AvScenesRoomEditor extends LitElement {
       delay_after_off: v.delay_after_off as number | undefined,
       commands: v.commands as Obj | undefined,
     }) as Device;
+    // Not part of the form: kept as they are, an empty list included
+    const settings = this.room.devices?.[id]?.settings;
+    if (settings !== undefined) {
+      device.settings = settings;
+    }
     // An enabled check without options is still a check
     if (v.ready_enabled && !device.ready) {
       device.ready = {};
@@ -792,7 +826,137 @@ export class AvScenesRoomEditor extends LitElement {
     return deviceList(this.hass, remembered, this.room.devices?.[String(device)]?.entity_id, attribute);
   }
 
-  /** Device settings in the card: automatic, or chosen ones with favourites. */
+  /** How a setting is listed in the editor: its name, else its entity's or the setting's. */
+  private _describeSetting(s: Obj, withDevice: boolean): string {
+    const what = s.entity
+      ? (s.name as string) ||
+        (this.hass.states[s.entity as string]?.attributes.friendly_name as string | undefined) ||
+        (s.entity as string) ||
+        this._t("setting.entity")
+      : this._t(`setting.${s.setting}`);
+    if (!withDevice) {
+      return what;
+    }
+    const device = this.room.devices?.[String(s.device)];
+    return `${what} (${device?.name ?? String(s.device)})`;
+  }
+
+  /** "From the devices"/"automatic" or a choice, as a dropdown. */
+  private _settingsMode(chosen: boolean, auto: string, set: (chosen: boolean) => void): TemplateResult {
+    return html`<ha-form
+      .hass=${this.hass}
+      .data=${{ settings_mode: chosen ? "chosen" : "auto" }}
+      .schema=${[
+        {
+          name: "settings_mode",
+          required: true,
+          selector: {
+            select: {
+              options: [
+                { value: "auto", label: this._t(auto) },
+                { value: "chosen", label: this._t("settings_chosen") },
+              ],
+              mode: "dropdown",
+            },
+          },
+        },
+      ]}
+      .computeLabel=${this._label}
+      @value-changed=${(ev: CustomEvent) => {
+        const next = (ev.detail.value as Obj).settings_mode === "chosen";
+        if (next !== chosen) {
+          set(next);
+        }
+      }}
+    ></ha-form>`;
+  }
+
+  /**
+   * A list of settings with their favourites. With ``devices`` each setting
+   * names one of them (an activity's choice); without, all belong to
+   * ``owner`` (a device's own list) and carry no device.
+   */
+  private _renderSettingItems(
+    items: Obj[],
+    setItems: (list: Obj[]) => void,
+    devices: string[] | null,
+    owner?: string,
+  ): TemplateResult {
+    const isPlayer = (d: unknown) =>
+      Boolean(this.room.devices?.[String(d)]?.entity_id?.startsWith("media_player."));
+    const deviceOptions = (devices ?? []).map((d) => ({ value: d, label: this.room.devices?.[d]?.name ?? d }));
+    return html`${items.map((item, i) => {
+      const device = devices ? item.device : owner;
+      const kind = item.entity !== undefined ? "entity" : (item.setting as string);
+      // Source and sound mode need a media player; any device can have entities
+      const kinds = isPlayer(device) ? [...SETTINGS, "entity"] : ["entity"];
+      const entity = item.entity as string | undefined;
+      const entityOptions = entity ? this.hass.states[entity]?.attributes.options : undefined;
+      const choices =
+        kind === "entity"
+          ? Array.isArray(entityOptions)
+            ? entityOptions.map(String)
+            : undefined
+          : this._settingList(device, kind);
+      return html`<div class="step">
+        <div class="step-head">
+          <span class="title">${this._describeSetting(item, devices !== null)}</span>
+          ${this._moveButtons(items, i, setItems)}
+        </div>
+        <ha-form
+          .hass=${this.hass}
+          .data=${{ device: item.device, setting: kind, entity, name: item.name, options: item.options ?? [] }}
+          .schema=${[
+            ...(devices
+              ? [{ name: "device", required: true, selector: { select: { options: deviceOptions, mode: "dropdown" } } }]
+              : []),
+            {
+              name: "setting",
+              required: true,
+              selector: {
+                select: { options: kinds.map((value) => ({ value, label: this._t(`setting.${value}`) })), mode: "dropdown" },
+              },
+            },
+            ...(kind === "entity"
+              ? [
+                  { name: "entity", required: true, selector: { entity: { filter: { domain: [...SETTING_ENTITY_DOMAINS] } } } },
+                  { name: "name", selector: { text: {} } },
+                ]
+              : []),
+            // Favourites for lists: source, sound mode, a select
+            ...(choices !== undefined
+              ? [
+                  {
+                    name: "options",
+                    selector: { select: { options: choices, multiple: true, custom_value: true, mode: "dropdown" } },
+                  },
+                ]
+              : []),
+          ]}
+          .computeLabel=${this._label}
+          .computeHelper=${this._helper}
+          @value-changed=${(ev: CustomEvent) => {
+            const v = ev.detail.value as Obj;
+            const next = isPlayer(devices ? v.device : owner) ? (v.setting as string) : "entity";
+            const head = devices ? { device: v.device } : {};
+            const list = [...items];
+            list[i] =
+              next === "entity"
+                ? // An entity not picked yet stays "" so the entry remains an entity setting
+                  clean({ ...head, entity: v.entity ?? "", name: v.name, options: v.options }, ["entity"])
+                : clean({ ...head, setting: next, options: v.options });
+            setItems(list);
+          }}
+        ></ha-form>
+      </div>`;
+    })}`;
+  }
+
+  private get _lists(): Record<string, Sources> {
+    return { source_list: this.sources, sound_mode_list: this.soundModes };
+  }
+
+  /** An activity's settings in the card: those of its devices, or its own choice. */
   private _renderCardSettings(id: string, activity: Activity): TemplateResult {
     const chosen = activity.remote?.settings as Obj[] | undefined;
     const setSettings = (list: Obj[] | undefined) => {
@@ -804,125 +968,25 @@ export class AvScenesRoomEditor extends LitElement {
       }
       this._setActivity(id, { ...activity, remote: cleanRemote(remote) });
     };
-    const players = (activity.devices ?? []).filter((d) =>
-      this.room.devices?.[d]?.entity_id?.startsWith("media_player."),
+    const fromDevices = autoSettings(this.hass, this.room, activity, this._lists, this._related);
+    // Starting a choice from what the devices offer now
+    const mode = this._settingsMode(chosen !== undefined, "settings_auto", (next) =>
+      setSettings(next ? fromDevices.map((s) => ({ ...s })) : undefined),
     );
-    const deviceName = (d: unknown) => this.room.devices?.[String(d)]?.name ?? String(d);
-    const isPlayer = (d: unknown) =>
-      Boolean(this.room.devices?.[String(d)]?.entity_id?.startsWith("media_player."));
-    const auto = autoSettings(this.hass, this.room, activity, {
-      source_list: this.sources,
-      sound_mode_list: this.soundModes,
-    });
-    const describe = (s: Obj) => {
-      const what = s.entity
-        ? (s.name as string) ||
-          (this.hass.states[s.entity as string]?.attributes.friendly_name as string | undefined) ||
-          (s.entity as string)
-        : this._t(`setting.${s.setting ?? "entity"}`);
-      return `${what} (${deviceName(s.device)})`;
-    };
-
-    const mode = html`<ha-form
-      .hass=${this.hass}
-      .data=${{ settings_mode: chosen === undefined ? "auto" : "chosen" }}
-      .schema=${[
-        {
-          name: "settings_mode",
-          required: true,
-          selector: {
-            select: {
-              options: ["auto", "chosen"].map((value) => ({ value, label: this._t(`settings_${value}`) })),
-              mode: "dropdown",
-            },
-          },
-        },
-      ]}
-      .computeLabel=${this._label}
-      @value-changed=${(ev: CustomEvent) => {
-        const value = (ev.detail.value as Obj).settings_mode;
-        if (value === "auto" && chosen !== undefined) {
-          setSettings(undefined);
-        } else if (value === "chosen" && chosen === undefined) {
-          // Start from what the card shows now
-          setSettings(auto.map((s) => ({ ...s })));
-        }
-      }}
-    ></ha-form>`;
 
     if (chosen === undefined) {
       return html`${mode}
         <p class="hint">
-          ${auto.length
-            ? this._t("settings_auto_shows", { list: auto.map(describe).join(", ") })
+          ${fromDevices.length
+            ? this._t("settings_auto_shows", { list: fromDevices.map((s) => this._describeSetting(s, true)).join(", ") })
             : this._t("settings_auto_none")}
         </p>`;
     }
 
     const devices = activity.devices ?? [];
-    const deviceOptions = devices.map((d) => ({ value: d, label: deviceName(d) }));
+    const players = devices.filter((d) => this.room.devices?.[d]?.entity_id?.startsWith("media_player."));
     return html`${mode}
-      ${chosen.map((item, i) => {
-        const kind = item.entity !== undefined ? "entity" : (item.setting as string);
-        // Source and sound mode need a media player; any device can have entities
-        const kinds = isPlayer(item.device) ? [...SETTINGS, "entity"] : ["entity"];
-        const entity = item.entity as string | undefined;
-        const entityOptions = entity ? this.hass.states[entity]?.attributes.options : undefined;
-        const choices =
-          kind === "entity"
-            ? Array.isArray(entityOptions)
-              ? entityOptions.map(String)
-              : undefined
-            : this._settingList(item.device, kind);
-        return html`<div class="step">
-          <div class="step-head">
-            <span class="title">${describe(item)}</span>
-            ${this._moveButtons(chosen, i, setSettings)}
-          </div>
-          <ha-form
-            .hass=${this.hass}
-            .data=${{ device: item.device, setting: kind, entity, name: item.name, options: item.options ?? [] }}
-            .schema=${[
-              { name: "device", required: true, selector: { select: { options: deviceOptions, mode: "dropdown" } } },
-              {
-                name: "setting",
-                required: true,
-                selector: {
-                  select: { options: kinds.map((value) => ({ value, label: this._t(`setting.${value}`) })), mode: "dropdown" },
-                },
-              },
-              ...(kind === "entity"
-                ? [
-                    { name: "entity", required: true, selector: { entity: { filter: { domain: [...SETTING_ENTITY_DOMAINS] } } } },
-                    { name: "name", selector: { text: {} } },
-                  ]
-                : []),
-              // Favourites for lists: source, sound mode, a select
-              ...(choices !== undefined
-                ? [
-                    {
-                      name: "options",
-                      selector: { select: { options: choices, multiple: true, custom_value: true, mode: "dropdown" } },
-                    },
-                  ]
-                : []),
-            ]}
-            .computeLabel=${this._label}
-            .computeHelper=${this._helper}
-            @value-changed=${(ev: CustomEvent) => {
-              const v = ev.detail.value as Obj;
-              const next = isPlayer(v.device) ? (v.setting as string) : "entity";
-              const list = [...chosen];
-              list[i] =
-                next === "entity"
-                  ? // An entity not picked yet stays "" so the entry remains an entity setting
-                    clean({ device: v.device, entity: v.entity ?? "", name: v.name, options: v.options }, ["entity"])
-                  : clean({ device: v.device, setting: next, options: v.options });
-              setSettings(list);
-            }}
-          ></ha-form>
-        </div>`;
-      })}
+      ${this._renderSettingItems(chosen, setSettings, devices)}
       ${chosen.length ? nothing : html`<p class="hint">${this._t("settings_none")}</p>`}
       ${devices.length
         ? html`<button
@@ -936,6 +1000,44 @@ export class AvScenesRoomEditor extends LitElement {
             + ${this._t("add_setting")}
           </button>`
         : nothing}`;
+  }
+
+  /** A device's settings in the card, for every activity that uses it. */
+  private _renderDeviceSettings(id: string, device: Device): TemplateResult {
+    const chosen = device.settings as Obj[] | undefined;
+    const setSettings = (list: Obj[] | undefined) => {
+      const next: Device = { ...device };
+      if (list === undefined) {
+        delete next.settings;
+      } else {
+        next.settings = list;
+      }
+      this._emit({ ...this.room, devices: { ...this.room.devices, [id]: next } });
+    };
+    const auto = deviceAutoSettings(this.hass, this.room, id, this._lists, this._related);
+    const mode = this._settingsMode(chosen !== undefined, "device_settings_auto", (next) =>
+      setSettings(next ? auto.map(({ device: _, ...s }) => s) : undefined),
+    );
+
+    if (chosen === undefined) {
+      return html`${mode}
+        <p class="hint">
+          ${auto.length
+            ? this._t("settings_auto_shows", { list: auto.map((s) => this._describeSetting(s, false)).join(", ") })
+            : this._t("device_settings_auto_none")}
+        </p>`;
+    }
+
+    const isPlayer = device.entity_id?.startsWith("media_player.");
+    return html`${mode}
+      ${this._renderSettingItems(chosen, setSettings, null, id)}
+      ${chosen.length ? nothing : html`<p class="hint">${this._t("device_settings_none")}</p>`}
+      <button
+        class="add"
+        @click=${() => setSettings([...chosen, isPlayer ? { setting: "sound_mode" } : { entity: "" }])}
+      >
+        + ${this._t("add_setting")}
+      </button>`;
   }
 
   private _addActivity(): void {

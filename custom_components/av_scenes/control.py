@@ -227,26 +227,59 @@ def no_lists(entity_id: str, setting: str) -> list[str]:
     return []
 
 
+def no_related(entity_id: str) -> list[str]:
+    """No known related entities: devices offer only their own lists."""
+    return []
+
+
+def device_settings(
+    room: dict[str, Any],
+    device_id: str,
+    lists: Callable[[str, str], list[str]] = no_lists,
+    related: Callable[[str], list[str]] = no_related,
+) -> list[dict[str, Any]]:
+    """The settings a device offers in the card, with the device set.
+
+    The device's ``settings``; without them, automatically: the source and
+    sound mode of a media player that ``lists(entity_id, setting)`` knows a
+    list for, and the numbers and selects ``related(entity_id)`` finds on
+    the same device.
+    """
+    device = room[CONF_DEVICES][device_id]
+    chosen = device.get(CONF_SETTINGS)
+    if chosen is not None:
+        return [{**item, CONF_DEVICE: device_id} for item in chosen]
+    entity_id = device[CONF_ENTITY_ID]
+    found: list[dict[str, Any]] = []
+    if _is_media_player(device):
+        found += [
+            {CONF_DEVICE: device_id, CONF_SETTING: setting}
+            for setting in SETTINGS
+            if lists(entity_id, setting)
+        ]
+    found += [{CONF_DEVICE: device_id, CONF_ENTITY: entity} for entity in related(entity_id)]
+    return found
+
+
 def settings_view(
     room: dict[str, Any],
     activity: dict[str, Any],
     lists: Callable[[str, str], list[str]] = no_lists,
+    related: Callable[[str], list[str]] = no_related,
 ) -> list[dict[str, Any]]:
     """The device settings the card offers while the activity runs.
 
-    The activity's ``settings`` under ``remote``; without them every setting
-    of its media players that ``lists(entity_id, setting)`` knows a list for.
-    A setting offers its favourites (``options``), else the device's list.
+    The activity's ``settings`` under ``remote``; without them those of its
+    devices, see device_settings. A setting offers its favourites
+    (``options``), else the device's list.
     """
     devices: dict[str, Any] = room[CONF_DEVICES]
     chosen = (activity.get(CONF_REMOTE) or {}).get(CONF_SETTINGS)
     if chosen is None:
         chosen = [
-            {CONF_DEVICE: device_id, CONF_SETTING: setting}
+            item
             for device_id in activity[CONF_DEVICES]
-            if _is_media_player(devices[device_id])
-            for setting in SETTINGS
-            if lists(devices[device_id][CONF_ENTITY_ID], setting)
+            for item in device_settings(room, device_id, lists, related)
         ]
     view: list[dict[str, Any]] = []
     for item in chosen:
@@ -286,15 +319,26 @@ def settings_view(
     return view
 
 
-def setting_entities(room: dict[str, Any], device_id: str) -> set[str]:
-    """The entities a device has as settings in any activity of the room;
-    send_command sets them with the entity ID as command."""
-    return {
-        item[CONF_ENTITY]
-        for activity in room[CONF_ACTIVITIES].values()
-        for item in (activity.get(CONF_REMOTE) or {}).get(CONF_SETTINGS) or []
-        if item[CONF_DEVICE] == device_id and CONF_ENTITY in item
-    }
+def setting_entities(
+    room: dict[str, Any],
+    device_id: str,
+    related: Callable[[str], list[str]] = no_related,
+) -> set[str]:
+    """The entities send_command may set on a device, with the entity ID as
+    command: its own and its activities' entity settings, and the entities
+    the automatic settings would offer."""
+    device = room[CONF_DEVICES][device_id]
+    items = [
+        *(device.get(CONF_SETTINGS) or []),
+        *(
+            item
+            for activity in room[CONF_ACTIVITIES].values()
+            for item in (activity.get(CONF_REMOTE) or {}).get(CONF_SETTINGS) or []
+            if item[CONF_DEVICE] == device_id
+        ),
+    ]
+    entities = {item[CONF_ENTITY] for item in items if CONF_ENTITY in item}
+    return entities | set(related(device[CONF_ENTITY_ID]))
 
 
 # Action of an entity setting by domain; switches are turned on or off
@@ -334,11 +378,12 @@ def remote_view(
     room: dict[str, Any],
     activity: dict[str, Any],
     lists: Callable[[str, str], list[str]] = no_lists,
+    related: Callable[[str], list[str]] = no_related,
 ) -> dict[str, Any]:
     """The remote control the card shows while an activity runs.
 
-    ``lists`` gives a media player's source or sound mode list, see
-    settings_view.
+    ``lists`` gives a media player's source or sound mode list and
+    ``related`` the numbers and selects of a device, see device_settings.
     """
     devices = room[CONF_DEVICES]
     own: list[str] = list(activity[CONF_COMMANDS])
@@ -359,7 +404,7 @@ def remote_view(
     return {
         "groups": groups,
         "buttons": [button_view(button) for button in activity[CONF_REMOTE][CONF_BUTTONS]],
-        "settings": settings_view(room, activity, lists),
+        "settings": settings_view(room, activity, lists, related),
         "media": media_entity(room, activity),
     }
 
@@ -434,11 +479,13 @@ def describe_command(
     command: str,
     device_id: str | None = None,
     platform_of: Callable[[str], str | None] = lambda entity_id: None,
+    related: Callable[[str], list[str]] = no_related,
 ) -> dict[str, Any]:
     """Where a button of the running activity goes and what runs there.
 
     Follows AVScenesCoordinator.async_send_command. ``platform_of`` gives
-    the integration of a remote entity, for its key names.
+    the integration of a remote entity, for its key names; ``related`` the
+    entities a device offers as settings.
     ``via`` is ``activity_commands``, ``device_commands``, ``remote``,
     ``media_player`` or None (the button does nothing).
     """
@@ -456,7 +503,7 @@ def describe_command(
     device = devices[device_id]
     entity_id = device[CONF_ENTITY_ID]
     base = {"device": device_id, "entity_id": entity_id, "ready": bool(device.get(CONF_READY))}
-    if command in setting_entities(room, device_id):
+    if command in setting_entities(room, device_id, related):
         domain = command.split(".", 1)[0]
         service = _ENTITY_SERVICES.get(domain, "turn_on / turn_off")
         return {**base, "via": "entity", "action": f"{domain}.{service}", "entity_id": command}

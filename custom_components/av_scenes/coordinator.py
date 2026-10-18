@@ -55,6 +55,7 @@ from homeassistant.components.media_player import MediaPlayerEntityFeature
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import (
     ATTR_ENTITY_ID,
+    EntityCategory,
     SERVICE_TURN_OFF,
     SERVICE_TURN_ON,
     STATE_OFF,
@@ -196,6 +197,39 @@ def power_service(entity_id: str, *, on: bool) -> tuple[str, str]:
     if entity_id.startswith("cover."):
         return "cover", "open_cover" if on else "close_cover"
     return "homeassistant", SERVICE_TURN_ON if on else SERVICE_TURN_OFF
+
+
+# Entities of a device the card offers as settings without configuration
+_AUTO_SETTING_DOMAINS = ("number", "select")
+
+
+def related_setting_entities(hass: HomeAssistant, entity_id: str) -> list[str]:
+    """The numbers and selects of the device an entity belongs to, e.g. the
+    tone controls of a receiver; for an integration without devices, those
+    of the same config entry without a device. Disabled, hidden and
+    diagnostic entities are left out."""
+    registry = er.async_get(hass)
+    entry = registry.async_get(entity_id)
+    if entry is None:
+        return []
+    if entry.device_id is not None:
+        candidates = er.async_entries_for_device(registry, entry.device_id)
+    elif entry.config_entry_id is not None:
+        candidates = [
+            e
+            for e in er.async_entries_for_config_entry(registry, entry.config_entry_id)
+            if e.device_id is None
+        ]
+    else:
+        return []
+    return [
+        e.entity_id
+        for e in candidates
+        if e.domain in _AUTO_SETTING_DOMAINS
+        and e.disabled_by is None
+        and e.hidden_by is None
+        and e.entity_category is not EntityCategory.DIAGNOSTIC
+    ]
 
 
 def can_switch(hass: HomeAssistant, entity_id: str, *, on: bool) -> bool:
@@ -599,6 +633,10 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return [str(item) for item in live]
         return list(self._lists[attribute].get(entity_id, []))
 
+    def related_entities(self, entity_id: str) -> list[str]:
+        """The numbers and selects a device offers as settings without configuration."""
+        return related_setting_entities(self.hass, entity_id)
+
     def _track_sources(self) -> None:
         """Follow the source and sound mode lists of the configured media players."""
         if self._unsub_sources is not None:
@@ -783,7 +821,9 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "default_activity": self.default_activity(room_id),
             "activities": activity_list(room),
             "remote": (
-                remote_view(room, activity, self.setting_list) if activity is not None else None
+                remote_view(room, activity, self.setting_list, self.related_entities)
+                if activity is not None
+                else None
             ),
         }
 
@@ -857,7 +897,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         remote = device.get(CONF_REMOTE_ENTITY)
         try:
-            if command in setting_entities(room, device_id):
+            if command in setting_entities(room, device_id, self.related_entities):
                 # A device setting of the card: the entity is the command
                 call: tuple[str, str, dict[str, Any]] | None = entity_setting_call(command, value)
             else:

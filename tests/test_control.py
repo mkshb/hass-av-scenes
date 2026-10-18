@@ -16,6 +16,7 @@ from custom_components.av_scenes.control import (
     media_entity,
     remote_view,
     routing,
+    setting_entities,
     settings_view,
 )
 from custom_components.av_scenes.model import validate_config
@@ -411,6 +412,118 @@ def test_settings_view() -> None:
             "options": [],
         }
     ]
+
+
+def test_device_level_settings() -> None:
+    """Without activity settings the card shows those of the activity's
+    devices: chosen on the device, else its lists and related entities."""
+    data = living_room()
+    room_cfg = data["rooms"]["wz"]
+    room_cfg["devices"]["beamer"]["settings"] = [
+        {"entity": "select.beamer_color_mode", "name": "Color mode"},
+    ]
+    room_cfg["devices"]["vu"]["settings"] = []  # nothing from the set-top box
+    room = validate_config(data)["rooms"]["wz"]
+    known = {(ONKYO, "sound_mode"): ["THX", "STEREO"], (VU, "source"): ["ZDF"]}
+    related = {ONKYO: ["number.onkyo_bass", "number.onkyo_treble"], VU: ["select.vu_x"]}
+
+    def lists(entity_id: str, setting: str) -> list[str]:
+        return known.get((entity_id, setting), [])
+
+    def rel(entity_id: str) -> list[str]:
+        return related.get(entity_id, [])
+
+    tv = room["activities"]["tv"]
+    view = settings_view(room, tv, lists, rel)
+    assert [(s["device"], s["setting"], s["entity_id"], s["label"]) for s in view] == [
+        ("onkyo", "sound_mode", ONKYO, None),
+        ("onkyo", "entity", "number.onkyo_bass", None),
+        ("onkyo", "entity", "number.onkyo_treble", None),
+        ("beamer", "entity", "select.beamer_color_mode", "Color mode"),
+    ]
+
+    # The activity's own choice wins
+    tv["remote"]["settings"] = [{"device": "onkyo", "setting": "sound_mode", "options": []}]
+    assert [s["setting"] for s in settings_view(room, tv, lists, rel)] == ["sound_mode"]
+
+    # Entities send_command may set: chosen ones and what the automatic offers
+    assert setting_entities(room, "beamer", rel) == {"select.beamer_color_mode"}
+    assert setting_entities(room, "onkyo", rel) == {"number.onkyo_bass", "number.onkyo_treble"}
+
+
+async def test_automatic_entity_settings(
+    hass: HomeAssistant, devices: Devices, player_calls
+) -> None:
+    """A number of the same device (or integration without devices) is a
+    setting of the card without configuration, and send_command sets it."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from homeassistant.helpers import device_registry as dr, entity_registry as er
+
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    async def record(call: ServiceCall) -> None:
+        calls.append((f"{call.domain}.{call.service}", dict(call.data)))
+
+    onkyo_entry = MockConfigEntry(domain="onkyo")
+    onkyo_entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    hass.states.async_remove(ONKYO)
+    registry.async_get_or_create(
+        "media_player", "onkyo", "main", suggested_object_id="onkyo_receiver",
+        config_entry=onkyo_entry,
+    )
+    for key in ("bass", "treble"):
+        registry.async_get_or_create(
+            "number", "onkyo", key, suggested_object_id=f"onkyo_{key}", config_entry=onkyo_entry
+        )
+    # Not offered: diagnostic, disabled, or a switch
+    registry.async_get_or_create(
+        "number", "onkyo", "temp", suggested_object_id="onkyo_temp", config_entry=onkyo_entry,
+        entity_category=er.EntityCategory.DIAGNOSTIC,
+    )
+    registry.async_get_or_create(
+        "number", "onkyo", "off", suggested_object_id="onkyo_off", config_entry=onkyo_entry,
+        disabled_by=er.RegistryEntryDisabler.USER,
+    )
+    registry.async_get_or_create(
+        "switch", "onkyo", "mute", suggested_object_id="onkyo_mute", config_entry=onkyo_entry
+    )
+    # A number of another device of a hub integration is not offered
+    hub = MockConfigEntry(domain="hub")
+    hub.add_to_hass(hass)
+    device_registry = dr.async_get(hass)
+    speaker = device_registry.async_get_or_create(config_entry_id=hub.entry_id, identifiers={("hub", "a")})
+    other = device_registry.async_get_or_create(config_entry_id=hub.entry_id, identifiers={("hub", "b")})
+    hass.states.async_remove(VU)
+    registry.async_get_or_create(
+        "media_player", "hub", "a", suggested_object_id="vu_as2b_de", config_entry=hub,
+        device_id=speaker.id,
+    )
+    registry.async_get_or_create(
+        "number", "hub", "a_bass", suggested_object_id="vu_bass", config_entry=hub,
+        device_id=speaker.id,
+    )
+    registry.async_get_or_create(
+        "number", "hub", "b_bass", suggested_object_id="other_bass", config_entry=hub,
+        device_id=other.id,
+    )
+    hass.states.async_set(ONKYO, "on")
+    hass.states.async_set(VU, "on")
+
+    coordinator = await setup(hass, devices, remote_room())
+    await coordinator.async_start_activity("wz", "tv")
+    hass.services.async_register("number", "set_value", record)
+
+    settings = coordinator.room_view("wz")["remote"]["settings"]
+    assert [s["entity_id"] for s in settings] == [
+        "number.onkyo_bass", "number.onkyo_treble", "number.vu_bass",
+    ]
+
+    await send(hass, "number.onkyo_bass", value=2, device="onkyo")
+    assert calls == [("number.set_value", {"entity_id": "number.onkyo_bass", "value": 2.0})]
+    with pytest.raises(ServiceValidationError):
+        await send(hass, "number.other_bass", value=2, device="vu")
 
 
 async def test_entity_settings(hass: HomeAssistant, devices: Devices, hass_ws_client) -> None:

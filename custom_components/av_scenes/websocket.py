@@ -37,7 +37,7 @@ from .const import (
     SIGNAL_ROOMS_UPDATED,
 )
 from .control import activity_list, describe_command, remote_view, route_summary
-from .coordinator import AVScenesCoordinator
+from .coordinator import AVScenesCoordinator, related_setting_entities
 from .flow import plan_start, plan_stop
 from .model import async_validate_config, find_missing_entities
 
@@ -69,6 +69,7 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_config_validate)
     websocket_api.async_register_command(hass, ws_config_save)
     websocket_api.async_register_command(hass, ws_config_sources)
+    websocket_api.async_register_command(hass, ws_config_related)
     websocket_api.async_register_command(hass, ws_config_flow)
     websocket_api.async_register_command(hass, ws_config_remote)
 
@@ -280,6 +281,24 @@ def ws_config_sources(
     connection.send_result(msg["id"], lists)
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/config/related",
+        vol.Required("entity_ids"): [str],
+    }
+)
+@websocket_api.require_admin
+@callback
+def ws_config_related(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Per device entity: the numbers and selects its automatic settings offer."""
+    connection.send_result(
+        msg["id"],
+        {entity_id: related_setting_entities(hass, entity_id) for entity_id in msg["entity_ids"]},
+    )
+
+
 def _setting_lists(hass: HomeAssistant) -> Callable[[str, str], list[str]]:
     """The source and sound mode lists the coordinators know, for remote_view."""
     coordinators = _coordinators(hass)
@@ -381,7 +400,10 @@ async def ws_config_remote(
     room_id: str = msg[ATTR_ROOM]
     activity_id: str = msg[ATTR_ACTIVITY]
     activity = room[CONF_ACTIVITIES][activity_id]
-    remote = remote_view(room, activity, _setting_lists(hass))
+    def related(entity_id: str) -> list[str]:
+        return related_setting_entities(hass, entity_id)
+
+    remote = remote_view(room, activity, _setting_lists(hass), related)
     registry = er.async_get(hass)
 
     def platform_of(entity_id: str) -> str | None:
@@ -393,7 +415,7 @@ async def ws_config_remote(
     buttons += [(setting["command"], setting["device"]) for setting in remote["settings"]]
     targets = {
         f"{command}|{device_id or ''}": describe_command(
-            room, activity, command, device_id, platform_of
+            room, activity, command, device_id, platform_of, related
         )
         for command, device_id in buttons
     }

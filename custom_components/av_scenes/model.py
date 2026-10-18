@@ -17,6 +17,9 @@ Layout of ``entry.data``::
             delay_after_off: 0
             commands:                      # remote buttons -> HA actions
               guide: [...]
+            settings:                      # in the card; default: automatic
+              - {setting: sound_mode, options: [THX, STEREO]}
+              - {entity: number.onkyo_bass, name: Bass}
         activities:
           <activity_id>:
             name: TV
@@ -35,9 +38,8 @@ Layout of ``entry.data``::
               buttons:
                 - {command: netflix, name: Netflix, icon: mdi:netflix}
                 - {device: aptv, source: YouTube}   # quick select: source or app
-              settings:                    # device settings in the card; default: all
+              settings:                    # this activity's own choice; default: the devices'
                 - {device: onkyo, setting: sound_mode, options: [THX, STEREO]}
-                - {device: onkyo, entity: number.onkyo_bass, name: Bass}
             commands: {netflix: [...]}     # activity-only commands
 """
 from __future__ import annotations
@@ -146,6 +148,34 @@ READY_SCHEMA = vol.Schema(
     }
 )
 
+# A setting the card offers: the source or sound mode of a media player, or
+# an entity of the device (a number, select or switch), with optional
+# favourites to choose from. Under a device it belongs to that device; under
+# an activity it names the device.
+_SETTING_FIELDS = {
+    vol.Optional(CONF_SETTING): vol.In([SETTING_SOURCE, SETTING_SOUND_MODE]),
+    vol.Optional(CONF_ENTITY): vol.All(cv.entity_id, cv.entity_domain(SETTING_ENTITY_DOMAINS)),
+    vol.Optional(CONF_NAME): str,
+    vol.Optional(CONF_OPTIONS, default=list): [vol.Coerce(str)],
+}
+DEVICE_SETTING_SCHEMA = vol.Schema(_SETTING_FIELDS)
+SETTING_SCHEMA = vol.Schema({vol.Required(CONF_DEVICE): _KEY, **_SETTING_FIELDS})
+
+
+def _one_of_setting_or_entity(setting: dict[str, Any]) -> dict[str, Any]:
+    if (CONF_SETTING in setting) == (CONF_ENTITY in setting):
+        raise vol.Invalid("a setting has either a setting (source, sound_mode) or an entity")
+    return setting
+
+
+def _setting(value: Any) -> dict[str, Any]:
+    return _one_of_setting_or_entity(SETTING_SCHEMA(value))
+
+
+def _device_setting(value: Any) -> dict[str, Any]:
+    return _one_of_setting_or_entity(DEVICE_SETTING_SCHEMA(value))
+
+
 DEVICE_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_ENTITY_ID): cv.entity_id,
@@ -158,6 +188,8 @@ DEVICE_SCHEMA = vol.Schema(
         vol.Optional(CONF_DELAY_AFTER_ON, default=0): _SECONDS,
         vol.Optional(CONF_DELAY_AFTER_OFF, default=0): _SECONDS,
         vol.Optional(CONF_COMMANDS, default=dict): _COMMANDS,
+        # Settings in the card; without them automatic, see control.device_settings
+        vol.Optional(CONF_SETTINGS): vol.Any(None, [_device_setting]),
     }
 )
 
@@ -277,27 +309,6 @@ BUTTON_SCHEMA = vol.Schema(
     }
 )
 
-# A device setting the card offers: the source or sound mode of a media
-# player, or an entity of the device (a number, select or switch), with
-# optional favourites to choose from
-SETTING_SCHEMA = vol.Schema(
-    {
-        vol.Required(CONF_DEVICE): _KEY,
-        vol.Optional(CONF_SETTING): vol.In([SETTING_SOURCE, SETTING_SOUND_MODE]),
-        vol.Optional(CONF_ENTITY): vol.All(cv.entity_id, cv.entity_domain(SETTING_ENTITY_DOMAINS)),
-        vol.Optional(CONF_NAME): str,
-        vol.Optional(CONF_OPTIONS, default=list): [vol.Coerce(str)],
-    }
-)
-
-
-def _setting(value: Any) -> dict[str, Any]:
-    setting = SETTING_SCHEMA(value)
-    if (CONF_SETTING in setting) == (CONF_ENTITY in setting):
-        raise vol.Invalid("a setting has either a setting (source, sound_mode) or an entity")
-    return setting
-
-
 REMOTE_SCHEMA = vol.Schema(
     {
         # A device id, or null to hide the group
@@ -344,6 +355,15 @@ def _check_references(rooms: dict[str, Any]) -> None:
     for room_id, room in rooms.items():
         devices = room[CONF_DEVICES]
         default = room.get(CONF_DEFAULT_ACTIVITY)
+        for device_id, device in devices.items():
+            for idx, setting in enumerate(device.get(CONF_SETTINGS) or []):
+                if CONF_SETTING in setting and not device[CONF_ENTITY_ID].startswith(
+                    "media_player."
+                ):
+                    raise vol.Invalid(
+                        f"source and sound mode need a media player, '{device_id}' is none",
+                        path=[CONF_ROOMS, room_id, CONF_DEVICES, device_id, CONF_SETTINGS, idx],
+                    )
         if default is not None and default not in room[CONF_ACTIVITIES]:
             raise vol.Invalid(
                 f"unknown activity '{default}'",

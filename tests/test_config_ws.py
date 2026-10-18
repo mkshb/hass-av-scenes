@@ -198,3 +198,30 @@ async def test_sound_modes_are_remembered(
     assert hass_storage[f"{DOMAIN}.{entry.entry_id}.state"]["data"]["sound_modes"] == {
         "media_player.onkyo_receiver": ["THX"]
     }
+
+
+async def test_related_entities(hass: HomeAssistant, devices, hass_ws_client) -> None:
+    """The panel asks which numbers and selects a device offers automatically."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from homeassistant.helpers import entity_registry as er
+
+    onkyo = MockConfigEntry(domain="onkyo")
+    onkyo.add_to_hass(hass)
+    registry = er.async_get(hass)
+    hass.states.async_remove("media_player.onkyo_receiver")  # free the entity ID
+    registry.async_get_or_create(
+        "media_player", "onkyo", "main", suggested_object_id="onkyo_receiver", config_entry=onkyo
+    )
+    registry.async_get_or_create(
+        "select", "onkyo", "dimmer", suggested_object_id="onkyo_dimmer", config_entry=onkyo
+    )
+    await setup_entry(hass, living_room())
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "av_scenes/config/related", "entity_ids": ["media_player.onkyo_receiver", "light.x"]}
+    )
+    assert (await client.receive_json())["result"] == {
+        "media_player.onkyo_receiver": ["select.onkyo_dimmer"],
+        "light.x": [],
+    }

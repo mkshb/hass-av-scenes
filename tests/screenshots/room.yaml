@@ -9,6 +9,15 @@ devices:
     entity_id: media_player.av_receiver
     power_switch: switch.av_rack_outlet
     ready: {timeout: 60, reload_integration: true, on_timeout: abort}
+    # What the card offers of the receiver in every activity
+    settings:
+      - {setting: sound_mode, options: [Dolby Atmos, DTS:X, Direct]}
+      - {entity: number.av_receiver_treble, name: Treble}
+      - {entity: number.av_receiver_bass, name: Bass}
+      - {entity: number.av_receiver_center_level, name: Center level}
+      - {entity: number.av_receiver_subwoofer_level, name: Subwoofer level}
+      - {entity: switch.av_receiver_late_night, name: Late night}
+      - {entity: select.av_receiver_display, name: Display}
   projector:
     name: Projector
     entity_id: media_player.projector
@@ -76,14 +85,6 @@ activities:
         - {device: apple_tv, source: Disney+}
         - {device: apple_tv, source: Plex, icon: mdi:plex}
         - {device: apple_tv, source: YouTube, icon: mdi:youtube}
-      settings:
-        - {device: receiver, setting: sound_mode, options: [Dolby Atmos, DTS:X, Direct]}
-        - {device: receiver, entity: number.av_receiver_treble, name: Treble}
-        - {device: receiver, entity: number.av_receiver_bass, name: Bass}
-        - {device: receiver, entity: number.av_receiver_center_level, name: Center level}
-        - {device: receiver, entity: number.av_receiver_subwoofer_level, name: Subwoofer level}
-        - {device: receiver, entity: switch.av_receiver_late_night, name: Late night}
-        - {device: receiver, entity: select.av_receiver_display, name: Display}
   music:
     name: Music
     icon: mdi:music

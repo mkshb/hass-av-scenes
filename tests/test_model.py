@@ -198,6 +198,41 @@ def test_device_settings() -> None:
             assert err.value.path[-1] == path[-1]
 
 
+def test_device_settings_on_a_device() -> None:
+    """A device lists its own settings without naming itself; source and
+    sound mode need a media player."""
+    data = _config()
+    data["rooms"]["wz"]["devices"]["onkyo"]["settings"] = [
+        {"setting": "sound_mode", "options": ["THX"]},
+        {"entity": "number.onkyo_bass", "name": "Bass"},
+    ]
+    data["rooms"]["wz"]["devices"]["plug"] = {"entity_id": "switch.plug", "settings": []}
+    room = validate_config(data)["rooms"]["wz"]
+    assert room["devices"]["onkyo"]["settings"] == [
+        {"setting": "sound_mode", "options": ["THX"]},
+        {"entity": "number.onkyo_bass", "name": "Bass", "options": []},
+    ]
+    assert room["devices"]["plug"]["settings"] == []
+    assert "settings" not in room["devices"]["beamer"]
+
+    for settings in (
+        [{"device": "onkyo", "setting": "source"}],  # the device is implied
+        [{"name": "Nothing"}],
+    ):
+        data = _config()
+        data["rooms"]["wz"]["devices"]["onkyo"]["settings"] = settings
+        with pytest.raises(vol.Invalid):
+            validate_config(data)
+
+    data = _config()
+    data["rooms"]["wz"]["devices"]["plug"] = {
+        "entity_id": "switch.plug", "settings": [{"setting": "source"}],
+    }
+    with pytest.raises(vol.Invalid) as err:
+        validate_config(data)
+    assert err.value.path == ["rooms", "wz", "devices", "plug", "settings", 0]
+
+
 def test_default_activity_must_exist() -> None:
     """The default activity refers to an activity of the room."""
     data = _config()

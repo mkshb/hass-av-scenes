@@ -106,28 +106,64 @@ export const SETTING_LISTS: Record<string, string> = {
   sound_mode: "sound_mode_list",
 };
 
-/** The settings the card shows without a choice: every setting of the
- * activity's media players with a known list (as the integration does). */
+/** Numbers and selects per device entity that a device offers automatically
+ * (av_scenes/config/related). */
+export type Related = Record<string, string[]>;
+
+/** What a device offers without a choice, as the integration does: source
+ * and sound mode of a media player with a known list, and its related
+ * numbers and selects. */
+export function deviceAutoSettings(
+  hass: HomeAssistant,
+  room: Room,
+  deviceId: string,
+  lists: Record<string, Sources>,
+  related: Related = {},
+): Obj[] {
+  const entity = room.devices?.[deviceId]?.entity_id;
+  if (!entity) {
+    return [];
+  }
+  const found: Obj[] = [];
+  if (entity.startsWith("media_player.")) {
+    for (const setting of SETTINGS) {
+      const attribute = SETTING_LISTS[setting];
+      if (deviceList(hass, lists[attribute] ?? {}, entity, attribute).length) {
+        found.push({ device: deviceId, setting });
+      }
+    }
+  }
+  for (const other of related[entity] ?? []) {
+    found.push({ device: deviceId, entity: other });
+  }
+  return found;
+}
+
+/** The settings a device offers in the card: its own choice, else automatic. */
+export function deviceSettings(
+  hass: HomeAssistant,
+  room: Room,
+  deviceId: string,
+  lists: Record<string, Sources>,
+  related: Related = {},
+): Obj[] {
+  const own = room.devices?.[deviceId]?.settings;
+  if (Array.isArray(own)) {
+    return own.map((s) => ({ ...(s as Obj), device: deviceId }));
+  }
+  return deviceAutoSettings(hass, room, deviceId, lists, related);
+}
+
+/** The settings the card shows for an activity without its own choice:
+ * those of its devices. */
 export function autoSettings(
   hass: HomeAssistant,
   room: Room,
   activity: Activity,
   lists: Record<string, Sources>,
-): { device: string; setting: string }[] {
-  const found: { device: string; setting: string }[] = [];
-  for (const device of activity.devices ?? []) {
-    const entity = room.devices?.[device]?.entity_id;
-    if (!entity?.startsWith("media_player.")) {
-      continue;
-    }
-    for (const setting of SETTINGS) {
-      const attribute = SETTING_LISTS[setting];
-      if (deviceList(hass, lists[attribute] ?? {}, entity, attribute).length) {
-        found.push({ device, setting });
-      }
-    }
-  }
-  return found;
+  related: Related = {},
+): Obj[] {
+  return (activity.devices ?? []).flatMap((d) => deviceSettings(hass, room, d, lists, related));
 }
 
 /** A quick-select button: selects a source on its device. */

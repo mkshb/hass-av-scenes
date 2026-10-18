@@ -440,24 +440,42 @@ In the configuration panel, quick select has its own list under **Remote control
 
 Below the buttons, the card has a **Settings** section for what you change during a film rather than at every start: the source and the sound mode of the activity's media players, and any number, select or switch entity of a device, such as the tone controls or speaker levels a receiver's integration provides. The card shows a source, sound mode or select as a list with its current value, a number as a slider with its range, a switch as an on/off key. The section is closed until it is opened; each browser remembers that per room. A change runs the matching action (`media_player.select_source`, `media_player.select_sound_mode`, `number.set_value`, `select.select_option`, `switch.turn_on`/`turn_off`) after the device's readiness check, like every button.
 
-Without configuration the card offers the source and sound mode of every media player of the activity that reported such a list; the integration remembers the lists while a device is off. `settings` under `remote` chooses instead, in this order, with optional favourites, so a receiver with fifteen sound modes offers the three you use; an empty list hides the section:
+Settings belong to a device, and every activity that uses the device shows them. Without configuration a device offers, automatically:
+
+- the source and sound mode of a media player that reported such a list (the integration remembers the lists while the device is off),
+- the `number` and `select` entities of the same device, such as tone controls or speaker levels. For an integration without devices, those of the same integration entry without a device. Disabled, hidden and diagnostic entities are left out, and switches are never added automatically.
+
+`settings` on a device chooses instead, in this order, with optional favourites, so a receiver with fifteen sound modes offers the three you use; an empty list shows nothing of that device:
+
+```yaml
+devices:
+  onkyo:
+    entity_id: media_player.onkyo_receiver
+    settings:
+      - {setting: sound_mode, options: ["DOLBY ATMOS/DOLBY SURROUND", "THX CINEMA", "DIRECT"]}
+      - {setting: source}   # the receiver's whole source list
+      - {entity: number.onkyo_bass, name: Bass}
+      - {entity: switch.onkyo_late_night, name: Late night}
+  beamer:
+    entity_id: media_player.epson_ehtw7400
+    settings: []            # nothing of the projector in the card
+```
+
+`entity` takes a `number`, `select`, `switch` or their `input_*` helpers; `name` labels it, else its own name. AV Scenes does not talk to the device itself: what the card can offer depends on the entities the device's integration provides.
+
+An activity can make its own choice instead of its devices' settings, with `settings` under `remote`; each entry then names its `device`:
 
 ```yaml
 activities:
   apple_tv:
     remote:
       settings:
-        - {device: onkyo, setting: sound_mode, options: ["DOLBY ATMOS/DOLBY SURROUND", "THX CINEMA", "DIRECT"]}
-        - {device: onkyo, setting: source}   # the receiver's whole source list
-        - {device: onkyo, entity: number.onkyo_bass, name: Bass}
-        - {device: onkyo, entity: switch.onkyo_late_night, name: Late night}
+        - {device: onkyo, setting: sound_mode}
 ```
-
-`entity` takes a `number`, `select`, `switch` or their `input_*` helpers; `name` labels it, else its own name. AV Scenes does not talk to the device itself: what the card can offer depends on the entities the device's integration provides.
 
 `av_scenes.send_command` sets an entity setting with the entity ID as `command`, the new value as `value` and the device as `device`, e.g. `command: number.onkyo_bass`, `value: -2`, `device: onkyo`.
 
-In the panel it is **Settings in the card** on every activity's page: automatic, or chosen settings with favourites picked from the device's list, and entities of the device. A receiver can still refuse a sound mode that does not fit the incoming signal; the card then keeps showing the mode it actually uses.
+In the panel it is **Settings in the card** on every device's page (automatic, or chosen with favourites) and on every activity's page (from the devices, or chosen for that activity). A receiver can still refuse a sound mode that does not fit the incoming signal; the card then keeps showing the mode it actually uses.
 
 A command is resolved in this order: the activity's own `commands`, then the device of its group (own `commands` or built-in action), then the first device of the activity that defines it — so digit keys `"0"`–`"9"` only need to exist on the set-top box.
 
