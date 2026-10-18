@@ -174,3 +174,27 @@ async def test_sources_are_remembered(
     hass.config_entries.async_update_entry(entry, data={"rooms": rooms})
     await hass.async_block_till_done()
     assert await sources() == {"media_player.onkyo_receiver": ["SAT", "NET"]}
+
+
+async def test_sound_modes_are_remembered(
+    hass: HomeAssistant, devices, hass_ws_client, hass_storage
+) -> None:
+    """Sound mode lists are remembered like source lists, for the panel's favourites."""
+    hass.states.async_set(
+        "media_player.onkyo_receiver", "on", {"source_list": ["SAT"], "sound_mode_list": ["THX"]}
+    )
+    entry = await setup_entry(hass, living_room())
+    client = await hass_ws_client(hass)
+    hass.states.async_set("media_player.onkyo_receiver", "off", {})
+    await hass.async_block_till_done()
+
+    await client.send_json_auto_id(
+        {"type": "av_scenes/config/sources", "attribute": "sound_mode_list"}
+    )
+    assert (await client.receive_json())["result"] == {"media_player.onkyo_receiver": ["THX"]}
+
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass_storage[f"{DOMAIN}.{entry.entry_id}.state"]["data"]["sound_modes"] == {
+        "media_player.onkyo_receiver": ["THX"]
+    }

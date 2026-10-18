@@ -10,9 +10,13 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import type { HomeAssistant } from "../types";
 import {
   GROUPS,
+  SETTINGS,
+  SETTING_LISTS,
   STEP_TYPES,
+  autoSettings,
   clean,
   cleanRemote,
+  deviceList,
   deviceUsage,
   isQuickSelect,
   renameDevice,
@@ -50,6 +54,7 @@ export class AvScenesRoomEditor extends LitElement {
     room: { attribute: false },
     roomId: { attribute: false },
     sources: { attribute: false },
+    soundModes: { attribute: false },
     saved: { attribute: false },
     _tab: { state: true },
     _view: { state: true },
@@ -60,6 +65,8 @@ export class AvScenesRoomEditor extends LitElement {
   declare room: Room;
   declare roomId: string;
   declare sources: Sources;
+  /** Remembered sound mode lists, like the source lists */
+  declare soundModes: Sources;
   /** The room as last saved; IDs of what is not saved yet follow their names. */
   declare saved?: Room;
   declare _tab: Tab;
@@ -71,6 +78,7 @@ export class AvScenesRoomEditor extends LitElement {
     this._tab = "devices";
     this._view = { kind: "list" };
     this.sources = {};
+    this.soundModes = {};
   }
 
   protected willUpdate(changed: Map<string, unknown>): void {
@@ -599,6 +607,8 @@ export class AvScenesRoomEditor extends LitElement {
 
       ${this._card(this._t("quick_select"), this._t("quick_select_hint"), this._renderQuickSelect(id, activity))}
 
+      ${this._card(this._t("card_settings"), this._t("card_settings_hint"), this._renderCardSettings(id, activity))}
+
       ${this._card(
         this._t("section_remote_preview"),
         this._t("hint_remote_preview"),
@@ -681,7 +691,7 @@ export class AvScenesRoomEditor extends LitElement {
       <ha-form
         .hass=${this.hass}
         .data=${step}
-        .schema=${stepSchema(this.hass, this.room, step, (k) => this._t(k), this.sources)}
+        .schema=${stepSchema(this.hass, this.room, step, (k) => this._t(k), this.sources, this.soundModes)}
         .computeLabel=${this._label}
         @value-changed=${(ev: CustomEvent) => {
           const list = [...steps];
@@ -703,6 +713,9 @@ export class AvScenesRoomEditor extends LitElement {
     }
     if (activity.remote?.buttons) {
       remote.buttons = activity.remote.buttons;
+    }
+    if (activity.remote?.settings) {
+      remote.settings = activity.remote.settings;
     }
     this._setActivity(id, { ...activity, remote: Object.keys(remote).length ? remote : undefined });
   }
@@ -767,6 +780,119 @@ export class AvScenesRoomEditor extends LitElement {
       ${players.length
         ? html`<button class="add" @click=${() => setQuick([...quick, { device: players[players.length - 1], source: "" }])}>
             + ${this._t("add_quick_select")}
+          </button>`
+        : html`<p class="hint">${this._t("quick_select_no_player")}</p>`}`;
+  }
+
+  /** The list a device setting chooses from: live, else remembered. */
+  private _settingList(device: unknown, setting: unknown): string[] {
+    const attribute = SETTING_LISTS[String(setting)] ?? "source_list";
+    const remembered = attribute === "sound_mode_list" ? this.soundModes : this.sources;
+    return deviceList(this.hass, remembered, this.room.devices?.[String(device)]?.entity_id, attribute);
+  }
+
+  /** Device settings in the card: automatic, or chosen ones with favourites. */
+  private _renderCardSettings(id: string, activity: Activity): TemplateResult {
+    const chosen = activity.remote?.settings as Obj[] | undefined;
+    const setSettings = (list: Obj[] | undefined) => {
+      const remote: Obj = { ...activity.remote };
+      if (list === undefined) {
+        delete remote.settings;
+      } else {
+        remote.settings = list;
+      }
+      this._setActivity(id, { ...activity, remote: cleanRemote(remote) });
+    };
+    const players = (activity.devices ?? []).filter((d) =>
+      this.room.devices?.[d]?.entity_id?.startsWith("media_player."),
+    );
+    const deviceName = (d: unknown) => this.room.devices?.[String(d)]?.name ?? String(d);
+    const auto = autoSettings(this.hass, this.room, activity, {
+      source_list: this.sources,
+      sound_mode_list: this.soundModes,
+    });
+    const describe = (s: { device: unknown; setting: unknown }) =>
+      `${this._t(`setting.${s.setting}`)} (${deviceName(s.device)})`;
+
+    const mode = html`<ha-form
+      .hass=${this.hass}
+      .data=${{ settings_mode: chosen === undefined ? "auto" : "chosen" }}
+      .schema=${[
+        {
+          name: "settings_mode",
+          required: true,
+          selector: {
+            select: {
+              options: ["auto", "chosen"].map((value) => ({ value, label: this._t(`settings_${value}`) })),
+              mode: "dropdown",
+            },
+          },
+        },
+      ]}
+      .computeLabel=${this._label}
+      @value-changed=${(ev: CustomEvent) => {
+        const value = (ev.detail.value as Obj).settings_mode;
+        if (value === "auto" && chosen !== undefined) {
+          setSettings(undefined);
+        } else if (value === "chosen" && chosen === undefined) {
+          // Start from what the card shows now
+          setSettings(auto.map((s) => ({ ...s })));
+        }
+      }}
+    ></ha-form>`;
+
+    if (chosen === undefined) {
+      return html`${mode}
+        <p class="hint">
+          ${auto.length
+            ? this._t("settings_auto_shows", { list: auto.map(describe).join(", ") })
+            : this._t("settings_auto_none")}
+        </p>`;
+    }
+
+    const deviceOptions = players.map((d) => ({ value: d, label: deviceName(d) }));
+    const settingOptions = SETTINGS.map((value) => ({ value, label: this._t(`setting.${value}`) }));
+    return html`${mode}
+      ${chosen.map((item, i) => html`<div class="step">
+        <div class="step-head">
+          <span class="title">${describe(item as { device: unknown; setting: unknown })}</span>
+          ${this._moveButtons(chosen, i, setSettings)}
+        </div>
+        <ha-form
+          .hass=${this.hass}
+          .data=${{ device: item.device, setting: item.setting, options: item.options ?? [] }}
+          .schema=${[
+            { name: "device", required: true, selector: { select: { options: deviceOptions, mode: "dropdown" } } },
+            { name: "setting", required: true, selector: { select: { options: settingOptions, mode: "dropdown" } } },
+            {
+              name: "options",
+              selector: {
+                select: {
+                  options: this._settingList(item.device, item.setting),
+                  multiple: true,
+                  custom_value: true,
+                  mode: "dropdown",
+                },
+              },
+            },
+          ]}
+          .computeLabel=${this._label}
+          .computeHelper=${this._helper}
+          @value-changed=${(ev: CustomEvent) => {
+            const v = ev.detail.value as Obj;
+            const list = [...chosen];
+            list[i] = clean({ device: v.device, setting: v.setting, options: v.options });
+            setSettings(list);
+          }}
+        ></ha-form>
+      </div>`)}
+      ${chosen.length ? nothing : html`<p class="hint">${this._t("settings_none")}</p>`}
+      ${players.length
+        ? html`<button
+            class="add"
+            @click=${() => setSettings([...chosen, { device: players[0], setting: "sound_mode" }])}
+          >
+            + ${this._t("add_setting")}
           </button>`
         : html`<p class="hint">${this._t("quick_select_no_player")}</p>`}`;
   }

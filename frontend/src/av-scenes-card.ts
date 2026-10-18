@@ -6,6 +6,7 @@
  * integration's services, so the same commands work from automations.
  */
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
+import { live } from "lit/directives/live.js";
 
 import "./editor";
 import { commandLabel } from "./labels";
@@ -13,7 +14,15 @@ import { localize } from "./localize";
 import { clock, nowPlaying, type NowPlaying } from "./now-playing";
 import { coolingText, progressText } from "./progress";
 import { Swipe, touchpadKey, useTouchpad } from "./touchpad";
-import type { ButtonView, CardConfig, GroupView, HomeAssistant, RoomInfo, RoomView } from "./types";
+import type {
+  ButtonView,
+  CardConfig,
+  GroupView,
+  HomeAssistant,
+  RoomInfo,
+  RoomView,
+  SettingView,
+} from "./types";
 
 const DOMAIN = "av_scenes";
 
@@ -49,6 +58,11 @@ const TRANSPORT = ["previous", "play_pause", "play", "pause", "stop", "next"];
 const REPEATING = new Set(["volume_up", "volume_down", "up", "down", "left", "right"]);
 const REPEAT_DELAY = 400;
 const REPEAT_INTERVAL = 200;
+/** Storage key of whether a viewer opened the device settings of a room. */
+function settingsKey(room: string): string {
+  return `av-scenes-settings:${room}`;
+}
+
 /** Wait before subscribing again after the integration refused (e.g. not loaded yet). */
 const RETRY_DELAY = 30_000;
 
@@ -93,6 +107,8 @@ export class AvScenesRemoteCard extends LitElement {
   private _swipe?: Swipe;
   // Arrow keys or touch surface as chosen on this device, also when storage is blocked
   private _padChoices = new Map<string, string>();
+  // Device settings opened or closed on this device, also when storage is blocked
+  private _settingsOpen = new Map<string, boolean>();
   // The key held down, until it is released or the press is cancelled
   private _press?: { command: string; extra: Record<string, unknown>; sent: boolean };
 
@@ -492,7 +508,84 @@ export class AvScenesRemoteCard extends LitElement {
       ${buttons.length
         ? html`<div class="buttons">${buttons.map((b) => this._customButton(b))}</div>`
         : nothing}
+      ${view.remote!.settings?.length ? this._renderSettings(view, view.remote!.settings) : nothing}
     </div>`;
+  }
+
+  /** Whether the device settings are open: closed until the viewer opens them. */
+  private _settingsShown(room: string): boolean {
+    const key = settingsKey(room);
+    if (this._settingsOpen.has(key)) {
+      return this._settingsOpen.get(key)!;
+    }
+    try {
+      return window.localStorage.getItem(key) === "open";
+    } catch {
+      return false;
+    }
+  }
+
+  private _toggleSettings(room: string): void {
+    const key = settingsKey(room);
+    const open = !this._settingsShown(room);
+    this._settingsOpen.set(key, open);
+    try {
+      window.localStorage.setItem(key, open ? "open" : "closed");
+    } catch {
+      // Storage blocked: the choice lasts until the page is reloaded
+    }
+    this.requestUpdate();
+  }
+
+  /** Source, sound mode and the like of the running activity's devices. */
+  private _renderSettings(view: RoomView, settings: SettingView[]): TemplateResult {
+    const open = this._settingsShown(view.room);
+    return html`<div class="settings">
+      <button
+        class="settings-toggle"
+        aria-expanded=${open ? "true" : "false"}
+        @click=${() => this._toggleSettings(view.room)}
+      >
+        <ha-icon icon="mdi:tune-variant"></ha-icon>
+        <span>${this._t("settings")}</span>
+        <ha-icon class="chevron" .icon=${open ? "mdi:chevron-up" : "mdi:chevron-down"}></ha-icon>
+      </button>
+      ${open ? html`<div class="setting-list">${settings.map((s) => this._renderSetting(s))}</div>` : nothing}
+    </div>`;
+  }
+
+  private _renderSetting(setting: SettingView): TemplateResult {
+    const state = this.hass?.states[setting.entity_id];
+    const value = state?.attributes[setting.attribute];
+    const current = value === undefined || value === null ? undefined : String(value);
+    // The current value also when it is not among the favourites or the list
+    const options =
+      current !== undefined && !setting.options.includes(current)
+        ? [current, ...setting.options]
+        : setting.options;
+    const device =
+      setting.name || (state?.attributes.friendly_name as string | undefined) || setting.device;
+    const label = this._t(`setting.${setting.setting}`);
+    return html`<label class="setting">
+      <span class="setting-text">
+        <span class="setting-name">${label}</span>
+        <span class="setting-device">${device}</span>
+      </span>
+      <select
+        aria-label=${`${label} – ${device}`}
+        .value=${live(current ?? "")}
+        ?disabled=${!options.length}
+        @change=${(ev: Event) => {
+          const choice = (ev.target as HTMLSelectElement).value;
+          if (choice && choice !== current) {
+            this._send(setting.command, { device: setting.device, value: choice });
+          }
+        }}
+      >
+        ${current === undefined ? html`<option value="" disabled>–</option>` : nothing}
+        ${options.map((o) => html`<option value=${o} ?selected=${o === current}>${o}</option>`)}
+      </select>
+    </label>`;
   }
 
   private _key(
@@ -1036,6 +1129,61 @@ export class AvScenesRemoteCard extends LitElement {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
       gap: 8px;
+    }
+    .settings {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .settings-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 40px;
+      padding: 0 4px;
+      background: none;
+      color: var(--secondary-text-color);
+      --mdc-icon-size: 20px;
+    }
+    .settings-toggle span {
+      flex: 1;
+      text-align: left;
+    }
+    .setting-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .setting {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+      align-items: center;
+      gap: 12px;
+    }
+    .setting-text {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .setting-name {
+      overflow-wrap: anywhere;
+    }
+    .setting-device {
+      font-size: 0.85em;
+      color: var(--secondary-text-color);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .setting select {
+      width: 100%;
+      min-height: 40px;
+      padding: 0 8px;
+      border: none;
+      border-radius: var(--avs-radius);
+      background: var(--avs-key-bg);
+      color: var(--avs-key-color);
+      font: inherit;
     }
     .custom {
       display: flex;

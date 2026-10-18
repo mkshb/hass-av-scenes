@@ -160,7 +160,7 @@
         },
         "value": {
           "name": "Value",
-          "description": "Value for the command, e.g. 0.4 for volume_set or the source for select_source"
+          "description": "Value for the command, e.g. 0.4 for volume_set, the source for select_source or the sound mode for select_sound_mode"
         },
         "device": {
           "name": "Device",

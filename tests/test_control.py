@@ -12,7 +12,12 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from .common import BEAMER, ONKYO, VU, Devices, living_room, setup
 from custom_components.av_scenes.const import DOMAIN
-from custom_components.av_scenes.control import media_entity, remote_view, routing
+from custom_components.av_scenes.control import (
+    media_entity,
+    remote_view,
+    routing,
+    settings_view,
+)
 from custom_components.av_scenes.model import validate_config
 
 
@@ -27,7 +32,7 @@ def player_calls(hass: HomeAssistant) -> list[tuple[str, dict[str, Any]]]:
     for service in (
         "volume_up", "volume_down", "volume_mute", "volume_set", "media_next_track",
         "media_previous_track", "media_play_pause", "media_play", "media_pause", "media_stop",
-        "select_source",
+        "select_source", "select_sound_mode",
     ):
         hass.services.async_register("media_player", service, record)
     hass.services.async_register("test", "key", record)
@@ -344,6 +349,90 @@ async def test_quick_select_buttons(
         await send(hass, "select_source", device="vu")
 
 
+def test_settings_view() -> None:
+    """Without settings: every list of the activity's media players; with
+    them: the chosen ones, offering their favourites or the device's list."""
+    data = living_room()
+    data["rooms"]["wz"]["devices"]["plug"] = {"entity_id": "switch.plug"}
+    data["rooms"]["wz"]["activities"]["tv"]["devices"].append("plug")
+    room = validate_config(data)["rooms"]["wz"]
+    known = {
+        (ONKYO, "source"): ["SAT", "NET"],
+        (ONKYO, "sound_mode"): ["THX", "STEREO", "DIRECT"],
+        (VU, "source"): ["ZDF"],
+    }
+
+    def lists(entity_id: str, setting: str) -> list[str]:
+        return known.get((entity_id, setting), [])
+
+    tv = room["activities"]["tv"]
+    assert [(s["device"], s["setting"], s["options"]) for s in settings_view(room, tv, lists)] == [
+        ("onkyo", "source", ["SAT", "NET"]),
+        ("onkyo", "sound_mode", ["THX", "STEREO", "DIRECT"]),
+        ("vu", "source", ["ZDF"]),
+    ]
+    assert settings_view(room, tv, lists)[1] == {
+        "device": "onkyo",
+        "name": None,
+        "entity_id": ONKYO,
+        "setting": "sound_mode",
+        "attribute": "sound_mode",
+        "command": "select_sound_mode",
+        "options": ["THX", "STEREO", "DIRECT"],
+    }
+
+    tv["remote"]["settings"] = [
+        {"device": "onkyo", "setting": "sound_mode", "options": ["DIRECT", "THX"]},
+        {"device": "beamer", "setting": "source", "options": []},
+    ]
+    assert [(s["device"], s["setting"], s["options"]) for s in settings_view(room, tv, lists)] == [
+        ("onkyo", "sound_mode", ["DIRECT", "THX"]),
+        ("beamer", "source", []),
+    ]
+    tv["remote"]["settings"] = []
+    assert settings_view(room, tv, lists) == []
+
+
+async def test_device_settings(
+    hass: HomeAssistant, devices: Devices, player_calls, hass_storage
+) -> None:
+    """The card offers the source and sound mode of the running activity's
+    media players, also while one is off, and sets them on the device."""
+    hass.states.async_set(
+        ONKYO, "on", {"source_list": ["SAT", "NET"], "sound_mode_list": ["THX", "STEREO"]}
+    )
+    coordinator = await setup(hass, devices, remote_room())
+    await coordinator.async_start_activity("wz", "musik")
+
+    settings = coordinator.room_view("wz")["remote"]["settings"]
+    assert [(s["setting"], s["options"]) for s in settings] == [
+        ("source", ["SAT", "NET"]),
+        ("sound_mode", ["THX", "STEREO"]),
+    ]
+
+    # Off: the lists are gone from the state but remembered
+    hass.states.async_set(ONKYO, "off", {})
+    await hass.async_block_till_done()
+    assert coordinator.room_view("wz")["remote"]["settings"] == settings
+
+    # A new list reaches the card
+    updates: list[int] = []
+    coordinator.async_add_listener(lambda: updates.append(1))
+    hass.states.async_set(ONKYO, "on", {"sound_mode_list": ["THX", "STEREO", "DIRECT"]})
+    await hass.async_block_till_done()
+    assert updates
+    assert coordinator.room_view("wz")["remote"]["settings"][1]["options"] == [
+        "THX", "STEREO", "DIRECT"
+    ]
+
+    await send(hass, "select_sound_mode", value="DIRECT", device="onkyo")
+    assert player_calls == [
+        ("media_player.select_sound_mode", {"entity_id": ONKYO, "sound_mode": "DIRECT"}),
+    ]
+    with pytest.raises(ServiceValidationError):
+        await send(hass, "select_sound_mode", device="onkyo")
+
+
 async def test_remote_entity_navigation(
     hass: HomeAssistant, devices: Devices, player_calls
 ) -> None:
@@ -422,6 +511,7 @@ async def test_card_preview_is_the_card(
     room["activities"]["tv"]["devices"].append("atv")
     room["activities"]["tv"]["remote"]["buttons"].append({"device": "atv", "source": "Netflix"})
     hass.states.async_set("media_player.atv", "off")
+    hass.states.async_set(ONKYO, "off", {"sound_mode_list": ["THX", "STEREO"]})
     coordinator = await setup(hass, devices, data)
     await coordinator.async_start_activity("wz", "tv")
 
@@ -438,6 +528,7 @@ async def test_card_preview_is_the_card(
     assert targets["ok|"]["via"] == "remote" and targets["ok|"]["key"] == "select"
     assert targets["netflix|"] == {"via": "activity_commands", "device": None, "actions": ["test.key"]}
     assert targets["select_source|atv"]["action"] == "media_player.select_source"
+    assert targets["select_sound_mode|onkyo"]["action"] == "media_player.select_sound_mode"
     # "guide" goes with the navigation to the Apple TV, which has no such key
     assert targets["guide|"]["via"] is None and targets["guide|"]["device"] == "atv"
 
@@ -446,7 +537,9 @@ async def test_card_preview_is_the_card(
     for key, target in targets.items():
         command, device = key.split("|")
         player_calls.clear()
-        value = 0.3 if command == "volume_set" else "Netflix" if command == "select_source" else None
+        value = {"volume_set": 0.3, "select_source": "Netflix", "select_sound_mode": "THX"}.get(
+            command
+        )
         extra = {**({"device": device} if device else {}), **({"value": value} if value else {})}
         if target["via"] is None:
             # A button nothing handles: the preview says so, the action refuses it

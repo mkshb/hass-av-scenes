@@ -149,7 +149,7 @@ from .const import (
     STEP_TYPE_SET_VOLUME,
     STEP_TYPE_WAIT_AVAILABLE,
 )
-from .control import activity_list, builtin_call, remote_call, remote_view, route
+from .control import SETTINGS, activity_list, builtin_call, remote_call, remote_view, route
 from .model import CONF_DELAY_AFTER, async_validate_config, find_missing_entities
 
 _LOGGER = logging.getLogger(__name__)
@@ -160,6 +160,10 @@ STORAGE_VERSION = 1
 # again after this many seconds instead of waiting for its growing back-off
 # (5, 10, 20, 40 s ...), which can miss a device that came up meanwhile
 RELOAD_RETRY_INTERVAL = 5.0
+
+# Lists of the configured media players that are remembered while they are
+# off: attribute -> key in the stored state
+_REMEMBERED_LISTS = {"source_list": "sources", "sound_mode_list": "sound_modes"}
 
 # States in which a device counts as switched off
 _OFF_STATES = {STATE_OFF, STATE_STANDBY, STATE_UNAVAILABLE, STATE_UNKNOWN, "closed"}
@@ -307,8 +311,8 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.state"
         )
         self._restored = False
-        # media player -> its last known source list
-        self._sources: dict[str, list[str]] = {}
+        # attribute (source_list, sound_mode_list) -> media player -> its last known list
+        self._lists: dict[str, dict[str, list[str]]] = {a: {} for a in _REMEMBERED_LISTS}
         self._unsub_sources: CALLBACK_TYPE | None = None
 
     # ------------------------------------------------------------------
@@ -502,10 +506,13 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_restore(self) -> None:
         stored = await self._store.async_load() or {}
-        self._sources = {
-            entity_id: [str(s) for s in sources]
-            for entity_id, sources in (stored.get("sources") or {}).items()
-            if isinstance(sources, list)
+        self._lists = {
+            attribute: {
+                entity_id: [str(s) for s in items]
+                for entity_id, items in (stored.get(key) or {}).items()
+                if isinstance(items, list)
+            }
+            for attribute, key in _REMEMBERED_LISTS.items()
         }
         for room_id, data in stored.get(CONF_ROOMS, {}).items():
             if room_id not in self.rooms:
@@ -538,7 +545,7 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 }
                 for room_id, rt in self._runtime.items()
             },
-            "sources": self._sources,
+            **{key: self._lists[attribute] for attribute, key in _REMEMBERED_LISTS.items()},
         }
 
     @callback
@@ -565,16 +572,26 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         await super().async_shutdown()
 
     # ------------------------------------------------------------------
-    # Remembered source lists
+    # Remembered source and sound mode lists
     # ------------------------------------------------------------------
 
-    @property
-    def source_lists(self) -> dict[str, list[str]]:
-        """Last known source list per media player of the configuration."""
-        return dict(self._sources)
+    def remembered_lists(self, attribute: str = "source_list") -> dict[str, list[str]]:
+        """Last known list (source_list, sound_mode_list) per media player of
+        the configuration."""
+        return dict(self._lists[attribute])
+
+    def setting_list(self, entity_id: str, setting: str) -> list[str]:
+        """What a device setting of the card can be set to: the media player's
+        list while it has one, else the remembered one."""
+        attribute = SETTINGS[setting][1]
+        state = self.hass.states.get(entity_id)
+        live = state.attributes.get(attribute) if state is not None else None
+        if isinstance(live, list) and live:
+            return [str(item) for item in live]
+        return list(self._lists[attribute].get(entity_id, []))
 
     def _track_sources(self) -> None:
-        """Follow the source lists of the configured media players."""
+        """Follow the source and sound mode lists of the configured media players."""
         if self._unsub_sources is not None:
             self._unsub_sources()
             self._unsub_sources = None
@@ -587,11 +604,12 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             }
         )
         changed = False
-        for entity_id in [e for e in self._sources if e not in players]:
-            del self._sources[entity_id]
-            changed = True
+        for lists in self._lists.values():
+            for entity_id in [e for e in lists if e not in players]:
+                del lists[entity_id]
+                changed = True
         for entity_id in players:
-            changed |= self._remember_sources(entity_id, self.hass.states.get(entity_id))
+            changed |= self._remember_lists(entity_id, self.hass.states.get(entity_id))
         if changed:
             self._schedule_save()
         if players:
@@ -601,19 +619,23 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     @callback
     def _source_state_changed(self, event: Event[EventStateChangedData]) -> None:
-        if self._remember_sources(event.data["entity_id"], event.data["new_state"]):
+        if self._remember_lists(event.data["entity_id"], event.data["new_state"]):
             self._schedule_save()
+            # The device settings of a running activity offer the new list
+            self.async_update_listeners()
 
-    def _remember_sources(self, entity_id: str, state: State | None) -> bool:
-        """Keep a non-empty source list; True when it changed."""
-        sources = state.attributes.get("source_list") if state is not None else None
-        if not isinstance(sources, list) or not sources:
-            return False
-        sources = [str(s) for s in sources]
-        if self._sources.get(entity_id) == sources:
-            return False
-        self._sources[entity_id] = sources
-        return True
+    def _remember_lists(self, entity_id: str, state: State | None) -> bool:
+        """Keep the non-empty lists of a media player; True when one changed."""
+        changed = False
+        for attribute, lists in self._lists.items():
+            items = state.attributes.get(attribute) if state is not None else None
+            if not isinstance(items, list) or not items:
+                continue
+            items = [str(item) for item in items]
+            if lists.get(entity_id) != items:
+                lists[entity_id] = items
+                changed = True
+        return changed
 
     # ------------------------------------------------------------------
     # Commands
@@ -751,7 +773,9 @@ class AVScenesCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "cooling": list(rt.cooling.values()),
             "default_activity": self.default_activity(room_id),
             "activities": activity_list(room),
-            "remote": remote_view(room, activity) if activity is not None else None,
+            "remote": (
+                remote_view(room, activity, self.setting_list) if activity is not None else None
+            ),
         }
 
     async def async_send_command(

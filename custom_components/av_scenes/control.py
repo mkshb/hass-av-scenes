@@ -35,19 +35,26 @@ from .const import (
     CONF_ENTITY_ID,
     CONF_ICON,
     CONF_NAME,
+    CONF_OPTIONS,
     CONF_READY,
     CONF_REMOTE,
     CONF_REMOTE_ENTITY,
+    CONF_SETTING,
+    CONF_SETTINGS,
     CONF_SOURCE,
     CONF_TOUCHPAD,
     GROUP_CHANNELS,
     GROUP_NAVIGATION,
     GROUP_TRANSPORT,
     GROUP_VOLUME,
+    SETTING_SOUND_MODE,
+    SETTING_SOURCE,
 )
 
 # Quick-select buttons send this with the source (or app) as value
 COMMAND_SELECT_SOURCE = "select_source"
+# The sound mode setting of the card sends this with the sound mode as value
+COMMAND_SELECT_SOUND_MODE = "select_sound_mode"
 
 # Built-in actions of a media player: command -> service
 _MEDIA_PLAYER_SERVICES: dict[str, str] = {
@@ -65,6 +72,14 @@ _MEDIA_PLAYER_SERVICES: dict[str, str] = {
     "next": "media_next_track",
     "previous": "media_previous_track",
     COMMAND_SELECT_SOURCE: "select_source",
+    COMMAND_SELECT_SOUND_MODE: "select_sound_mode",
+}
+
+# Device settings of the card: setting -> (attribute with the current value,
+# attribute with the list to choose from, command that sets it)
+SETTINGS: dict[str, tuple[str, str, str]] = {
+    SETTING_SOURCE: ("source", "source_list", COMMAND_SELECT_SOURCE),
+    SETTING_SOUND_MODE: ("sound_mode", "sound_mode_list", COMMAND_SELECT_SOUND_MODE),
 }
 
 # Navigation keys a remote entity handles: command -> remote command, per
@@ -165,6 +180,10 @@ def builtin_call(
         if isinstance(value, float) and value.is_integer():
             value = int(value)
         data["source"] = str(value)
+    elif command == COMMAND_SELECT_SOUND_MODE:
+        if value is None or value == "":
+            raise ValueError("select_sound_mode needs the sound mode as value")
+        data["sound_mode"] = str(value)
     return "media_player", service, data
 
 
@@ -202,8 +221,61 @@ def button_view(button: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def remote_view(room: dict[str, Any], activity: dict[str, Any]) -> dict[str, Any]:
-    """The remote control the card shows while an activity runs."""
+def no_lists(entity_id: str, setting: str) -> list[str]:
+    """No known lists: the card offers only chosen favourites."""
+    return []
+
+
+def settings_view(
+    room: dict[str, Any],
+    activity: dict[str, Any],
+    lists: Callable[[str, str], list[str]] = no_lists,
+) -> list[dict[str, Any]]:
+    """The device settings the card offers while the activity runs.
+
+    The activity's ``settings`` under ``remote``; without them every setting
+    of its media players that ``lists(entity_id, setting)`` knows a list for.
+    A setting offers its favourites (``options``), else the device's list.
+    """
+    devices: dict[str, Any] = room[CONF_DEVICES]
+    chosen = (activity.get(CONF_REMOTE) or {}).get(CONF_SETTINGS)
+    if chosen is None:
+        chosen = [
+            {CONF_DEVICE: device_id, CONF_SETTING: setting}
+            for device_id in activity[CONF_DEVICES]
+            if _is_media_player(devices[device_id])
+            for setting in SETTINGS
+            if lists(devices[device_id][CONF_ENTITY_ID], setting)
+        ]
+    view: list[dict[str, Any]] = []
+    for item in chosen:
+        device = devices[item[CONF_DEVICE]]
+        entity_id = device[CONF_ENTITY_ID]
+        attribute, _, command = SETTINGS[item[CONF_SETTING]]
+        view.append(
+            {
+                "device": item[CONF_DEVICE],
+                "name": device.get(CONF_NAME),
+                "entity_id": entity_id,
+                "setting": item[CONF_SETTING],
+                "attribute": attribute,
+                "command": command,
+                "options": list(item.get(CONF_OPTIONS) or lists(entity_id, item[CONF_SETTING])),
+            }
+        )
+    return view
+
+
+def remote_view(
+    room: dict[str, Any],
+    activity: dict[str, Any],
+    lists: Callable[[str, str], list[str]] = no_lists,
+) -> dict[str, Any]:
+    """The remote control the card shows while an activity runs.
+
+    ``lists`` gives a media player's source or sound mode list, see
+    settings_view.
+    """
     devices = room[CONF_DEVICES]
     own: list[str] = list(activity[CONF_COMMANDS])
     groups: dict[str, Any] = {}
@@ -223,6 +295,7 @@ def remote_view(room: dict[str, Any], activity: dict[str, Any]) -> dict[str, Any
     return {
         "groups": groups,
         "buttons": [button_view(button) for button in activity[CONF_REMOTE][CONF_BUTTONS]],
+        "settings": settings_view(room, activity, lists),
         "media": media_entity(room, activity),
     }
 

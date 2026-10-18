@@ -119,7 +119,7 @@ devices:
 | Restart-safe | The running activity survives a Home Assistant restart |
 | Repairs | Entities that do not exist (typo, renamed entity) are reported in **Settings → Repairs** |
 | Configuration panel | An admin page in the sidebar with a built-in guide: devices and activities as lists, each edited on its own page in short sections with help texts, using Home Assistant's own pickers; plus a YAML view |
-| Remote control card | A dashboard card per room: power, activities, volume, d-pad, channels, playback and your own buttons — only what the running activity offers |
+| Remote control card | A dashboard card per room: power, activities, volume, d-pad, channels, playback, your own buttons and device settings such as source and sound mode — only what the running activity offers |
 | Command routing | `av_scenes.send_command` sends a button (e.g. `volume_up`) to whichever device the running activity uses for it — from the card, automations or wall switches |
 | 4 entity platforms | Scene, Switch, Sensor, Select — one virtual device per room |
 
@@ -435,6 +435,23 @@ activities:
 In the configuration panel, quick select has its own list under **Remote control**: pick the device, then the source from its list. The integration remembers the last source list of every configured media player, so the list is there even while the device is off; an Apple TV reports its apps only while it is connected, so start it once after adding it. A name that is not in the list can be typed in.
 
 `av_scenes.send_command` does the same with `command: select_source`, `value: <source>` and `device`.
+
+### Device settings
+
+Below the buttons, the card has a **Settings** section for what you change during a film rather than at every start: the source and the sound mode of the activity's media players, each as a list to choose from with its current value. The section is closed until it is opened; each browser remembers that per room. A choice runs `media_player.select_source` or `media_player.select_sound_mode` after the device's readiness check, like every button.
+
+Without configuration the card offers the source and sound mode of every media player of the activity that reported such a list; the integration remembers the lists while a device is off. `settings` under `remote` chooses instead, in this order, with optional favourites, so a receiver with fifteen sound modes offers the three you use; an empty list hides the section:
+
+```yaml
+activities:
+  apple_tv:
+    remote:
+      settings:
+        - {device: onkyo, setting: sound_mode, options: ["DOLBY ATMOS/DOLBY SURROUND", "THX CINEMA", "DIRECT"]}
+        - {device: onkyo, setting: source}   # the receiver's whole source list
+```
+
+In the panel it is **Settings in the card** on every activity's page: automatic, or chosen settings with favourites picked from the device's list. A receiver can still refuse a sound mode that does not fit the incoming signal; the card then keeps showing the mode it actually uses.
 
 A command is resolved in this order: the activity's own `commands`, then the device of its group (own `commands` or built-in action), then the first device of the activity that defines it — so digit keys `"0"`–`"9"` only need to exist on the set-top box.
 

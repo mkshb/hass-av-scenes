@@ -12,6 +12,7 @@ takes the revision that was read, so changes made elsewhere in the meantime
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 import hashlib
 from typing import Any
 
@@ -259,17 +260,37 @@ async def ws_config_save(
     )
 
 
-@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/config/sources"})
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/config/sources",
+        vol.Optional("attribute", default="source_list"): vol.In(
+            ["source_list", "sound_mode_list"]
+        ),
+    }
+)
 @websocket_api.require_admin
 @callback
 def ws_config_sources(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Last known source list per media player, also while it is off."""
-    sources: dict[str, list[str]] = {}
+    """Last known source (or sound mode) list per media player, also while it is off."""
+    lists: dict[str, list[str]] = {}
     for coordinator in _coordinators(hass):
-        sources.update(coordinator.source_lists)
-    connection.send_result(msg["id"], sources)
+        lists.update(coordinator.remembered_lists(msg["attribute"]))
+    connection.send_result(msg["id"], lists)
+
+
+def _setting_lists(hass: HomeAssistant) -> Callable[[str, str], list[str]]:
+    """The source and sound mode lists the coordinators know, for remote_view."""
+    coordinators = _coordinators(hass)
+
+    def lists(entity_id: str, setting: str) -> list[str]:
+        for coordinator in coordinators:
+            if found := coordinator.setting_list(entity_id, setting):
+                return found
+        return []
+
+    return lists
 
 
 _UNKNOWN_ACTIVITY = {"error": {"path": [], "message": "Unknown activity"}}
@@ -360,7 +381,7 @@ async def ws_config_remote(
     room_id: str = msg[ATTR_ROOM]
     activity_id: str = msg[ATTR_ACTIVITY]
     activity = room[CONF_ACTIVITIES][activity_id]
-    remote = remote_view(room, activity)
+    remote = remote_view(room, activity, _setting_lists(hass))
     registry = er.async_get(hass)
 
     def platform_of(entity_id: str) -> str | None:
@@ -369,6 +390,7 @@ async def ws_config_remote(
 
     buttons = [(c, None) for group in remote["groups"].values() for c in group["commands"]]
     buttons += [(button["command"], button["device"]) for button in remote["buttons"]]
+    buttons += [(setting["command"], setting["device"]) for setting in remote["settings"]]
     targets = {
         f"{command}|{device_id or ''}": describe_command(
             room, activity, command, device_id, platform_of

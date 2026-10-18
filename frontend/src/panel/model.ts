@@ -74,16 +74,58 @@ const PERCENT = { number: { min: 0, max: 100, step: 1, mode: "slider" } };
 /** Remembered source lists per media player (av_scenes/config/sources). */
 export type Sources = Record<string, string[]>;
 
-/** Source list of a media player: live while it is on, else the remembered one. */
-export function sourceList(hass: HomeAssistant, sources: Sources, entity: string | undefined): string[] {
+/** A list of a media player (source_list, sound_mode_list): live while it is
+ * on, else the remembered one. */
+export function deviceList(
+  hass: HomeAssistant,
+  remembered: Sources,
+  entity: string | undefined,
+  attribute = "source_list",
+): string[] {
   if (!entity) {
     return [];
   }
-  const live = hass.states[entity]?.attributes.source_list;
+  const live = hass.states[entity]?.attributes[attribute];
   if (Array.isArray(live) && live.length) {
     return live.map(String);
   }
-  return sources[entity] ?? [];
+  return remembered[entity] ?? [];
+}
+
+/** Source list of a media player: live while it is on, else the remembered one. */
+export function sourceList(hass: HomeAssistant, sources: Sources, entity: string | undefined): string[] {
+  return deviceList(hass, sources, entity, "source_list");
+}
+
+/** Device settings the card can offer, and the list each one chooses from. */
+export const SETTINGS = ["source", "sound_mode"] as const;
+export const SETTING_LISTS: Record<string, string> = {
+  source: "source_list",
+  sound_mode: "sound_mode_list",
+};
+
+/** The settings the card shows without a choice: every setting of the
+ * activity's media players with a known list (as the integration does). */
+export function autoSettings(
+  hass: HomeAssistant,
+  room: Room,
+  activity: Activity,
+  lists: Record<string, Sources>,
+): { device: string; setting: string }[] {
+  const found: { device: string; setting: string }[] = [];
+  for (const device of activity.devices ?? []) {
+    const entity = room.devices?.[device]?.entity_id;
+    if (!entity?.startsWith("media_player.")) {
+      continue;
+    }
+    for (const setting of SETTINGS) {
+      const attribute = SETTING_LISTS[setting];
+      if (deviceList(hass, lists[attribute] ?? {}, entity, attribute).length) {
+        found.push({ device, setting });
+      }
+    }
+  }
+  return found;
 }
 
 /** A quick-select button: selects a source on its device. */
@@ -98,6 +140,7 @@ export function stepSchema(
   step: Step,
   label: (key: string) => string,
   sources: Sources = {},
+  soundModes: Sources = {},
 ): Obj[] {
   const devices = Object.entries(room.devices ?? {}).map(([id, d]) => ({
     value: id,
@@ -105,10 +148,6 @@ export function stepSchema(
   }));
   const deviceField = { name: "device", required: true, selector: { select: { options: devices, mode: "dropdown" } } };
   const entity = step.device ? room.devices?.[step.device]?.entity_id : undefined;
-  const attrList = (attr: string): string[] => {
-    const value = entity ? hass.states[entity]?.attributes[attr] : undefined;
-    return Array.isArray(value) ? value.map(String) : [];
-  };
   const fields: Record<string, Obj[]> = {
     power_on: [deviceField],
     power_off: [deviceField],
@@ -122,7 +161,7 @@ export function stepSchema(
     ],
     set_sound_mode: [
       deviceField,
-      { name: "sound_mode", required: true, selector: { select: { options: attrList("sound_mode_list"), custom_value: true, mode: "dropdown" } } },
+      { name: "sound_mode", required: true, selector: { select: { options: deviceList(hass, soundModes, entity, "sound_mode_list"), custom_value: true, mode: "dropdown" } } },
     ],
     set_brightness: [
       deviceField,
@@ -183,9 +222,14 @@ export function clean<T extends Obj>(value: T, keep: string[] = []): T {
   return out as T;
 }
 
-/** Like clean, but a group set to null (hidden) stays hidden. */
+/** Like clean, but a group set to null (hidden) stays hidden, and an empty
+ * settings list (no settings in the card) stays. */
 export function cleanRemote(remote: Obj): Obj {
-  return clean(remote, GROUPS.filter((g) => remote[g] === null));
+  const keep: string[] = GROUPS.filter((g) => remote[g] === null);
+  if (Array.isArray(remote.settings)) {
+    keep.push("settings");
+  }
+  return clean(remote, keep);
 }
 
 /** Home Assistant's slugify: lower case, no accents, underscores. */

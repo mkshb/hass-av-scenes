@@ -156,6 +156,33 @@ def test_quick_select_buttons() -> None:
     ]
 
 
+def test_device_settings() -> None:
+    """Device settings name a media player and a setting; favourites are optional."""
+    room = validate_config(
+        _config(remote={"settings": [
+            {"device": "onkyo", "setting": "sound_mode", "options": ["THX", "STEREO"]},
+            {"device": "beamer", "setting": "source"},
+        ]})
+    )["rooms"]["wz"]
+    assert room["activities"]["tv"]["remote"]["settings"] == [
+        {"device": "onkyo", "setting": "sound_mode", "options": ["THX", "STEREO"]},
+        {"device": "beamer", "setting": "source", "options": []},
+    ]
+    # Without settings the card offers all; an empty list none
+    assert "settings" not in validate_config(_config())["rooms"]["wz"]["activities"]["tv"]["remote"]
+
+    for setting, path in (
+        ({"device": "onkyo", "setting": "volume"}, ["setting"]),
+        ({"device": "nope", "setting": "source"}, ["device"]),
+        ({"device": "plug", "setting": "source"}, ["device"]),
+    ):
+        data = _config(remote={"settings": [setting]})
+        data["rooms"]["wz"]["devices"]["plug"] = {"entity_id": "switch.plug"}
+        with pytest.raises(vol.Invalid) as err:
+            validate_config(data)
+        assert err.value.path[-1] == path[-1]
+
+
 def test_default_activity_must_exist() -> None:
     """The default activity refers to an activity of the room."""
     data = _config()

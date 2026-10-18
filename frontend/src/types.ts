@@ -76,6 +76,21 @@ export interface ButtonView {
   device: string | null;
 }
 
+/** A device setting the card offers while the activity runs. */
+export interface SettingView {
+  device: string;
+  /** The device's name in the configuration, if it has one */
+  name: string | null;
+  entity_id: string;
+  setting: "source" | "sound_mode";
+  /** The attribute with the current value */
+  attribute: string;
+  /** send_command command that sets it, with the choice as value */
+  command: string;
+  /** Favourites, else the device's list */
+  options: string[];
+}
+
 /** av_scenes/control/subscribe – sent now and on every change. */
 export interface RoomView {
   entry_id: string;
@@ -96,6 +111,7 @@ export interface RoomView {
   remote: {
     groups: Partial<Record<Group, GroupView>>;
     buttons: ButtonView[];
+    settings: SettingView[];
     /** The media player whose title and artwork the card shows */
     media: string | null;
   } | null;

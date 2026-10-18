@@ -40,6 +40,12 @@ CONF_COMMANDS: Final = "commands"
 CONF_REMOTE: Final = "remote"
 CONF_BUTTONS: Final = "buttons"
 CONF_TOUCHPAD: Final = "touchpad"
+# Device settings the card offers while an activity runs
+CONF_SETTINGS: Final = "settings"
+CONF_SETTING: Final = "setting"
+CONF_OPTIONS: Final = "options"
+SETTING_SOURCE: Final = "source"
+SETTING_SOUND_MODE: Final = "sound_mode"
 CONF_COMMAND: Final = "command"
 
 # Step parameters
